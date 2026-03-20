@@ -1,0 +1,29 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "http://35.156.250.66/api/:path*"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "http://35.156.250.66/auth/:path*"
+    },
+    {
+      "source": "/profile/:path*",
+      "destination": "http://35.156.250.66/profile/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "http://35.156.250.66/health"
+    },
+    {
+      "source": "/health/:path*",
+      "destination": "http://35.156.250.66/health/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+
