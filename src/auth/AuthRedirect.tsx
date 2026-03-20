@@ -1,13 +1,17 @@
-import { Navigate } from 'react-router';
+import { Navigate } from 'react-router-dom';
+import { ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 
-export const AuthRedirect = () => {
+export const AuthRedirect = ({ children }: { children: ReactNode }) => {
   const { token, isLoading } = useAuth();
 
-  // Wait until authentication check is complete
   if (isLoading) {
-    return null; // or a loading spinner
+    return null;
   }
 
-  return token ? <Navigate to="/" replace /> : <Navigate to="/login" replace />;
+  if (token) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
 };

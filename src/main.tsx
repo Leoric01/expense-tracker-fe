@@ -25,10 +25,33 @@ const AppWithTheme = () => {
     palette: {
       mode,
       primary: {
-        main: '#1976d2',
+        main: '#059669',
+        light: '#34d399',
+        dark: '#047857',
+        contrastText: '#fff',
       },
       secondary: {
-        main: '#dc004e',
+        main: '#d97706',
+        light: '#fbbf24',
+        dark: '#b45309',
+      },
+      ...(mode === 'light'
+        ? {
+            background: { default: '#f8fafc', paper: '#ffffff' },
+          }
+        : {
+            background: { default: '#0f172a', paper: '#1e293b' },
+          }),
+    },
+    shape: { borderRadius: 10 },
+    typography: {
+      fontFamily: '"DM Sans", "Segoe UI", system-ui, sans-serif',
+    },
+    components: {
+      MuiButton: {
+        styleOverrides: {
+          root: { textTransform: 'none', fontWeight: 600 },
+        },
       },
     },
   })

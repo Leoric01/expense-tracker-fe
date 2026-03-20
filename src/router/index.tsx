@@ -1,11 +1,12 @@
 import { LayoutWrapper } from '@components/layoutWrapper';
+import { AuthRedirect } from '@auth/AuthRedirect';
 import { ProtectedRoute } from '@auth/ProtectedRoute';
 import { Activate } from '@pages/Activate';
 import { Home } from '@pages/Home';
 import { Login } from '@pages/Login';
 import { NotFound } from '@pages/NotFound';
 import { Register } from '@pages/Register';
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter } from 'react-router-dom';
 
 export const router = createBrowserRouter([
   {
@@ -20,18 +21,34 @@ export const router = createBrowserRouter([
   },
   {
     path: '/login',
-    element: <Login />,
+    element: (
+      <AuthRedirect>
+        <Login />
+      </AuthRedirect>
+    ),
   },
   {
     path: '/register',
-    element: <Register />,
+    element: (
+      <AuthRedirect>
+        <Register />
+      </AuthRedirect>
+    ),
   },
   {
     path: '/activate',
-    element: <Activate />,
+    element: (
+      <AuthRedirect>
+        <Activate />
+      </AuthRedirect>
+    ),
   },
   {
     path: '*',
-    element: <NotFound />,
+    element: (
+      <ProtectedRoute>
+        <NotFound />
+      </ProtectedRoute>
+    ),
   },
 ]);
