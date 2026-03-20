@@ -1,5 +1,8 @@
 import MenuIcon from '@mui/icons-material/Menu';
+import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
+import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import { useAuth } from '@auth/AuthContext';
+import { useThemeMode } from '@components/contexts/ThemeModeContext';
 import {
   AppBar,
   Avatar,
@@ -12,6 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import { FC, MouseEvent, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 type HeaderProps = {
   onMenuToggle: () => void;
@@ -20,6 +24,8 @@ type HeaderProps = {
 
 export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
   const { userData, logout } = useAuth();
+  const { mode, toggleMode } = useThemeMode();
+  const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
 
@@ -41,6 +47,11 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
     setAnchorEl(null);
   };
 
+  const handleOpenProfile = () => {
+    handleMenuClose();
+    navigate('/profile');
+  };
+
   const handleLogout = () => {
     handleMenuClose();
     logout();
@@ -57,7 +68,12 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
         <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
           Expense tracker
         </Typography>
-        <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Tooltip title={mode === 'dark' ? 'Přepnout na světlý režim' : 'Přepnout na tmavý režim'}>
+            <IconButton onClick={toggleMode} color="inherit" aria-label="přepnout režim">
+              {mode === 'dark' ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
+            </IconButton>
+          </Tooltip>
           <Tooltip title={userData?.fullName || 'Uživatel'}>
             <IconButton onClick={handleAvatarClick} size="small" sx={{ ml: 1 }} aria-label="profil">
               <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: 14 }}>{initials}</Avatar>
@@ -71,6 +87,7 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           >
             <MenuItem disabled>{userData?.fullName || 'Přihlášený uživatel'}</MenuItem>
+            <MenuItem onClick={handleOpenProfile}>Můj profil</MenuItem>
             <MenuItem onClick={handleLogout}>Odhlásit</MenuItem>
           </Menu>
         </Box>

@@ -5,6 +5,7 @@ import { Activate } from '@pages/Activate';
 import { Home } from '@pages/Home';
 import { Login } from '@pages/Login';
 import { NotFound } from '@pages/NotFound';
+import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
 import { createBrowserRouter } from 'react-router-dom';
 
@@ -16,7 +17,10 @@ export const router = createBrowserRouter([
         <LayoutWrapper />
       </ProtectedRoute>
     ),
-    children: [{ index: true, element: <Home /> }],
+    children: [
+      { index: true, element: <Home /> },
+      { path: 'profile', element: <Profile /> },
+    ],
     errorElement: <NotFound />,
   },
   {

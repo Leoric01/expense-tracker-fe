@@ -24,22 +24,34 @@ const AppWithTheme = () => {
   const theme = createTheme({
     palette: {
       mode,
-      primary: {
-        main: '#059669',
-        light: '#34d399',
-        dark: '#047857',
-        contrastText: '#fff',
-      },
-      secondary: {
-        main: '#d97706',
-        light: '#fbbf24',
-        dark: '#b45309',
-      },
       ...(mode === 'light'
         ? {
+            // Opposite side of the color wheel to dark-mode palette.
+            primary: {
+              main: '#be185d',
+              light: '#ec4899',
+              dark: '#9d174d',
+              contrastText: '#fff',
+            },
+            secondary: {
+              main: '#1d4ed8',
+              light: '#60a5fa',
+              dark: '#1e40af',
+            },
             background: { default: '#f8fafc', paper: '#ffffff' },
           }
         : {
+            primary: {
+              main: '#059669',
+              light: '#34d399',
+              dark: '#047857',
+              contrastText: '#fff',
+            },
+            secondary: {
+              main: '#d97706',
+              light: '#fbbf24',
+              dark: '#b45309',
+            },
             background: { default: '#0f172a', paper: '#1e293b' },
           }),
     },
