@@ -3,40 +3,37 @@ import type {
   CategoryResponseDto,
   CreateTransactionRequestDto,
   PagedModelCategoryResponseDto,
-  PagedModelTransactionResponseDto,
   PagedModelWalletResponseDto,
-  TransactionResponseDto,
   WalletResponseDto,
 } from '@api/model';
 import {
   CategoryResponseDtoCategoryKind,
   CreateTransactionRequestDtoTransactionType,
 } from '@api/model';
-import { transactionCreate, transactionFindAll } from '@api/transaction-controller/transaction-controller';
+import { transactionCreate } from '@api/transaction-controller/transaction-controller';
 import { walletFindAll } from '@api/wallet-controller/wallet-controller';
 import { PageHeading } from '@components/PageHeading';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
+import SearchIcon from '@mui/icons-material/Search';
 import {
   Box,
   Button,
   FormControl,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material';
+import { useDebouncedValue } from '@hooks/useDebouncedValue';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useMemo, useState } from 'react';
-import { asCategoryChildren, toCategoryTree } from '../categories/categoryTreeUtils';
+import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
+import { toCategoryTree } from '../categories/categoryTreeUtils';
+import { CategoryTreePicker } from './CategoryTreePicker';
 import {
   defaultDatetimeLocal,
   parseAmount,
@@ -44,50 +41,14 @@ import {
 } from './transactionFormUtils';
 
 const WALLET_LIST = { page: 0, size: 200 } as const;
-const CAT_LIST = { page: 0, size: 2000 } as const;
-const TX_LIST = { page: 0, size: 25, sort: ['transactionDate,desc'] } as const;
-
-function flattenCategories(nodes: CategoryResponseDto[]): CategoryResponseDto[] {
-  const out: CategoryResponseDto[] = [];
-  const walk = (n: CategoryResponseDto) => {
-    out.push(n);
-    asCategoryChildren(n.children).forEach(walk);
-  };
-  nodes.forEach(walk);
-  return out;
-}
-
-function pad2(n: number) {
-  return String(n).padStart(2, '0');
-}
-
-function txTypeLabel(t?: string): string {
-  switch (t) {
-    case CreateTransactionRequestDtoTransactionType.TRANSFER:
-      return 'Převod';
-    case CreateTransactionRequestDtoTransactionType.INCOME:
-      return 'Příjem';
-    case CreateTransactionRequestDtoTransactionType.EXPENSE:
-      return 'Výdaj';
-    case CreateTransactionRequestDtoTransactionType.BALANCE_ADJUSTMENT:
-      return 'Korekce';
-    default:
-      return t ?? '—';
-  }
-}
-
-function formatTxDate(iso?: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
 
 export type TransactionFormsPanelProps = {
   trackerId: string;
   trackerName: string;
   walletsFromParent?: WalletResponseDto[];
   embedded?: boolean;
+  /** Skryje nadpis „Transakce“ (záložky na Domě). */
+  hideTitle?: boolean;
 };
 
 export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
@@ -95,10 +56,22 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
   trackerName,
   walletsFromParent,
   embedded,
+  hideTitle,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
+  const [categorySearch, setCategorySearch] = useState('');
+  const debouncedCategorySearch = useDebouncedValue(categorySearch, 300);
+
+  const catParams = useMemo(
+    () => ({
+      page: 0,
+      size: 2000,
+      ...(debouncedCategorySearch.trim() ? { search: debouncedCategorySearch.trim() } : {}),
+    }),
+    [debouncedCategorySearch],
+  );
 
   const { data: walletsRes } = useQuery({
     queryKey: ['/api/wallet', trackerId, WALLET_LIST],
@@ -106,14 +79,9 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
     enabled: Boolean(trackerId) && walletsFromParent === undefined,
   });
 
-  const { data: catRes } = useQuery({
-    queryKey: [`/api/category/${trackerId}/active`, CAT_LIST],
-    queryFn: () => categoryFindAllActive(trackerId, CAT_LIST),
-    enabled: Boolean(trackerId),
-  });
-  const { data: txRes, refetch: refetchTx } = useQuery({
-    queryKey: ['/api/transaction', trackerId, TX_LIST],
-    queryFn: () => transactionFindAll(trackerId, TX_LIST),
+  const { data: catRes, isLoading: categoriesLoading } = useQuery({
+    queryKey: [`/api/category/${trackerId}/active`, catParams],
+    queryFn: () => categoryFindAllActive(trackerId, catParams),
     enabled: Boolean(trackerId),
   });
 
@@ -124,15 +92,7 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
 
   const catPaged = catRes?.data as PagedModelCategoryResponseDto | undefined;
   const catFlat = catPaged?.content ?? [];
-  const catTree = useMemo(() => toCategoryTree(catFlat), [catFlat]);
-  const categoriesFlat = useMemo(() => flattenCategories(catTree), [catTree]);
-  const incomeCats = categoriesFlat.filter((c) => c.categoryKind === CategoryResponseDtoCategoryKind.INCOME);
-  const expenseCats = categoriesFlat.filter(
-    (c) => c.categoryKind === CategoryResponseDtoCategoryKind.EXPENSE,
-  );
-
-  const txPaged = txRes?.data as PagedModelTransactionResponseDto | undefined;
-  const recentTx = (txPaged?.content ?? []) as TransactionResponseDto[];
+  const categoryTree = useMemo(() => toCategoryTree(catFlat), [catFlat]);
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['/api/transaction', trackerId] });
@@ -149,7 +109,6 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
       }
       enqueueSnackbar('Transakce byla zaznamenána', { variant: 'success' });
       await invalidate();
-      await refetchTx();
     } catch {
       enqueueSnackbar('Transakci se nepodařilo uložit', { variant: 'error' });
     } finally {
@@ -157,76 +116,42 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
     }
   };
 
-  const header = embedded ? (
-    <PageHeading component="h2" sx={{ mt: 4, mb: 1 }}>
-      Transakce
-    </PageHeading>
-  ) : (
-    <>
-      <PageHeading component="h1" gutterBottom>
+  const header =
+    hideTitle && embedded ? null : embedded ? (
+      <PageHeading component="h2" sx={{ mt: 4, mb: 1 }}>
         Transakce
       </PageHeading>
-      <Typography color="text.secondary" sx={{ mb: 2 }}>
-        Rozpočet: <strong>{trackerName}</strong>
-      </Typography>
-    </>
-  );
+    ) : (
+      <>
+        <PageHeading component="h1" gutterBottom>
+          Transakce
+        </PageHeading>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
+          Rozpočet: <strong>{trackerName}</strong>
+        </Typography>
+      </>
+    );
 
   return (
-    <Box>
+    <Box sx={hideTitle && embedded ? { mt: 1 } : undefined}>
       {header}
 
-      <Stack spacing={3}>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-            Příjem / výdaj
-          </Typography>
-          <IncomeExpenseForm
-            wallets={activeWallets}
-            incomeCategories={incomeCats}
-            expenseCategories={expenseCats}
-            submitting={submitting}
-            onSubmit={submit}
-          />
-        </Paper>
-
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            Nedávné transakce
-          </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Datum</TableCell>
-                <TableCell>Typ</TableCell>
-                <TableCell>Popis</TableCell>
-                <TableCell align="right">Částka</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {recentTx.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4}>
-                    <Typography color="text.secondary">Zatím žádné záznamy.</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                recentTx.map((row) => (
-                  <TableRow key={row.id ?? row.transactionDate}>
-                    <TableCell>{formatTxDate(row.transactionDate)}</TableCell>
-                    <TableCell>{txTypeLabel(row.transactionType as string | undefined)}</TableCell>
-                    <TableCell>{row.description ?? row.note ?? '—'}</TableCell>
-                    <TableCell align="right">
-                      {row.amount != null ? row.amount : '—'}
-                      {row.currencyCode ? ` ${row.currencyCode}` : ''}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Paper>
-      </Stack>
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+          Příjem / výdaj
+        </Typography>
+        <IncomeExpenseForm
+          wallets={activeWallets}
+          categoryTree={categoryTree}
+          categoryFlat={catFlat}
+          categorySearch={categorySearch}
+          categorySearchDebounced={debouncedCategorySearch}
+          onCategorySearchChange={setCategorySearch}
+          categoriesLoading={categoriesLoading}
+          submitting={submitting}
+          onSubmit={submit}
+        />
+      </Paper>
     </Box>
   );
 };
@@ -238,26 +163,36 @@ type WalletProps = {
 };
 
 type IEProps = WalletProps & {
-  incomeCategories: CategoryResponseDto[];
-  expenseCategories: CategoryResponseDto[];
+  categoryTree: CategoryResponseDto[];
+  categoryFlat: CategoryResponseDto[];
+  categorySearch: string;
+  categorySearchDebounced: string;
+  onCategorySearchChange: (v: string) => void;
+  categoriesLoading: boolean;
 };
 
 const IncomeExpenseForm: FC<IEProps> = ({
   wallets,
-  incomeCategories,
-  expenseCategories,
+  categoryTree,
+  categoryFlat,
+  categorySearch,
+  categorySearchDebounced,
+  onCategorySearchChange,
+  categoriesLoading,
   submitting,
   onSubmit,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
-  const [kind, setKind] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [walletId, setWalletId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
   const [when, setWhen] = useState(defaultDatetimeLocal);
   const [description, setDescription] = useState('');
 
-  const cats = kind === 'INCOME' ? incomeCategories : expenseCategories;
+  useEffect(() => {
+    if (!categoryId) return;
+    if (!categoryFlat.some((c) => c.id === categoryId)) setCategoryId('');
+  }, [categoryFlat, categoryId]);
 
   const handle = async (e: FormEvent) => {
     e.preventDefault();
@@ -270,9 +205,15 @@ const IncomeExpenseForm: FC<IEProps> = ({
       enqueueSnackbar('Zadej kladnou částku', { variant: 'warning' });
       return;
     }
+    const cat = categoryFlat.find((c) => c.id === categoryId);
+    const kind = cat?.categoryKind;
+    if (kind !== CategoryResponseDtoCategoryKind.INCOME && kind !== CategoryResponseDtoCategoryKind.EXPENSE) {
+      enqueueSnackbar('Kategorie nemá platný typ příjem/výdaj', { variant: 'warning' });
+      return;
+    }
     await onSubmit({
       transactionType:
-        kind === 'INCOME'
+        kind === CategoryResponseDtoCategoryKind.INCOME
           ? CreateTransactionRequestDtoTransactionType.INCOME
           : CreateTransactionRequestDtoTransactionType.EXPENSE,
       walletId,
@@ -285,25 +226,10 @@ const IncomeExpenseForm: FC<IEProps> = ({
 
   return (
     <Box component="form" onSubmit={handle}>
-      <Stack spacing={2} maxWidth={480}>
+      <Stack spacing={2} sx={{ maxWidth: 560 }}>
         <Typography variant="body2" color="text.secondary">
-          Příjem nebo výdaj v jedné peněžence vůči kategorii.
+          Typ transakce (příjem nebo výdaj) se vezme z vybrané kategorie.
         </Typography>
-        <FormControl fullWidth>
-          <InputLabel id="ie-kind">Typ</InputLabel>
-          <Select
-            labelId="ie-kind"
-            label="Typ"
-            value={kind}
-            onChange={(e) => {
-              setKind(e.target.value as 'INCOME' | 'EXPENSE');
-              setCategoryId('');
-            }}
-          >
-            <MenuItem value="EXPENSE">Výdaj</MenuItem>
-            <MenuItem value="INCOME">Příjem</MenuItem>
-          </Select>
-        </FormControl>
         <FormControl fullWidth required>
           <InputLabel id="ie-w">Peněženka</InputLabel>
           <Select
@@ -319,27 +245,38 @@ const IncomeExpenseForm: FC<IEProps> = ({
             ))}
           </Select>
         </FormControl>
-        <FormControl fullWidth required>
-          <InputLabel id="ie-cat">Kategorie</InputLabel>
-          <Select
-            labelId="ie-cat"
-            label="Kategorie"
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value as string)}
-          >
-            {cats.length === 0 ? (
-              <MenuItem value="" disabled>
-                Žádná kategorie — přidej v menu Kategorie
-              </MenuItem>
-            ) : (
-              cats.map((c) => (
-                <MenuItem key={c.id} value={c.id}>
-                  {c.name ?? c.id}
-                </MenuItem>
-              ))
-            )}
-          </Select>
-        </FormControl>
+        <Box>
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+            Kategorie
+          </Typography>
+          <TextField
+            size="small"
+            fullWidth
+            placeholder="Hledat v kategoriích…"
+            value={categorySearch}
+            onChange={(e) => onCategorySearchChange(e.target.value)}
+            sx={{ mb: 1.5 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+            }}
+          />
+          <CategoryTreePicker
+            key={categorySearchDebounced}
+            tree={categoryTree}
+            selectedId={categoryId}
+            onSelect={setCategoryId}
+            emptyMessage={
+              categorySearch.trim()
+                ? 'Žádná kategorie neodpovídá hledání.'
+                : 'Žádná kategorie — přidej v menu Kategorie'
+            }
+            loading={categoriesLoading}
+          />
+        </Box>
         <TextField
           label="Částka"
           value={amount}

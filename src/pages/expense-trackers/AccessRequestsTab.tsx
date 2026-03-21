@@ -31,6 +31,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { buildAccessRequestMineParams } from './buildListParams';
+import { trackersTablePaperSx } from './trackersTableSurfaceSx';
 import { formatDateDdMmYyyy } from './formatDateDdMmYyyy';
 import { cycleSort, firstDirAccessRequest, type SortDir } from './tableSort';
 
@@ -179,7 +180,7 @@ export const AccessRequestsTab: FC = () => {
         </Typography>
       )}
 
-      <Paper sx={{ overflow: 'auto' }}>
+      <Paper sx={(theme) => trackersTablePaperSx(theme)}>
         <Table size="small">
           <TableHead>
             <TableRow>

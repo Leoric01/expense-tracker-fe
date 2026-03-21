@@ -43,6 +43,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
 import { buildMineParams } from './buildListParams';
+import { trackersTablePaperSx } from './trackersTableSurfaceSx';
 import { formatDateDdMmYyyy } from './formatDateDdMmYyyy';
 import { cycleSort, firstDirMine, type MineSortColumn, type SortDir } from './tableSort';
 
@@ -265,7 +266,7 @@ export const MineTrackersTab: FC = () => {
         </Typography>
       )}
 
-      <Paper sx={{ overflow: 'auto' }}>
+      <Paper sx={(theme) => trackersTablePaperSx(theme)}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -365,7 +366,7 @@ export const MineTrackersTab: FC = () => {
                       {isSelected ? (
                         <CheckCircleIcon color="primary" fontSize="small" aria-label="vybráno" />
                       ) : (
-                        <Box component="span" sx={{ color: 'text.disabled', fontSize: 12 }}>
+                        <Box component="span" sx={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
                           —
                         </Box>
                       )}

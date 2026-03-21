@@ -73,13 +73,6 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
             </ListItemButton>
           )}
         </NavLink>
-        <NavLink to="/categories" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-          {({ isActive }) => (
-            <ListItemButton selected={isActive} onClick={onMobileClose}>
-              <ListItemText primary="Kategorie" />
-            </ListItemButton>
-          )}
-        </NavLink>
       </List>
     </Box>
   );

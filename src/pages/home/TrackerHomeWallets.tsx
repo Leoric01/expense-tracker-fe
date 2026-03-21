@@ -20,14 +20,18 @@ import {
   MenuItem,
   Select,
   Stack,
+  ButtonBase,
   TextField,
   Typography,
 } from '@mui/material';
 import { PageHeading } from '@components/PageHeading';
+import { CategoriesForTracker } from '@pages/categories/CategoriesForTracker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { DragEvent, FC, FormEvent, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { RecentTransactionsPanel } from './RecentTransactionsPanel';
 import { TransactionFormsPanel } from './TransactionFormsPanel';
 import {
   defaultDatetimeLocal,
@@ -48,6 +52,22 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const ignoreClickUntilRef = useRef(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const mainTab = tabParam === 'categories' ? 1 : tabParam === 'history' ? 2 : 0;
+
+  const sectionNavBtnSx = (active: boolean) => ({
+    borderRadius: 1,
+    px: 0.5,
+    py: 0.25,
+    typography: 'h6' as const,
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase' as const,
+    color: active ? 'primary.main' : 'text.secondary',
+    textDecoration: active ? 'underline' : 'none',
+    textUnderlineOffset: 6,
+  });
 
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -273,7 +293,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         {trackerName}
       </PageHeading>
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 1 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 1, mt: 2 }}>
         <PageHeading component="h2">Moje peněženky</PageHeading>
         <Button
           variant="contained"
@@ -360,12 +380,47 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         </Box>
       )}
 
-      <TransactionFormsPanel
-        embedded
-        trackerId={trackerId}
-        trackerName={trackerName}
-        walletsFromParent={items}
-      />
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{ mt: 4, mb: 1, alignItems: 'center', flexWrap: 'wrap' }}
+        component="nav"
+        aria-label="Přepnout sekci"
+      >
+        <ButtonBase disableRipple onClick={() => setSearchParams({})} sx={sectionNavBtnSx(mainTab === 0)}>
+          Transakce
+        </ButtonBase>
+        <ButtonBase
+          disableRipple
+          onClick={() => setSearchParams({ tab: 'categories' })}
+          sx={sectionNavBtnSx(mainTab === 1)}
+        >
+          Kategorie
+        </ButtonBase>
+        <ButtonBase
+          disableRipple
+          onClick={() => setSearchParams({ tab: 'history' })}
+          sx={sectionNavBtnSx(mainTab === 2)}
+        >
+          Historie
+        </ButtonBase>
+      </Stack>
+
+      {mainTab === 0 && (
+        <TransactionFormsPanel
+          embedded
+          hideTitle
+          trackerId={trackerId}
+          trackerName={trackerName}
+          walletsFromParent={items}
+        />
+      )}
+
+      {mainTab === 1 && (
+        <CategoriesForTracker embedded trackerId={trackerId} trackerName={trackerName} />
+      )}
+
+      {mainTab === 2 && <RecentTransactionsPanel trackerId={trackerId} />}
 
       <Dialog
         open={Boolean(transferPair)}
