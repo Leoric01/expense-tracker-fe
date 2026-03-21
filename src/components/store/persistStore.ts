@@ -1,10 +1,14 @@
-import { BranchResponseDto } from '@api/model';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export type SelectedExpenseTrackerRef = {
+  id: string;
+  name: string;
+};
+
 interface UserPersistentState {
-  selectedBranch: BranchResponseDto | null;
-  setSelectedBranch: (branch: BranchResponseDto | null) => void;
+  selectedExpenseTracker: SelectedExpenseTrackerRef | null;
+  setSelectedExpenseTracker: (tracker: SelectedExpenseTrackerRef | null) => void;
   clearUserData: () => void;
 }
 
@@ -15,9 +19,9 @@ export const createUserPersistStore = (userId: string) => {
   return create<UserPersistentState>()(
     persist(
       (set) => ({
-        selectedBranch: null,
-        setSelectedBranch: (branch) => set({ selectedBranch: branch }),
-        clearUserData: () => set({ selectedBranch: null }),
+        selectedExpenseTracker: null,
+        setSelectedExpenseTracker: (tracker) => set({ selectedExpenseTracker: tracker }),
+        clearUserData: () => set({ selectedExpenseTracker: null }),
       }),
       {
         name: `user-${userId}-storage`,

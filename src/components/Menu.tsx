@@ -1,4 +1,5 @@
-import { Box, Drawer, List, ListItemButton, ListItemText, Toolbar } from '@mui/material';
+import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
+import { Box, Drawer, List, ListItemButton, ListItemText, Toolbar, Typography } from '@mui/material';
 import { FC } from 'react';
 import { NavLink } from 'react-router-dom';
 
@@ -10,14 +11,46 @@ type MenuProps = {
 };
 
 export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
+  const { selectedExpenseTracker } = useSelectedExpenseTracker();
+  const budgetName = selectedExpenseTracker?.name ?? '—';
+
   const drawer = (
     <Box sx={{ textAlign: 'center' }}>
-      <Toolbar />
+      <Toolbar
+        sx={{
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          minHeight: 'auto',
+          py: 2,
+          px: 1.5,
+          gap: 0.5,
+        }}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
+          Rozpočet
+        </Typography>
+        <Typography
+          variant="subtitle1"
+          fontWeight={600}
+          sx={{ textAlign: 'left', lineHeight: 1.3 }}
+          noWrap
+          title={budgetName}
+        >
+          {budgetName}
+        </Typography>
+      </Toolbar>
       <List sx={{ px: 1 }}>
         <NavLink to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
           {({ isActive }) => (
             <ListItemButton selected={isActive} onClick={onMobileClose}>
               <ListItemText primary="Domů" />
+            </ListItemButton>
+          )}
+        </NavLink>
+        <NavLink to="/trackers" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+          {({ isActive }) => (
+            <ListItemButton selected={isActive} onClick={onMobileClose}>
+              <ListItemText primary="Trackery" />
             </ListItemButton>
           )}
         </NavLink>

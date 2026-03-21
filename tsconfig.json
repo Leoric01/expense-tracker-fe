@@ -23,7 +23,6 @@
       "@auth/*": ["src/auth/*"],
       "@layouts/*": ["src/layouts/*"],
       "@router/*": ["src/router/*"],
-      "@stores/*": ["src/stores/*"],
       "@hooks/*": ["src/hooks/*"],
       "@types/*": ["src/types/*"],
       "@utils/*": ["src/utils/*"],

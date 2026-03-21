@@ -49,7 +49,7 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
 
   const handleOpenProfile = () => {
     handleMenuClose();
-    navigate('/profile');
+    navigate('/settings');
   };
 
   const handleLogout = () => {

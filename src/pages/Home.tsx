@@ -1,6 +1,7 @@
 import { useAuth } from '@auth/AuthContext';
-import { Box, Typography } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
 import { FC } from 'react';
+import { Link } from 'react-router-dom';
 
 export const Home: FC = () => {
   const { userData } = useAuth();
@@ -13,6 +14,9 @@ export const Home: FC = () => {
       <Typography color="text.secondary" sx={{ mb: 2 }}>
         Aplikace je připravená — sem přijdou výdaje a přehledy.
       </Typography>
+      <Button component={Link} to="/trackers" variant="contained">
+        Moje trackery
+      </Button>
     </Box>
   );
 };

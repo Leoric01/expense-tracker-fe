@@ -9,8 +9,31 @@
       "destination": "http://35.156.250.66/auth/:path*"
     },
     {
-      "source": "/profile/:path*",
-      "destination": "http://35.156.250.66/profile/:path*"
+      "source": "/profile/me",
+      "destination": "http://35.156.250.66/profile/me"
+    },
+    {
+      "source": "/profile/update",
+      "destination": "http://35.156.250.66/profile/update"
+    },
+    {
+      "source": "/profile/change-password",
+      "destination": "http://35.156.250.66/profile/change-password"
+    },
+    {
+      "source": "/profile",
+      "destination": "http://35.156.250.66/profile",
+      "has": [{ "type": "query", "key": "page" }]
+    },
+    {
+      "source": "/profile",
+      "destination": "http://35.156.250.66/profile",
+      "has": [{ "type": "query", "key": "size" }]
+    },
+    {
+      "source": "/profile",
+      "destination": "http://35.156.250.66/profile",
+      "has": [{ "type": "query", "key": "search" }]
     },
     {
       "source": "/health",
