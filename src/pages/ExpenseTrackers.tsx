@@ -1,3 +1,4 @@
+import { PageHeading } from '@components/PageHeading';
 import { Box, Tab, Tabs, Typography } from '@mui/material';
 import { FC, SyntheticEvent, useState } from 'react';
 import { AccessRequestsTab } from './expense-trackers/AccessRequestsTab';
@@ -12,9 +13,9 @@ export const ExpenseTrackers: FC = () => {
   return (
     <Box>
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
+        <PageHeading component="h1" gutterBottom>
           Expense trackery
-        </Typography>
+        </PageHeading>
         <Typography color="text.secondary">
           Spravuj vlastní trackery, vyhledej cizí a vyřiď žádosti o přístup nebo pozvánky.
         </Typography>

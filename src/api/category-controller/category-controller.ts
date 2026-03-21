@@ -22,6 +22,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CategoryDeactivateParams,
+  CategoryFindAllActiveParams,
   CategoryFindAllParams,
   CategoryUploadIconBody,
   CategoryUploadIconParams,
@@ -641,16 +643,33 @@ export type categoryDeactivateResponseSuccess = categoryDeactivateResponse200 & 
 };
 export type categoryDeactivateResponse = categoryDeactivateResponseSuccess;
 
-export const getCategoryDeactivateUrl = (trackerId: string, categoryId: string) => {
-  return `/api/category/${trackerId}/${categoryId}`;
+export const getCategoryDeactivateUrl = (
+  trackerId: string,
+  categoryId: string,
+  params?: CategoryDeactivateParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/category/${trackerId}/${categoryId}?${stringifiedParams}`
+    : `/api/category/${trackerId}/${categoryId}`;
 };
 
 export const categoryDeactivate = async (
   trackerId: string,
   categoryId: string,
+  params?: CategoryDeactivateParams,
   options?: RequestInit,
 ): Promise<categoryDeactivateResponse> => {
-  const res = await fetch(getCategoryDeactivateUrl(trackerId, categoryId), {
+  const res = await fetch(getCategoryDeactivateUrl(trackerId, categoryId, params), {
     ...options,
     method: 'DELETE',
   });
@@ -668,14 +687,14 @@ export const getCategoryDeactivateMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof categoryDeactivate>>,
     TError,
-    { trackerId: string; categoryId: string },
+    { trackerId: string; categoryId: string; params?: CategoryDeactivateParams },
     TContext
   >;
   fetch?: RequestInit;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof categoryDeactivate>>,
   TError,
-  { trackerId: string; categoryId: string },
+  { trackerId: string; categoryId: string; params?: CategoryDeactivateParams },
   TContext
 > => {
   const mutationKey = ['categoryDeactivate'];
@@ -687,11 +706,11 @@ export const getCategoryDeactivateMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof categoryDeactivate>>,
-    { trackerId: string; categoryId: string }
+    { trackerId: string; categoryId: string; params?: CategoryDeactivateParams }
   > = (props) => {
-    const { trackerId, categoryId } = props ?? {};
+    const { trackerId, categoryId, params } = props ?? {};
 
-    return categoryDeactivate(trackerId, categoryId, fetchOptions);
+    return categoryDeactivate(trackerId, categoryId, params, fetchOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -708,7 +727,7 @@ export const useCategoryDeactivate = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof categoryDeactivate>>,
       TError,
-      { trackerId: string; categoryId: string },
+      { trackerId: string; categoryId: string; params?: CategoryDeactivateParams },
       TContext
     >;
     fetch?: RequestInit;
@@ -717,7 +736,7 @@ export const useCategoryDeactivate = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof categoryDeactivate>>,
   TError,
-  { trackerId: string; categoryId: string },
+  { trackerId: string; categoryId: string; params?: CategoryDeactivateParams },
   TContext
 > => {
   return useMutation(getCategoryDeactivateMutationOptions(options), queryClient);
@@ -811,3 +830,168 @@ export const useCategoryUpdate = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getCategoryUpdateMutationOptions(options), queryClient);
 };
+export type categoryFindAllActiveResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type categoryFindAllActiveResponseSuccess = categoryFindAllActiveResponse200 & {
+  headers: Headers;
+};
+export type categoryFindAllActiveResponse = categoryFindAllActiveResponseSuccess;
+
+export const getCategoryFindAllActiveUrl = (
+  trackerId: string,
+  params?: CategoryFindAllActiveParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/category/${trackerId}/active?${stringifiedParams}`
+    : `/api/category/${trackerId}/active`;
+};
+
+export const categoryFindAllActive = async (
+  trackerId: string,
+  params?: CategoryFindAllActiveParams,
+  options?: RequestInit,
+): Promise<categoryFindAllActiveResponse> => {
+  const res = await fetch(getCategoryFindAllActiveUrl(trackerId, params), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: categoryFindAllActiveResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as categoryFindAllActiveResponse;
+};
+
+export const getCategoryFindAllActiveQueryKey = (
+  trackerId: string,
+  params?: CategoryFindAllActiveParams,
+) => {
+  return [`/api/category/${trackerId}/active`, ...(params ? [params] : [])] as const;
+};
+
+export const getCategoryFindAllActiveQueryOptions = <
+  TData = Awaited<ReturnType<typeof categoryFindAllActive>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: CategoryFindAllActiveParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActive>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getCategoryFindAllActiveQueryKey(trackerId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof categoryFindAllActive>>> = ({ signal }) =>
+    categoryFindAllActive(trackerId, params, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof categoryFindAllActive>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type CategoryFindAllActiveQueryResult = NonNullable<
+  Awaited<ReturnType<typeof categoryFindAllActive>>
+>;
+export type CategoryFindAllActiveQueryError = unknown;
+
+export function useCategoryFindAllActive<
+  TData = Awaited<ReturnType<typeof categoryFindAllActive>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params: undefined | CategoryFindAllActiveParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActive>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryFindAllActive>>,
+          TError,
+          Awaited<ReturnType<typeof categoryFindAllActive>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryFindAllActive<
+  TData = Awaited<ReturnType<typeof categoryFindAllActive>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: CategoryFindAllActiveParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActive>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryFindAllActive>>,
+          TError,
+          Awaited<ReturnType<typeof categoryFindAllActive>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryFindAllActive<
+  TData = Awaited<ReturnType<typeof categoryFindAllActive>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: CategoryFindAllActiveParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActive>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useCategoryFindAllActive<
+  TData = Awaited<ReturnType<typeof categoryFindAllActive>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: CategoryFindAllActiveParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActive>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getCategoryFindAllActiveQueryOptions(trackerId, params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

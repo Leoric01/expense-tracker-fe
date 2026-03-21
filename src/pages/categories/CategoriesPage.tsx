@@ -1,7 +1,7 @@
 import {
   categoryCreate,
   categoryDeactivate,
-  categoryFindAll,
+  categoryFindAllActive,
   categoryUpdate,
 } from '@api/category-controller/category-controller';
 import type {
@@ -18,6 +18,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   Collapse,
   Dialog,
@@ -25,6 +26,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  FormControlLabel,
   IconButton,
   InputLabel,
   MenuItem,
@@ -35,7 +37,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { PageHeading } from '@components/PageHeading';
 import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
+import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useMemo, useState } from 'react';
@@ -86,8 +90,8 @@ const CategoriesForTracker: FC<{ trackerId: string; trackerName: string }> = ({
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['/api/category', trackerId, LIST_PARAMS],
-    queryFn: () => categoryFindAll(trackerId, LIST_PARAMS),
+    queryKey: [`/api/category/${trackerId}/active`, LIST_PARAMS],
+    queryFn: () => categoryFindAllActive(trackerId, LIST_PARAMS),
   });
 
   const paged = data?.data as PagedModelCategoryResponseDto | undefined;
@@ -98,6 +102,7 @@ const CategoriesForTracker: FC<{ trackerId: string; trackerName: string }> = ({
   const [createMode, setCreateMode] = useState<CreateMode>({ type: 'root' });
   const [editState, setEditState] = useState<EditMode | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteCascade, setDeleteCascade] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [formName, setFormName] = useState('');
@@ -107,7 +112,7 @@ const CategoriesForTracker: FC<{ trackerId: string; trackerName: string }> = ({
   const [formParentId, setFormParentId] = useState<string>('');
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['/api/category', trackerId] });
+    queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
 
   const openCreateRoot = () => {
     setCreateMode({ type: 'root' });
@@ -243,16 +248,17 @@ const CategoriesForTracker: FC<{ trackerId: string; trackerName: string }> = ({
     if (!deleteId) return;
     setSubmitting(true);
     try {
-      const res = await categoryDeactivate(trackerId, deleteId);
+      const res = await categoryDeactivate(trackerId, deleteId, { cascade: deleteCascade });
       if (res.status < 200 || res.status >= 300) {
-        enqueueSnackbar('Odstranění se nepodařilo', { variant: 'error' });
+        enqueueSnackbar(apiErrorMessage(res.data, 'Odstranění se nepodařilo'), { variant: 'error' });
         return;
       }
       enqueueSnackbar('Kategorie byla odstraněna', { variant: 'success' });
       setDeleteId(null);
+      setDeleteCascade(false);
       await invalidate();
     } catch {
-      enqueueSnackbar('Odstranění se nepodařilo', { variant: 'error' });
+      enqueueSnackbar('Odstranění se nepodařilo (síť nebo neočekávaná chyba)', { variant: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -260,11 +266,12 @@ const CategoriesForTracker: FC<{ trackerId: string; trackerName: string }> = ({
 
   return (
     <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
+      <PageHeading component="h1" gutterBottom>
         Kategorie
-      </Typography>
+      </PageHeading>
       <Typography color="text.secondary" sx={{ mb: 2 }}>
-        Rozpočet: <strong>{trackerName}</strong> — strom kategorií (příjem / výdaj), lze větvit podkategorie.
+        Rozpočet: <strong>{trackerName}</strong> — zobrazeny jsou jen aktivní kategorie; typ příjem / výdaj,
+        lze přidávat podkategorie.
       </Typography>
 
       <Stack direction="row" spacing={2} sx={{ mb: 2 }} alignItems="center">
@@ -297,7 +304,10 @@ const CategoriesForTracker: FC<{ trackerId: string; trackerName: string }> = ({
                   depth={0}
                   onAddChild={openCreateChild}
                   onEdit={openEdit}
-                  onDelete={(id) => setDeleteId(id)}
+                  onDelete={(id) => {
+                    setDeleteCascade(false);
+                    setDeleteId(id);
+                  }}
                 />
               ))}
             </Stack>
@@ -424,14 +434,39 @@ const CategoriesForTracker: FC<{ trackerId: string; trackerName: string }> = ({
         </Box>
       </Dialog>
 
-      <Dialog open={Boolean(deleteId)} onClose={() => !submitting && setDeleteId(null)}>
+      <Dialog
+        open={Boolean(deleteId)}
+        onClose={() => {
+          if (submitting) return;
+          setDeleteId(null);
+          setDeleteCascade(false);
+        }}
+      >
         <DialogTitle>Odstranit kategorii?</DialogTitle>
         <DialogContent>
-          <Typography>Opravdu chceš tuto kategorii odstranit? (Podkategorie mohou být ovlivněny podle pravidel
-            serveru.)</Typography>
+          <Typography sx={{ mb: 2 }}>
+            Opravdu chceš tuto kategorii odstranit? Bez kaskády může server odmítnout mazání, pokud existují
+            podkategorie.
+          </Typography>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={deleteCascade}
+                onChange={(_, c) => setDeleteCascade(c)}
+                disabled={submitting}
+              />
+            }
+            label="Smazat včetně podkategorií (kaskáda)"
+          />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteId(null)} disabled={submitting}>
+          <Button
+            onClick={() => {
+              setDeleteId(null);
+              setDeleteCascade(false);
+            }}
+            disabled={submitting}
+          >
             Zrušit
           </Button>
           <Button color="error" variant="contained" onClick={handleDelete} disabled={submitting}>
