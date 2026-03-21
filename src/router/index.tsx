@@ -5,6 +5,7 @@ import { Activate } from '@pages/Activate';
 import { Home } from '@pages/Home';
 import { Login } from '@pages/Login';
 import { NotFound } from '@pages/NotFound';
+import { CategoriesPage } from '@pages/categories/CategoriesPage';
 import { ExpenseTrackers } from '@pages/ExpenseTrackers';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'trackers', element: <ExpenseTrackers /> },
+      { path: 'categories', element: <CategoriesPage /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */
       { path: 'settings', element: <Profile /> },
       { path: 'profile', element: <Navigate to="/settings" replace /> },

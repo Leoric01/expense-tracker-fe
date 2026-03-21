@@ -15,7 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import { FC, MouseEvent, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 type HeaderProps = {
   onMenuToggle: () => void;
@@ -65,7 +65,17 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
             <MenuIcon />
           </IconButton>
         )}
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+        <Typography
+          variant="h6"
+          component={RouterLink}
+          to="/"
+          sx={{
+            flexGrow: 1,
+            color: 'inherit',
+            textDecoration: 'none',
+            '&:hover': { opacity: 0.85 },
+          }}
+        >
           Expense tracker
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>

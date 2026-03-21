@@ -23,6 +23,7 @@ import type {
 
 import type {
   CreateExpenseTrackerRequestDto,
+  ExpenseTrackerFindAllButMineParams,
   ExpenseTrackerFindAllMineParams,
   ExpenseTrackerFindAllParams,
   UpdateExpenseTrackerRequestDto,
@@ -746,6 +747,164 @@ export function useExpenseTrackerFindAllMine<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getExpenseTrackerFindAllMineQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export type expenseTrackerFindAllButMineResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type expenseTrackerFindAllButMineResponseSuccess =
+  expenseTrackerFindAllButMineResponse200 & {
+    headers: Headers;
+  };
+export type expenseTrackerFindAllButMineResponse = expenseTrackerFindAllButMineResponseSuccess;
+
+export const getExpenseTrackerFindAllButMineUrl = (params?: ExpenseTrackerFindAllButMineParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/expense-trackers/discover?${stringifiedParams}`
+    : `/api/expense-trackers/discover`;
+};
+
+export const expenseTrackerFindAllButMine = async (
+  params?: ExpenseTrackerFindAllButMineParams,
+  options?: RequestInit,
+): Promise<expenseTrackerFindAllButMineResponse> => {
+  const res = await fetch(getExpenseTrackerFindAllButMineUrl(params), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: expenseTrackerFindAllButMineResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as expenseTrackerFindAllButMineResponse;
+};
+
+export const getExpenseTrackerFindAllButMineQueryKey = (
+  params?: ExpenseTrackerFindAllButMineParams,
+) => {
+  return [`/api/expense-trackers/discover`, ...(params ? [params] : [])] as const;
+};
+
+export const getExpenseTrackerFindAllButMineQueryOptions = <
+  TData = Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>,
+  TError = unknown,
+>(
+  params?: ExpenseTrackerFindAllButMineParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExpenseTrackerFindAllButMineQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>> = ({
+    signal,
+  }) => expenseTrackerFindAllButMine(params, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ExpenseTrackerFindAllButMineQueryResult = NonNullable<
+  Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>
+>;
+export type ExpenseTrackerFindAllButMineQueryError = unknown;
+
+export function useExpenseTrackerFindAllButMine<
+  TData = Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>,
+  TError = unknown,
+>(
+  params: undefined | ExpenseTrackerFindAllButMineParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>,
+          TError,
+          Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useExpenseTrackerFindAllButMine<
+  TData = Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>,
+  TError = unknown,
+>(
+  params?: ExpenseTrackerFindAllButMineParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>,
+          TError,
+          Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useExpenseTrackerFindAllButMine<
+  TData = Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>,
+  TError = unknown,
+>(
+  params?: ExpenseTrackerFindAllButMineParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useExpenseTrackerFindAllButMine<
+  TData = Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>,
+  TError = unknown,
+>(
+  params?: ExpenseTrackerFindAllButMineParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof expenseTrackerFindAllButMine>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getExpenseTrackerFindAllButMineQueryOptions(params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

@@ -1,5 +1,14 @@
 import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
-import { Box, Drawer, List, ListItemButton, ListItemText, Toolbar, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemText,
+  Toolbar,
+  Typography,
+} from '@mui/material';
 import { FC } from 'react';
 import { NavLink } from 'react-router-dom';
 
@@ -11,7 +20,7 @@ type MenuProps = {
 };
 
 export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
-  const { selectedExpenseTracker } = useSelectedExpenseTracker();
+  const { selectedExpenseTracker, setSelectedExpenseTracker } = useSelectedExpenseTracker();
   const budgetName = selectedExpenseTracker?.name ?? '—';
 
   const drawer = (
@@ -38,6 +47,16 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
         >
           {budgetName}
         </Typography>
+        {selectedExpenseTracker && (
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => setSelectedExpenseTracker(null)}
+            sx={{ alignSelf: 'flex-start', mt: 0.5, px: 0, minWidth: 0, textTransform: 'none' }}
+          >
+            Zrušit výběr trackera
+          </Button>
+        )}
       </Toolbar>
       <List sx={{ px: 1 }}>
         <NavLink to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
@@ -51,6 +70,13 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
           {({ isActive }) => (
             <ListItemButton selected={isActive} onClick={onMobileClose}>
               <ListItemText primary="Trackery" />
+            </ListItemButton>
+          )}
+        </NavLink>
+        <NavLink to="/categories" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+          {({ isActive }) => (
+            <ListItemButton selected={isActive} onClick={onMobileClose}>
+              <ListItemText primary="Kategorie" />
             </ListItemButton>
           )}
         </NavLink>
