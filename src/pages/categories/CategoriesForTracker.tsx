@@ -1,3 +1,4 @@
+import { budgetPlanFindAllActive } from '@api/budget-plan-controller/budget-plan-controller';
 import {
   categoryCreate,
   categoryDeactivate,
@@ -5,12 +6,15 @@ import {
   categoryUpdate,
 } from '@api/category-controller/category-controller';
 import type {
+  BudgetPlanResponseDto,
   CategoryResponseDto,
   CreateCategoryRequestDto,
+  PagedModelBudgetPlanResponseDto,
   PagedModelCategoryResponseDto,
   UpdateCategoryRequestDto,
 } from '@api/model';
 import { CreateCategoryRequestDtoCategoryKind } from '@api/model';
+import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -41,7 +45,8 @@ import { PageHeading } from '@components/PageHeading';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useMemo, useRef, useState } from 'react';
+import { FC, FormEvent, useCallback, useMemo, useRef, useState } from 'react';
+import { CategoryBudgetPlansDialog } from './CategoryBudgetPlansDialog';
 import {
   asCategoryChildren,
   categoryKindChipColor,
@@ -53,6 +58,7 @@ import {
 } from './categoryTreeUtils';
 
 const LIST_PARAMS = { page: 0, size: 200 } as const;
+const BUDGET_LIST_PARAMS = { page: 0, size: 500 } as const;
 
 type CreateMode = { type: 'root' } | { type: 'child'; parentId: string };
 
@@ -82,9 +88,33 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     enabled: Boolean(trackerId) && categoriesQueryEnabled,
   });
 
+  const { data: budgetData } = useQuery({
+    queryKey: [`/api/budget-plan/${trackerId}/active`, BUDGET_LIST_PARAMS],
+    queryFn: async () => {
+      const res = await budgetPlanFindAllActive(trackerId, BUDGET_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('budget');
+      return res.data as PagedModelBudgetPlanResponseDto;
+    },
+    enabled: Boolean(trackerId) && categoriesQueryEnabled,
+    staleTime: 30_000,
+  });
+
   const paged = data?.data as PagedModelCategoryResponseDto | undefined;
   const flat = paged?.content ?? [];
   const tree = useMemo(() => toCategoryTree(flat), [flat]);
+
+  const budgetPlans = (budgetData?.content ?? []) as BudgetPlanResponseDto[];
+  const budgetsByCategoryId = useMemo(() => {
+    const m = new Map<string, BudgetPlanResponseDto[]>();
+    for (const b of budgetPlans) {
+      const cid = b.categoryId;
+      if (!cid) continue;
+      const arr = m.get(cid) ?? [];
+      arr.push(b);
+      m.set(cid, arr);
+    }
+    return m;
+  }, [budgetPlans]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>({ type: 'root' });
@@ -92,6 +122,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteCascade, setDeleteCascade] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [budgetCategory, setBudgetCategory] = useState<CategoryResponseDto | null>(null);
 
   const [formName, setFormName] = useState('');
   const [formKind, setFormKind] = useState<CreateCategoryRequestDtoCategoryKind>(
@@ -102,6 +133,10 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
+
+  const invalidateBudgets = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: [`/api/budget-plan/${trackerId}/active`] });
+  }, [queryClient, trackerId]);
 
   const openCreateRoot = () => {
     setCreateMode({ type: 'root' });
@@ -250,6 +285,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
       setDeleteId(null);
       setDeleteCascade(false);
       await invalidate();
+      await invalidateBudgets();
     } catch {
       enqueueSnackbar('Odstranění se nepodařilo (síť nebo neočekávaná chyba)', { variant: 'error' });
     } finally {
@@ -259,8 +295,8 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
 
   const budgetBlurb = (
     <>
-      Rozpočet: <strong>{trackerName}</strong> — zobrazeny jsou jen aktivní kategorie; typ příjem / výdaj,
-      lze přidávat podkategorie.
+      Tracker <strong>{trackerName}</strong> — aktivní kategorie; typ příjem / výdaj, podkategorie a rozpočty
+      u jednotlivých kategorií (ikona peněženky).
     </>
   );
 
@@ -329,6 +365,8 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                       setDeleteCascade(false);
                       setDeleteId(id);
                     }}
+                    onManageBudgets={setBudgetCategory}
+                    getBudgetCount={(categoryId) => budgetsByCategoryId.get(categoryId)?.length ?? 0}
                   />
                 ))}
               </Stack>
@@ -509,6 +547,15 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      <CategoryBudgetPlansDialog
+        open={Boolean(budgetCategory)}
+        category={budgetCategory}
+        trackerId={trackerId}
+        plans={budgetCategory?.id ? budgetsByCategoryId.get(budgetCategory.id) ?? [] : []}
+        onClose={() => setBudgetCategory(null)}
+        onInvalidate={invalidateBudgets}
+      />
     </Box>
   );
 };
@@ -519,9 +566,19 @@ type RowProps = {
   onAddChild: (parentId: string) => void;
   onEdit: (c: CategoryResponseDto) => void;
   onDelete: (id: string) => void;
+  onManageBudgets: (c: CategoryResponseDto) => void;
+  getBudgetCount: (categoryId: string) => number;
 };
 
-const CategoryTreeRows: FC<RowProps> = ({ node, depth, onAddChild, onEdit, onDelete }) => {
+const CategoryTreeRows: FC<RowProps> = ({
+  node,
+  depth,
+  onAddChild,
+  onEdit,
+  onDelete,
+  onManageBudgets,
+  getBudgetCount,
+}) => {
   const [expanded, setExpanded] = useState(false);
   const id = node.id;
   const children = asCategoryChildren(node.children);
@@ -530,6 +587,8 @@ const CategoryTreeRows: FC<RowProps> = ({ node, depth, onAddChild, onEdit, onDel
   const toggleExpanded = () => {
     if (hasChildren) setExpanded((v) => !v);
   };
+
+  const budgetCount = id ? getBudgetCount(id) : 0;
 
   return (
     <Box>
@@ -594,6 +653,19 @@ const CategoryTreeRows: FC<RowProps> = ({ node, depth, onAddChild, onEdit, onDel
         />
         {id && (
           <>
+            <Tooltip title={budgetCount > 0 ? `Rozpočty (${budgetCount})` : 'Rozpočet ke kategorii'}>
+              <IconButton
+                size="small"
+                aria-label="rozpočty kategorie"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onManageBudgets(node);
+                }}
+                color={budgetCount > 0 ? 'primary' : 'default'}
+              >
+                <AccountBalanceWalletOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Podkategorie">
               <IconButton
                 size="small"
@@ -645,6 +717,8 @@ const CategoryTreeRows: FC<RowProps> = ({ node, depth, onAddChild, onEdit, onDel
                 onAddChild={onAddChild}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onManageBudgets={onManageBudgets}
+                getBudgetCount={getBudgetCount}
               />
             ))}
           </Box>
