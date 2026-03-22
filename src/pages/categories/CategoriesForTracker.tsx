@@ -44,9 +44,11 @@ import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useMemo, useRef, useState } from 'react';
 import {
   asCategoryChildren,
+  categoryKindChipColor,
   categoryKindLabel,
   collectIdsInSubtree,
   findNodeById,
+  rootAncestorCategory,
   toCategoryTree,
 } from './categoryTreeUtils';
 
@@ -106,9 +108,9 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   };
 
   const openCreateChild = (parentId: string) => {
-    const parent = flat.find((c) => c.id === parentId);
+    const root = rootAncestorCategory(tree, flat, parentId);
     const parentKind =
-      (parent?.categoryKind as CreateCategoryRequestDtoCategoryKind | undefined) ??
+      (root?.categoryKind as CreateCategoryRequestDtoCategoryKind | undefined) ??
       CreateCategoryRequestDtoCategoryKind.EXPENSE;
     setCreateMode({ type: 'child', parentId });
     setFormName('');
@@ -580,7 +582,12 @@ const CategoryTreeRows: FC<RowProps> = ({ node, depth, onAddChild, onEdit, onDel
         >
           {node.name ?? '—'}
         </Typography>
-        <Chip size="small" label={categoryKindLabel(node.categoryKind)} variant="outlined" />
+        <Chip
+          size="small"
+          label={categoryKindLabel(node.categoryKind)}
+          variant="outlined"
+          color={categoryKindChipColor(node.categoryKind)}
+        />
         {id && (
           <>
             <Tooltip title="Podkategorie">

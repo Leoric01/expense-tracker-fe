@@ -1,4 +1,5 @@
 import { CreateWalletRequestDtoWalletType, WalletResponseDtoWalletType } from '@api/model';
+import { minorUnitsToMajor } from '@utils/moneyMinorUnits';
 
 const TYPE_LABELS: Record<string, string> = {
   [WalletResponseDtoWalletType.CASH]: 'Hotovost',
@@ -19,12 +20,14 @@ export const WALLET_TYPE_OPTIONS = Object.values(CreateWalletRequestDtoWalletTyp
   label: TYPE_LABELS[v] ?? v,
 }));
 
-export function formatWalletAmount(amount: number | undefined, currencyCode?: string): string {
-  if (amount === undefined || Number.isNaN(amount)) return '—';
+/** `amountMinor` = hodnota z API v haléřích/centech. */
+export function formatWalletAmount(amountMinor: number | undefined, currencyCode?: string): string {
+  const major = minorUnitsToMajor(amountMinor);
+  if (major === undefined) return '—';
   const code = (currencyCode ?? 'CZK').toUpperCase();
   try {
-    return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: code }).format(amount);
+    return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: code }).format(major);
   } catch {
-    return `${amount.toLocaleString('cs-CZ')} ${code}`;
+    return `${major.toLocaleString('cs-CZ')} ${code}`;
   }
 }

@@ -12,14 +12,12 @@ import {
 } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
 import { useTheme } from '@mui/material/styles';
+import { formatDateTimeDdMmYyyyHhMm } from '@utils/dateTimeCs';
+import { formatWalletAmount } from './walletDisplay';
 import { useQuery } from '@tanstack/react-query';
 import { FC } from 'react';
 
 const TX_LIST = { page: 0, size: 25, sort: ['transactionDate,desc'] } as const;
-
-function pad2(n: number) {
-  return String(n).padStart(2, '0');
-}
 
 function txTypeLabel(t?: string): string {
   switch (t) {
@@ -50,13 +48,6 @@ function amountColorForType(t: string | undefined, theme: Theme): string {
     default:
       return theme.palette.text.secondary;
   }
-}
-
-function formatTxDate(iso?: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }) => {
@@ -98,7 +89,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           ) : (
             recentTx.map((row) => (
               <TableRow key={row.id ?? row.transactionDate}>
-                <TableCell>{formatTxDate(row.transactionDate)}</TableCell>
+                <TableCell>{formatDateTimeDdMmYyyyHhMm(row.transactionDate)}</TableCell>
                 <TableCell>{txTypeLabel(row.transactionType as string | undefined)}</TableCell>
                 <TableCell>{row.categoryName?.trim() ? row.categoryName : '—'}</TableCell>
                 <TableCell>{row.description ?? row.note ?? '—'}</TableCell>
@@ -109,8 +100,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
                     color: amountColorForType(row.transactionType as string | undefined, theme),
                   }}
                 >
-                  {row.amount != null ? row.amount : '—'}
-                  {row.currencyCode ? ` ${row.currencyCode}` : ''}
+                  {formatWalletAmount(row.amount, row.currencyCode)}
                 </TableCell>
               </TableRow>
             ))

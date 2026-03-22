@@ -27,6 +27,7 @@ import {
 import { PageHeading } from '@components/PageHeading';
 import { CategoriesForTracker } from '@pages/categories/CategoriesForTracker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
+import { majorToMinorUnits } from '@utils/moneyMinorUnits';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { DragEvent, FC, FormEvent, useEffect, useRef, useState } from 'react';
@@ -146,7 +147,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     const bal = initialBalance.trim();
     if (bal !== '') {
       const n = parseFloat(bal.replace(',', '.'));
-      if (!Number.isNaN(n)) payload.initialBalance = n;
+      if (!Number.isNaN(n)) payload.initialBalance = majorToMinorUnits(n);
     }
 
     setSubmitting(true);
@@ -189,14 +190,19 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       enqueueSnackbar('Zadej kladnou částku', { variant: 'warning' });
       return;
     }
+    const transferIso = toIsoFromDatetimeLocal(transferWhen);
+    if (!transferIso) {
+      enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', { variant: 'warning' });
+      return;
+    }
     setTransferSubmitting(true);
     try {
       const res = await transactionCreate(trackerId, {
         transactionType: CreateTransactionRequestDtoTransactionType.TRANSFER,
         sourceWalletId: transferPair.sourceId,
         targetWalletId: transferPair.targetId,
-        amount: amt,
-        transactionDate: toIsoFromDatetimeLocal(transferWhen),
+        amount: majorToMinorUnits(amt),
+        transactionDate: transferIso,
         ...(transferDesc.trim() ? { description: transferDesc.trim() } : {}),
       });
       if (res.status < 200 || res.status >= 300) {
@@ -221,13 +227,18 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       enqueueSnackbar('Zadej skutečný zůstatek po inventuře', { variant: 'warning' });
       return;
     }
+    const corrIso = toIsoFromDatetimeLocal(corrWhen);
+    if (!corrIso) {
+      enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', { variant: 'warning' });
+      return;
+    }
     setCorrSubmitting(true);
     try {
       const res = await transactionCreate(trackerId, {
         transactionType: CreateTransactionRequestDtoTransactionType.BALANCE_ADJUSTMENT,
         walletId: correctionWallet.id,
-        correctedBalance: bal,
-        transactionDate: toIsoFromDatetimeLocal(corrWhen),
+        correctedBalance: majorToMinorUnits(bal),
+        transactionDate: corrIso,
         ...(corrNote.trim() ? { note: corrNote.trim() } : {}),
       });
       if (res.status < 200 || res.status >= 300) {
@@ -306,9 +317,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           Přidat peněženku
         </Button>
       </Stack>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Přetáhni aktivní peněženku na jinou pro převod. Klikni na peněženku pro korekci zůstatku (inventura).
-      </Typography>
 
       {isError && (
         <Typography color="error" sx={{ mb: 2 }}>
@@ -455,10 +463,10 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
               />
               <TextField
                 label="Datum a čas"
-                type="datetime-local"
                 value={transferWhen}
                 onChange={(e) => setTransferWhen(e.target.value)}
-                onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                placeholder="dd.MM.yyyy HH:mm"
+                helperText="Formát dd.MM.yyyy HH:mm"
                 InputLabelProps={{ shrink: true }}
                 required
                 fullWidth
@@ -515,10 +523,10 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
               />
               <TextField
                 label="Datum a čas"
-                type="datetime-local"
                 value={corrWhen}
                 onChange={(e) => setCorrWhen(e.target.value)}
-                onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                placeholder="dd.MM.yyyy HH:mm"
+                helperText="Formát dd.MM.yyyy HH:mm"
                 InputLabelProps={{ shrink: true }}
                 required
                 fullWidth

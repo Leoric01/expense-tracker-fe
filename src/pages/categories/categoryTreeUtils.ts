@@ -65,6 +65,13 @@ export function categoryKindLabel(kind?: string): string {
   return kind ?? '—';
 }
 
+/** Barva MUI `Chip` — příjem zeleně, výdaj červeně. */
+export function categoryKindChipColor(kind?: string): 'success' | 'error' | 'default' {
+  if (kind === 'INCOME') return 'success';
+  if (kind === 'EXPENSE') return 'error';
+  return 'default';
+}
+
 /** Najde uzel v podstromu a vrátí jeho id + všech potomků (pro výběr nového rodiče). */
 export function collectIdsInSubtree(node: CategoryResponseDto): Set<string> {
   const s = new Set<string>();
@@ -82,4 +89,36 @@ export function findNodeById(tree: CategoryResponseDto[], id: string): CategoryR
     if (found) return found;
   }
   return null;
+}
+
+/**
+ * Od uzlu `startId` po řetězci `parentId` až ke kořeni. Uzel hledá v `flat`, jinak ve `tree`
+ * (podkategorie můžou být jen ve vnořeném stromu).
+ */
+export function rootAncestorCategory(
+  tree: CategoryResponseDto[],
+  flat: CategoryResponseDto[],
+  startId: string,
+): CategoryResponseDto | undefined {
+  const flatById = new Map<string, CategoryResponseDto>();
+  for (const c of flat) {
+    if (c.id) flatById.set(c.id, c);
+  }
+
+  const resolve = (id: string): CategoryResponseDto | undefined =>
+    flatById.get(id) ?? findNodeById(tree, id) ?? undefined;
+
+  let id: string | undefined = startId;
+  let last: CategoryResponseDto | undefined;
+  const seen = new Set<string>();
+
+  while (id && !seen.has(id)) {
+    seen.add(id);
+    const node = resolve(id);
+    if (!node) return last;
+    last = node;
+    if (!node.parentId) return node;
+    id = node.parentId;
+  }
+  return last;
 }

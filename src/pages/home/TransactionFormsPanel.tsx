@@ -14,6 +14,7 @@ import { transactionCreate } from '@api/transaction-controller/transaction-contr
 import { walletFindAll } from '@api/wallet-controller/wallet-controller';
 import { PageHeading } from '@components/PageHeading';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
+import { majorToMinorUnits } from '@utils/moneyMinorUnits';
 import SearchIcon from '@mui/icons-material/Search';
 import {
   Box,
@@ -32,10 +33,12 @@ import { useDebouncedValue } from '@hooks/useDebouncedValue';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
-import { toCategoryTree } from '../categories/categoryTreeUtils';
+import { findNodeById, toCategoryTree } from '../categories/categoryTreeUtils';
 import { CategoryTreePicker } from './CategoryTreePicker';
 import {
+  canonicalAmountFromUserInput,
   defaultDatetimeLocal,
+  formatAmountDisplayCs,
   parseAmount,
   toIsoFromDatetimeLocal,
 } from './transactionFormUtils';
@@ -99,18 +102,20 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
     await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
   };
 
-  const submit = async (payload: CreateTransactionRequestDto) => {
+  const submit = async (payload: CreateTransactionRequestDto): Promise<boolean> => {
     setSubmitting(true);
     try {
       const res = await transactionCreate(trackerId, payload);
       if (res.status < 200 || res.status >= 300) {
         enqueueSnackbar(apiErrorMessage(res.data, 'Transakci se nepodařilo uložit'), { variant: 'error' });
-        return;
+        return false;
       }
       enqueueSnackbar('Transakce byla zaznamenána', { variant: 'success' });
       await invalidate();
+      return true;
     } catch {
       enqueueSnackbar('Transakci se nepodařilo uložit', { variant: 'error' });
+      return false;
     } finally {
       setSubmitting(false);
     }
@@ -159,7 +164,7 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
 type WalletProps = {
   wallets: WalletResponseDto[];
   submitting: boolean;
-  onSubmit: (p: CreateTransactionRequestDto) => Promise<void>;
+  onSubmit: (p: CreateTransactionRequestDto) => Promise<boolean>;
 };
 
 type IEProps = WalletProps & {
@@ -191,8 +196,10 @@ const IncomeExpenseForm: FC<IEProps> = ({
 
   useEffect(() => {
     if (!categoryId) return;
-    if (!categoryFlat.some((c) => c.id === categoryId)) setCategoryId('');
-  }, [categoryFlat, categoryId]);
+    const inFlat = categoryFlat.some((c) => c.id === categoryId);
+    const inTree = Boolean(findNodeById(categoryTree, categoryId));
+    if (!inFlat && !inTree) setCategoryId('');
+  }, [categoryFlat, categoryTree, categoryId]);
 
   const handle = async (e: FormEvent) => {
     e.preventDefault();
@@ -205,47 +212,90 @@ const IncomeExpenseForm: FC<IEProps> = ({
       enqueueSnackbar('Zadej kladnou částku', { variant: 'warning' });
       return;
     }
-    const cat = categoryFlat.find((c) => c.id === categoryId);
+    const cat =
+      categoryFlat.find((c) => c.id === categoryId) ?? findNodeById(categoryTree, categoryId) ?? undefined;
     const kind = cat?.categoryKind;
     if (kind !== CategoryResponseDtoCategoryKind.INCOME && kind !== CategoryResponseDtoCategoryKind.EXPENSE) {
       enqueueSnackbar('Kategorie nemá platný typ příjem/výdaj', { variant: 'warning' });
       return;
     }
-    await onSubmit({
+    const transactionDateIso = toIsoFromDatetimeLocal(when);
+    if (!transactionDateIso) {
+      enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', { variant: 'warning' });
+      return;
+    }
+    const ok = await onSubmit({
       transactionType:
         kind === CategoryResponseDtoCategoryKind.INCOME
           ? CreateTransactionRequestDtoTransactionType.INCOME
           : CreateTransactionRequestDtoTransactionType.EXPENSE,
       walletId,
       categoryId,
-      amount: amt,
-      transactionDate: toIsoFromDatetimeLocal(when),
+      amount: majorToMinorUnits(amt),
+      transactionDate: transactionDateIso,
       ...(description.trim() ? { description: description.trim() } : {}),
     });
+    if (ok) {
+      setAmount('');
+      setDescription('');
+      setCategoryId('');
+      setWhen(defaultDatetimeLocal());
+      setWalletId('');
+      onCategorySearchChange('');
+    }
   };
 
   return (
     <Box component="form" onSubmit={handle}>
-      <Stack spacing={2} sx={{ maxWidth: 560 }}>
-        <Typography variant="body2" color="text.secondary">
-          Typ transakce (příjem nebo výdaj) se vezme z vybrané kategorie.
-        </Typography>
-        <FormControl fullWidth required>
-          <InputLabel id="ie-w">Peněženka</InputLabel>
-          <Select
-            labelId="ie-w"
-            label="Peněženka"
-            value={walletId}
-            onChange={(e) => setWalletId(e.target.value as string)}
-          >
-            {wallets.map((w) => (
-              <MenuItem key={w.id} value={w.id}>
-                {w.name ?? w.id} {w.currencyCode ? `(${w.currencyCode})` : ''}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Typ transakce (příjem nebo výdaj) se vezme z vybrané kategorie.
+      </Typography>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems="stretch">
+        <Stack spacing={2} sx={{ flex: 1, minWidth: 0 }}>
+          <FormControl fullWidth required>
+            <InputLabel id="ie-w">Peněženka</InputLabel>
+            <Select
+              labelId="ie-w"
+              label="Peněženka"
+              value={walletId}
+              onChange={(e) => setWalletId(e.target.value as string)}
+            >
+              {wallets.map((w) => (
+                <MenuItem key={w.id} value={w.id}>
+                  {w.name ?? w.id} {w.currencyCode ? `(${w.currencyCode})` : ''}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            label="Částka"
+            value={formatAmountDisplayCs(amount)}
+            onChange={(e) => setAmount(canonicalAmountFromUserInput(e.target.value))}
+            required
+            inputMode="decimal"
+            fullWidth
+          />
+          <TextField
+            label="Datum a čas"
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+            placeholder="dd.MM.yyyy HH:mm"
+            helperText="Formát dd.MM.yyyy HH:mm (24 h)"
+            required
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+          />
+          <TextField
+            label="Popis (volitelné)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            fullWidth
+          />
+          <Button type="submit" variant="contained" disabled={submitting} sx={{ alignSelf: 'flex-start' }}>
+            Uložit
+          </Button>
+        </Stack>
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
             Kategorie
           </Typography>
@@ -264,40 +314,21 @@ const IncomeExpenseForm: FC<IEProps> = ({
               ),
             }}
           />
-          <CategoryTreePicker
-            key={categorySearchDebounced}
-            tree={categoryTree}
-            selectedId={categoryId}
-            onSelect={setCategoryId}
-            emptyMessage={
-              categorySearch.trim()
-                ? 'Žádná kategorie neodpovídá hledání.'
-                : 'Žádná kategorie — přidej v menu Kategorie'
-            }
-            loading={categoriesLoading}
-          />
+          <Box sx={{ flex: 1, minHeight: 200 }}>
+            <CategoryTreePicker
+              key={categorySearchDebounced}
+              tree={categoryTree}
+              selectedId={categoryId}
+              onSelect={setCategoryId}
+              emptyMessage={
+                categorySearch.trim()
+                  ? 'Žádná kategorie neodpovídá hledání.'
+                  : 'Žádná kategorie — přidej v menu Kategorie'
+              }
+              loading={categoriesLoading}
+            />
+          </Box>
         </Box>
-        <TextField
-          label="Částka"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          required
-          inputMode="decimal"
-        />
-        <TextField
-          label="Datum a čas"
-          type="datetime-local"
-          value={when}
-          onChange={(e) => setWhen(e.target.value)}
-          onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-          InputLabelProps={{ shrink: true }}
-          required
-          fullWidth
-        />
-        <TextField label="Popis (volitelné)" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
-        <Button type="submit" variant="contained" disabled={submitting}>
-          Uložit
-        </Button>
       </Stack>
     </Box>
   );

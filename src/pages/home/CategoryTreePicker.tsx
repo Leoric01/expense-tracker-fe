@@ -1,8 +1,8 @@
 import type { CategoryResponseDto } from '@api/model';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { Box, CircularProgress, Collapse, IconButton, Paper, Stack, Typography } from '@mui/material';
+import { Box, Chip, CircularProgress, Collapse, IconButton, Paper, Stack, Typography } from '@mui/material';
 import { FC, useState } from 'react';
-import { asCategoryChildren } from '../categories/categoryTreeUtils';
+import { asCategoryChildren, categoryKindChipColor, categoryKindLabel } from '../categories/categoryTreeUtils';
 
 type RowProps = {
   node: CategoryResponseDto;
@@ -70,6 +70,13 @@ const CategoryTreePickRow: FC<RowProps> = ({ node, depth, selectedId, onSelect }
         <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap title={node.name}>
           {node.name ?? '—'}
         </Typography>
+        <Chip
+          size="small"
+          label={categoryKindLabel(node.categoryKind)}
+          variant="outlined"
+          color={categoryKindChipColor(node.categoryKind)}
+          sx={{ flexShrink: 0 }}
+        />
       </Stack>
       {hasChildren && (
         <Collapse in={expanded} timeout="auto" unmountOnExit>
