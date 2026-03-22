@@ -20,6 +20,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   InputLabel,
   MenuItem,
@@ -38,12 +39,7 @@ import {
   firstDayOfMonth,
   lastDayOfMonth,
 } from '@utils/dashboardPeriod';
-import {
-  CS_DATE_FORMAT_LABEL,
-  CS_DATE_HELPER_TEXT,
-  formatDateDdMmYyyyFromDate,
-  parseCsDateTime,
-} from '@utils/dateTimeCs';
+import { CS_DATE_FORMAT_LABEL, formatDateDdMmYyyyFromDate, parseCsDateTime } from '@utils/dateTimeCs';
 import { majorToMinorUnits } from '@utils/moneyMinorUnits';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
@@ -439,7 +435,8 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         spacing={2}
-        alignItems={{ sm: 'flex-end' }}
+        alignItems={{ xs: 'stretch', sm: 'center' }}
+        useFlexGap
         sx={{ mb: 2, flexWrap: 'wrap' }}
       >
         <TextField
@@ -447,7 +444,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           value={rangeFrom}
           onChange={(e) => setRangeFrom(e.target.value)}
           placeholder="dd.MM.yyyy"
-          helperText={CS_DATE_HELPER_TEXT}
           InputLabelProps={{ shrink: true }}
           size="small"
         />
@@ -456,7 +452,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           value={rangeTo}
           onChange={(e) => setRangeTo(e.target.value)}
           placeholder="dd.MM.yyyy"
-          helperText={CS_DATE_HELPER_TEXT}
           InputLabelProps={{ shrink: true }}
           size="small"
         />
@@ -467,6 +462,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
             setRangeFrom(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
             setRangeTo(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
           }}
+          sx={{ alignSelf: { xs: 'stretch', sm: 'auto' }, width: { xs: '100%', sm: 'auto' } }}
         >
           Aktuální měsíc
         </Button>
@@ -481,13 +477,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           Zadej obě platná data ({CS_DATE_FORMAT_LABEL}).
         </Typography>
       )}
-      {dashboard?.periodFrom && dashboard?.periodTo && rangeParamsOk && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Období dle serveru: {new Date(dashboard.periodFrom).toLocaleString('cs-CZ')} —{' '}
-          {new Date(dashboard.periodTo).toLocaleString('cs-CZ')}
-        </Typography>
-      )}
-
       {isError && (
         <Typography color="error" sx={{ mb: 2 }}>
           Nepodařilo se načíst peněženky.
@@ -575,43 +564,50 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                       '&:last-child': { pb: '16px !important' },
                     }}
                   >
-                    <Stack
-                      direction="row"
-                      justifyContent="space-between"
-                      alignItems="flex-start"
-                      spacing={1}
-                      sx={{ mb: 1 }}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        gap: 1.5,
+                      }}
                     >
-                      <Typography variant="h6" component="h3" sx={{ lineHeight: 1.3 }}>
-                        {w.name ?? '—'}
-                      </Typography>
-                      {w.active === false && <Chip size="small" label="Neaktivní" variant="outlined" />}
-                    </Stack>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                      {w.currencyCode ?? '—'}
-                    </Typography>
-                    {sm && (
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                        Příjem {formatWalletAmount(sm.totalIncome, w.currencyCode)} · Výdaj{' '}
-                        {formatWalletAmount(sm.totalExpense, w.currencyCode)}
-                      </Typography>
-                    )}
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                      Zůstatek (konec období)
-                    </Typography>
-                    <Typography variant="h6" component="p" sx={{ fontWeight: 600 }}>
-                      {formatWalletAmount(w.currentBalance, w.currencyCode)}
-                    </Typography>
-                    {canDragTransfer && (
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                        Úchyt vlevo: pořadí · přetáhni obsah karty na jinou peněženku pro převod
-                      </Typography>
-                    )}
-                    {!canDragTransfer && w.id && (
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                        Úchyt vlevo: pořadí karty
-                      </Typography>
-                    )}
+                      <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
+                        <Stack direction="row" alignItems="flex-start" spacing={1}>
+                          <Typography variant="h6" component="h3" sx={{ lineHeight: 1.3 }}>
+                            {w.name ?? '—'}
+                          </Typography>
+                          {w.active === false && <Chip size="small" label="Neaktivní" variant="outlined" />}
+                        </Stack>
+                        <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
+                          Zůstatek
+                        </Typography>
+                        <Typography variant="h6" component="p" sx={{ fontWeight: 600, lineHeight: 1.25 }}>
+                          {formatWalletAmount(w.currentBalance, w.currencyCode)}
+                        </Typography>
+                      </Stack>
+                      {sm && (
+                        <Stack
+                          alignItems="flex-end"
+                          spacing={0.25}
+                          sx={{ flexShrink: 0, textAlign: 'right', minWidth: 'min-content' }}
+                        >
+                          <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
+                            Zůstatek na začátku {formatWalletAmount(sm.startBalance, w.currencyCode)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
+                            Příjem {formatWalletAmount(sm.totalIncome, w.currencyCode)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
+                            Výdaj {formatWalletAmount(sm.totalExpense, w.currencyCode)}
+                          </Typography>
+                          <Divider sx={{ alignSelf: 'stretch', width: '100%', my: 0.5 }} />
+                          <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
+                            Čistá změna {formatWalletAmount(sm.difference, w.currencyCode)}
+                          </Typography>
+                        </Stack>
+                      )}
+                    </Box>
                   </CardContent>
                 </Stack>
               </Card>
