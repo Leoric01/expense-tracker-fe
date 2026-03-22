@@ -50,6 +50,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useCallback, useMemo, useRef, useState } from 'react';
 import { CategoryBudgetPlansDialog } from './CategoryBudgetPlansDialog';
+import { CategoryBudgetPlanUsageLine } from './categoryBudgetUsage';
 import {
   asCategoryChildren,
   categoryKindChipColor,
@@ -399,6 +400,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                       const rec = recurringByCategoryId.get(categoryId)?.length ?? 0;
                       return one + rec;
                     }}
+                    getOneOffBudgets={(categoryId) => budgetsByCategoryId.get(categoryId) ?? []}
                   />
                 ))}
               </Stack>
@@ -603,6 +605,7 @@ type RowProps = {
   onDelete: (id: string) => void;
   onManageBudgets: (c: CategoryResponseDto) => void;
   getBudgetCount: (categoryId: string) => number;
+  getOneOffBudgets: (categoryId: string) => BudgetPlanResponseDto[];
 };
 
 const CategoryTreeRows: FC<RowProps> = ({
@@ -613,6 +616,7 @@ const CategoryTreeRows: FC<RowProps> = ({
   onDelete,
   onManageBudgets,
   getBudgetCount,
+  getOneOffBudgets,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const id = node.id;
@@ -624,6 +628,7 @@ const CategoryTreeRows: FC<RowProps> = ({
   };
 
   const budgetCount = id ? getBudgetCount(id) : 0;
+  const oneOffPlans = id ? getOneOffBudgets(id) : [];
 
   return (
     <Box>
@@ -680,6 +685,28 @@ const CategoryTreeRows: FC<RowProps> = ({
         >
           {node.name ?? '—'}
         </Typography>
+        {oneOffPlans.length > 0 && (
+          <Stack
+            direction="row"
+            spacing={0.5}
+            alignItems="center"
+            sx={{
+              flex: '0 1 auto',
+              minWidth: 0,
+              maxWidth: { xs: 'min(38%, 200px)', sm: 'min(40%, 280px)' },
+            }}
+          >
+            {oneOffPlans.map((p) => (
+              <CategoryBudgetPlanUsageLine
+                key={p.id ?? p.name}
+                plan={p}
+                variant="listRow"
+                tooltipShowPlanName={oneOffPlans.length > 1}
+                showPeriodType
+              />
+            ))}
+          </Stack>
+        )}
         <Chip
           size="small"
           label={categoryKindLabel(node.categoryKind)}
@@ -754,6 +781,7 @@ const CategoryTreeRows: FC<RowProps> = ({
                 onDelete={onDelete}
                 onManageBudgets={onManageBudgets}
                 getBudgetCount={getBudgetCount}
+                getOneOffBudgets={getOneOffBudgets}
               />
             ))}
           </Box>

@@ -35,7 +35,6 @@ import {
   Typography,
 } from '@mui/material';
 import { AmountTextFieldCs } from '@pages/home/AmountTextFieldCs';
-import { formatWalletAmount } from '@pages/home/walletDisplay';
 import {
   formatAmountDisplayCs,
   parseAmount,
@@ -44,7 +43,6 @@ import { apiErrorMessage } from '@utils/apiErrorMessage';
 import {
   calendarDayEndUtcIso,
   calendarDayStartUtcIso,
-  formatDateDdMmYyyy,
   formatDateDdMmYyyyFromDate,
   parseCsDateTime,
 } from '@utils/dateTimeCs';
@@ -52,6 +50,7 @@ import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
 import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useCallback, useEffect, useState } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
+import { CategoryBudgetPlanUsageLine } from './categoryBudgetUsage';
 import { CategoryRecurringBudgetTab } from './CategoryRecurringBudgetTab';
 
 type Props = {
@@ -333,14 +332,7 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
                   }}
                 >
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="subtitle2">{p.name ?? '—'}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {formatWalletAmount(p.amount, p.currencyCode)} · {budgetPeriodLabelCs(p.periodType)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      {p.validFrom ? `Od ${formatDateDdMmYyyy(p.validFrom)}` : ''}
-                      {p.validTo ? ` · do ${formatDateDdMmYyyy(p.validTo)}` : ''}
-                    </Typography>
+                    <CategoryBudgetPlanUsageLine plan={p} showPeriodType />
                   </Box>
                   <Tooltip title="Upravit">
                     <IconButton
