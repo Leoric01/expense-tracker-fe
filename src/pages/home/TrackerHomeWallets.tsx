@@ -11,7 +11,6 @@ import { CreateWalletRequestDtoWalletType } from '@api/model';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import {
-  Alert,
   Box,
   Button,
   Card,
@@ -35,24 +34,25 @@ import { PageHeading } from '@components/PageHeading';
 import { CategoriesForTracker } from '@pages/categories/CategoriesForTracker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import {
-  dateRangeLocalToIsoParams,
+  dateRangeDdMmYyyyToIsoParams,
   firstDayOfMonth,
   lastDayOfMonth,
-  toYyyyMmDd,
 } from '@utils/dashboardPeriod';
+import {
+  CS_DATE_FORMAT_LABEL,
+  CS_DATE_HELPER_TEXT,
+  formatDateDdMmYyyyFromDate,
+  parseCsDateTime,
+} from '@utils/dateTimeCs';
 import { majorToMinorUnits } from '@utils/moneyMinorUnits';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { DragEvent, FC, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { RecentTransactionsPanel } from './RecentTransactionsPanel';
+import { BalanceCorrectionDialog, type BalanceCorrectionConfirmPayload } from './BalanceCorrectionDialog';
 import { TransferBetweenWalletsDialog, type TransferConfirmPayload } from './TransferBetweenWalletsDialog';
 import { TransactionFormsPanel } from './TransactionFormsPanel';
-import {
-  defaultDatetimeLocal,
-  parseAmount,
-  toIsoFromDatetimeLocal,
-} from './transactionFormUtils';
 import { formatWalletAmount, WALLET_TYPE_OPTIONS } from './walletDisplay';
 import {
   globalOrderAfterTrackerReorder,
@@ -117,20 +117,22 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const [transferSubmitting, setTransferSubmitting] = useState(false);
 
   const [correctionWallet, setCorrectionWallet] = useState<WalletResponseDto | null>(null);
-  const [corrBalance, setCorrBalance] = useState('');
-  const [corrWhen, setCorrWhen] = useState(defaultDatetimeLocal);
-  const [corrNote, setCorrNote] = useState('');
   const [corrSubmitting, setCorrSubmitting] = useState(false);
 
-  const [rangeFrom, setRangeFrom] = useState(() => toYyyyMmDd(firstDayOfMonth()));
-  const [rangeTo, setRangeTo] = useState(() => toYyyyMmDd(lastDayOfMonth()));
+  const [rangeFrom, setRangeFrom] = useState(() => formatDateDdMmYyyyFromDate(firstDayOfMonth()));
+  const [rangeTo, setRangeTo] = useState(() => formatDateDdMmYyyyFromDate(lastDayOfMonth()));
 
   const dashboardParams = useMemo(
-    () => dateRangeLocalToIsoParams(rangeFrom, rangeTo),
+    () => dateRangeDdMmYyyyToIsoParams(rangeFrom, rangeTo),
     [rangeFrom, rangeTo],
   );
 
-  const rangeValid = rangeFrom <= rangeTo;
+  const parsedFrom = useMemo(() => parseCsDateTime(rangeFrom.trim()), [rangeFrom]);
+  const parsedTo = useMemo(() => parseCsDateTime(rangeTo.trim()), [rangeTo]);
+  const bothDatesParsed = Boolean(parsedFrom && parsedTo);
+  const rangeOrderInvalid =
+    bothDatesParsed && parsedFrom!.getTime() > parsedTo!.getTime();
+  const rangeParamsOk = Boolean(dashboardParams);
 
   const {
     data: dashboardRes,
@@ -138,15 +140,19 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     isError,
     isFetched: dashboardFetched,
   } = useQuery({
-    queryKey: getWalletDashboardQueryKey(trackerId, dashboardParams),
+    queryKey: dashboardParams
+      ? getWalletDashboardQueryKey(trackerId, dashboardParams)
+      : ['wallet-dashboard', trackerId, 'invalid-range', rangeFrom, rangeTo],
     queryFn: async () => {
+      if (!dashboardParams) throw new Error('dashboard');
       const res = await walletDashboard(trackerId, dashboardParams);
       if (res.status < 200 || res.status >= 300) {
         throw new Error('dashboard');
       }
       return res.data as WalletDashboardResponseDto;
     },
-    enabled: Boolean(trackerId) && rangeValid,
+    enabled: Boolean(trackerId) && rangeParamsOk,
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
 
@@ -189,14 +195,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
     await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
   }, [queryClient, trackerId]);
-
-  useEffect(() => {
-    if (correctionWallet) {
-      setCorrBalance('');
-      setCorrWhen(defaultDatetimeLocal());
-      setCorrNote('');
-    }
-  }, [correctionWallet?.id]);
 
   const resetForm = () => {
     setName('');
@@ -298,41 +296,33 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     [transferPair, transferCurrenciesOk, trackerId, enqueueSnackbar, invalidateFinance],
   );
 
-  const handleCorrectionSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!correctionWallet?.id) return;
-    const bal = parseAmount(corrBalance);
-    if (bal == null) {
-      enqueueSnackbar('Zadej skutečný zůstatek po inventuře', { variant: 'warning' });
-      return;
-    }
-    const corrIso = toIsoFromDatetimeLocal(corrWhen);
-    if (!corrIso) {
-      enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', { variant: 'warning' });
-      return;
-    }
-    setCorrSubmitting(true);
-    try {
-      const res = await transactionCreate(trackerId, {
-        transactionType: CreateTransactionRequestDtoTransactionType.BALANCE_ADJUSTMENT,
-        walletId: correctionWallet.id,
-        correctedBalance: majorToMinorUnits(bal),
-        transactionDate: corrIso,
-        ...(corrNote.trim() ? { note: corrNote.trim() } : {}),
-      });
-      if (res.status < 200 || res.status >= 300) {
-        enqueueSnackbar(apiErrorMessage(res.data, 'Korekci se nepodařilo uložit'), { variant: 'error' });
-        return;
+  const handleCorrectionConfirm = useCallback(
+    async (payload: BalanceCorrectionConfirmPayload) => {
+      if (!correctionWallet?.id) return;
+      setCorrSubmitting(true);
+      try {
+        const res = await transactionCreate(trackerId, {
+          transactionType: CreateTransactionRequestDtoTransactionType.BALANCE_ADJUSTMENT,
+          walletId: correctionWallet.id,
+          correctedBalance: majorToMinorUnits(payload.correctedBalanceMajor),
+          transactionDate: payload.transactionDateIso,
+          ...(payload.note ? { note: payload.note } : {}),
+        });
+        if (res.status < 200 || res.status >= 300) {
+          enqueueSnackbar(apiErrorMessage(res.data, 'Korekci se nepodařilo uložit'), { variant: 'error' });
+          return;
+        }
+        enqueueSnackbar('Korekce byla zaznamenána', { variant: 'success' });
+        setCorrectionWallet(null);
+        await invalidateFinance();
+      } catch {
+        enqueueSnackbar('Korekci se nepodařilo uložit', { variant: 'error' });
+      } finally {
+        setCorrSubmitting(false);
       }
-      enqueueSnackbar('Korekce byla zaznamenána', { variant: 'success' });
-      setCorrectionWallet(null);
-      await invalidateFinance();
-    } catch {
-      enqueueSnackbar('Korekci se nepodařilo uložit', { variant: 'error' });
-    } finally {
-      setCorrSubmitting(false);
-    }
-  };
+    },
+    [correctionWallet?.id, trackerId, enqueueSnackbar, invalidateFinance],
+  );
 
   const clearDragVisual = () => {
     setDraggingId(null);
@@ -454,17 +444,19 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       >
         <TextField
           label="Od"
-          type="date"
           value={rangeFrom}
           onChange={(e) => setRangeFrom(e.target.value)}
+          placeholder="dd.MM.yyyy"
+          helperText={CS_DATE_HELPER_TEXT}
           InputLabelProps={{ shrink: true }}
           size="small"
         />
         <TextField
           label="Do"
-          type="date"
           value={rangeTo}
           onChange={(e) => setRangeTo(e.target.value)}
+          placeholder="dd.MM.yyyy"
+          helperText={CS_DATE_HELPER_TEXT}
           InputLabelProps={{ shrink: true }}
           size="small"
         />
@@ -472,19 +464,24 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           variant="outlined"
           size="small"
           onClick={() => {
-            setRangeFrom(toYyyyMmDd(firstDayOfMonth()));
-            setRangeTo(toYyyyMmDd(lastDayOfMonth()));
+            setRangeFrom(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
+            setRangeTo(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
           }}
         >
           Aktuální měsíc
         </Button>
       </Stack>
-      {!rangeValid && (
+      {rangeOrderInvalid && (
         <Typography color="error" variant="body2" sx={{ mb: 2 }}>
           Datum „od“ musí být před nebo stejné jako „do“.
         </Typography>
       )}
-      {dashboard?.periodFrom && dashboard?.periodTo && rangeValid && (
+      {!rangeParamsOk && !rangeOrderInvalid && (rangeFrom.trim() || rangeTo.trim()) && (
+        <Typography color="error" variant="body2" sx={{ mb: 2 }}>
+          Zadej obě platná data ({CS_DATE_FORMAT_LABEL}).
+        </Typography>
+      )}
+      {dashboard?.periodFrom && dashboard?.periodTo && rangeParamsOk && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
           Období dle serveru: {new Date(dashboard.periodFrom).toLocaleString('cs-CZ')} —{' '}
           {new Date(dashboard.periodTo).toLocaleString('cs-CZ')}
@@ -497,10 +494,12 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         </Typography>
       )}
 
-      {isLoading && rangeValid ? (
+      {isLoading && rangeParamsOk ? (
         <Typography color="text.secondary">Načítám peněženky…</Typography>
-      ) : !rangeValid ? null : items.length === 0 ? (
-        <Typography color="text.secondary">Zatím žádná peněženka — přidej první.</Typography>
+      ) : items.length === 0 ? (
+        rangeParamsOk ? (
+          <Typography color="text.secondary">Zatím žádná peněženka — přidej první.</Typography>
+        ) : null
       ) : (
         <Box
           sx={{
@@ -685,58 +684,21 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         }
       />
 
-      <Dialog
+      <BalanceCorrectionDialog
         open={Boolean(correctionWallet)}
+        wallet={correctionWallet}
+        submitting={corrSubmitting}
         onClose={() => !corrSubmitting && setCorrectionWallet(null)}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>Korekce zůstatku (inventura)</DialogTitle>
-        <Box component="form" onSubmit={handleCorrectionSubmit}>
-          <DialogContent>
-            <Stack spacing={2}>
-              <Typography variant="body2" color="text.secondary">
-                Peněženka: <strong>{correctionWallet?.name ?? '—'}</strong>
-                {correctionWallet?.currencyCode ? ` · ${correctionWallet.currencyCode}` : ''}
-              </Typography>
-              <Typography variant="body2">
-                Účetní zůstatek:{' '}
-                <strong>{formatWalletAmount(correctionWallet?.currentBalance, correctionWallet?.currencyCode)}</strong>
-              </Typography>
-              <Alert severity="info" variant="outlined">
-                Zadej skutečný zůstatek podle reality; rozdíl vůči systému dopočítá server.
-              </Alert>
-              <TextField
-                label="Skutečný zůstatek po inventuře"
-                value={corrBalance}
-                onChange={(e) => setCorrBalance(e.target.value)}
-                required
-                inputMode="decimal"
-                fullWidth
-              />
-              <TextField
-                label="Datum a čas"
-                value={corrWhen}
-                onChange={(e) => setCorrWhen(e.target.value)}
-                placeholder="dd.MM.yyyy HH:mm"
-                helperText="Formát dd.MM.yyyy HH:mm"
-                InputLabelProps={{ shrink: true }}
-                required
-                fullWidth
-              />
-              <TextField label="Poznámka (volitelné)" value={corrNote} onChange={(e) => setCorrNote(e.target.value)} fullWidth />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button type="button" onClick={() => setCorrectionWallet(null)} disabled={corrSubmitting}>
-              Zrušit
-            </Button>
-            <Button type="submit" variant="contained" disabled={corrSubmitting}>
-              Uložit korekci
-            </Button>
-          </DialogActions>
-        </Box>
-      </Dialog>
+        onConfirm={handleCorrectionConfirm}
+        onInvalidAmount={() =>
+          enqueueSnackbar('Zadej skutečný zůstatek po inventuře', { variant: 'warning' })
+        }
+        onInvalidDate={() =>
+          enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', {
+            variant: 'warning',
+          })
+        }
+      />
 
       <Dialog open={createOpen} onClose={() => !submitting && setCreateOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Nová peněženka</DialogTitle>

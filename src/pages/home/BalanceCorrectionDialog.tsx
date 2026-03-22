@@ -13,31 +13,28 @@ import {
 import type { WalletResponseDto } from '@api/model';
 import { FormEvent, memo, useEffect, useState } from 'react';
 import { AmountTextFieldCs } from './AmountTextFieldCs';
+import { formatWalletAmount } from './walletDisplay';
 import { defaultDatetimeLocal, formatAmountDisplayCs, parseAmount, toIsoFromDatetimeLocal } from './transactionFormUtils';
 
-export type TransferConfirmPayload = {
-  amountMajor: number;
+export type BalanceCorrectionConfirmPayload = {
+  correctedBalanceMajor: number;
   transactionDateIso: string;
-  description?: string;
+  note?: string;
 };
 
 type Props = {
   open: boolean;
-  sourceWallet?: WalletResponseDto;
-  targetWallet?: WalletResponseDto;
-  transferCurrenciesOk: boolean;
+  wallet?: WalletResponseDto | null;
   submitting: boolean;
   onClose: () => void;
-  onConfirm: (payload: TransferConfirmPayload) => void | Promise<void>;
+  onConfirm: (payload: BalanceCorrectionConfirmPayload) => void | Promise<void>;
   onInvalidAmount: () => void;
   onInvalidDate: () => void;
 };
 
-export const TransferBetweenWalletsDialog = memo(function TransferBetweenWalletsDialog({
+export const BalanceCorrectionDialog = memo(function BalanceCorrectionDialog({
   open,
-  sourceWallet,
-  targetWallet,
-  transferCurrenciesOk,
+  wallet,
   submitting,
   onClose,
   onConfirm,
@@ -46,13 +43,13 @@ export const TransferBetweenWalletsDialog = memo(function TransferBetweenWallets
 }: Props) {
   const [amountCanonical, setAmountCanonical] = useState('');
   const [when, setWhen] = useState(defaultDatetimeLocal);
-  const [desc, setDesc] = useState('');
+  const [note, setNote] = useState('');
 
   useEffect(() => {
     if (open) {
       setAmountCanonical('');
       setWhen(defaultDatetimeLocal());
-      setDesc('');
+      setNote('');
     }
   }, [open]);
 
@@ -60,9 +57,8 @@ export const TransferBetweenWalletsDialog = memo(function TransferBetweenWallets
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!transferCurrenciesOk) return;
-    const amountMajor = parseAmount(amountDisplay);
-    if (amountMajor == null || amountMajor <= 0) {
+    const bal = parseAmount(amountDisplay);
+    if (bal == null) {
       onInvalidAmount();
       return;
     }
@@ -72,36 +68,34 @@ export const TransferBetweenWalletsDialog = memo(function TransferBetweenWallets
       return;
     }
     await onConfirm({
-      amountMajor,
+      correctedBalanceMajor: bal,
       transactionDateIso: iso,
-      ...(desc.trim() ? { description: desc.trim() } : {}),
+      ...(note.trim() ? { note: note.trim() } : {}),
     });
   };
 
   return (
     <Dialog open={open} onClose={() => !submitting && onClose()} fullWidth maxWidth="sm">
-      <DialogTitle>Převod mezi peněženkami</DialogTitle>
+      <DialogTitle>Korekce zůstatku (inventura)</DialogTitle>
       <Box component="form" onSubmit={handleSubmit}>
         <DialogContent>
           <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary">
-              Z: <strong>{sourceWallet?.name ?? '—'}</strong>
-              {sourceWallet?.currencyCode ? ` (${sourceWallet.currencyCode})` : ''}
-              {' → '}
-              Do: <strong>{targetWallet?.name ?? '—'}</strong>
-              {targetWallet?.currencyCode ? ` (${targetWallet.currencyCode})` : ''}
+              Peněženka: <strong>{wallet?.name ?? '—'}</strong>
+              {wallet?.currencyCode ? ` · ${wallet.currencyCode}` : ''}
             </Typography>
-            {!transferCurrenciesOk && sourceWallet && targetWallet && (
-              <Alert severity="warning">
-                Měny peněženek se liší — převod mezi nimi nelze tímto způsobem provést.
-              </Alert>
-            )}
+            <Typography variant="body2">
+              Účetní zůstatek:{' '}
+              <strong>{formatWalletAmount(wallet?.currentBalance, wallet?.currencyCode)}</strong>
+            </Typography>
+            <Alert severity="info" variant="outlined">
+              Zadej skutečný zůstatek podle reality; rozdíl vůči systému dopočítá server.
+            </Alert>
             <AmountTextFieldCs
-              label="Částka"
+              label="Skutečný zůstatek po inventuře"
               canonical={amountCanonical}
               setCanonical={setAmountCanonical}
               required
-              disabled={!transferCurrenciesOk}
               fullWidth
               placeholder="0"
             />
@@ -114,23 +108,16 @@ export const TransferBetweenWalletsDialog = memo(function TransferBetweenWallets
               InputLabelProps={{ shrink: true }}
               required
               fullWidth
-              disabled={!transferCurrenciesOk}
             />
-            <TextField
-              label="Popis (volitelné)"
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              fullWidth
-              disabled={!transferCurrenciesOk}
-            />
+            <TextField label="Poznámka (volitelné)" value={note} onChange={(e) => setNote(e.target.value)} fullWidth />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button type="button" onClick={onClose} disabled={submitting}>
             Zrušit
           </Button>
-          <Button type="submit" variant="contained" disabled={submitting || !transferCurrenciesOk}>
-            Provést převod
+          <Button type="submit" variant="contained" disabled={submitting}>
+            Uložit korekci
           </Button>
         </DialogActions>
       </Box>

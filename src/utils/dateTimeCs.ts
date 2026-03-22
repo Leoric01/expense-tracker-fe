@@ -2,6 +2,17 @@ function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
 
+/** Jednotná nápověda pro textová pole data (CZ). */
+export const CS_DATE_FORMAT_LABEL = 'dd.MM.yyyy';
+
+export const CS_DATE_HELPER_TEXT = `Formát ${CS_DATE_FORMAT_LABEL}`;
+
+/** Lokální kalendářní datum → `dd.MM.yyyy` pro vstupní pole. */
+export function formatDateDdMmYyyyFromDate(d: Date): string {
+  if (Number.isNaN(d.getTime())) return '';
+  return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
+
 /** Aktuální okamžik jako hodnota pro textové pole `dd.MM.yyyy HH:mm` (lokální čas). */
 export function defaultDateTimeInputValue(): string {
   return formatDateTimeDdMmYyyyHhMmFromDate(new Date());
