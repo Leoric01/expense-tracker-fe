@@ -82,6 +82,19 @@ export function collectIdsInSubtree(node: CategoryResponseDto): Set<string> {
   return s;
 }
 
+/** Id všech uzlů ve stromu, které mají podkategorie (včetně zanořených). */
+export function collectIdsWithChildren(nodes: CategoryResponseDto[]): string[] {
+  const ids: string[] = [];
+  for (const n of nodes) {
+    const ch = asCategoryChildren(n.children);
+    if (ch.length > 0 && n.id) {
+      ids.push(n.id);
+      ids.push(...collectIdsWithChildren(ch));
+    }
+  }
+  return ids;
+}
+
 export function findNodeById(tree: CategoryResponseDto[], id: string): CategoryResponseDto | null {
   for (const n of tree) {
     if (n.id === id) return n;

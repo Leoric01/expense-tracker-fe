@@ -56,6 +56,7 @@ import {
   categoryKindChipColor,
   categoryKindLabel,
   collectIdsInSubtree,
+  collectIdsWithChildren,
   findNodeById,
   rootAncestorCategory,
   toCategoryTree,
@@ -117,6 +118,34 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const paged = data?.data as PagedModelCategoryResponseDto | undefined;
   const flat = paged?.content ?? [];
   const tree = useMemo(() => toCategoryTree(flat), [flat]);
+
+  const categoryIdsWithChildren = useMemo(() => collectIdsWithChildren(tree), [tree]);
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(() => new Set());
+
+  const allCategoriesExpanded = useMemo(
+    () =>
+      categoryIdsWithChildren.length > 0 &&
+      categoryIdsWithChildren.every((id) => expandedCategoryIds.has(id)),
+    [categoryIdsWithChildren, expandedCategoryIds],
+  );
+
+  const toggleCategoryExpand = useCallback((categoryId: string) => {
+    setExpandedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) next.delete(categoryId);
+      else next.add(categoryId);
+      return next;
+    });
+  }, []);
+
+  const toggleExpandAllCategories = useCallback(() => {
+    if (categoryIdsWithChildren.length === 0) return;
+    if (allCategoriesExpanded) {
+      setExpandedCategoryIds(new Set());
+    } else {
+      setExpandedCategoryIds(new Set(categoryIdsWithChildren));
+    }
+  }, [categoryIdsWithChildren, allCategoriesExpanded]);
 
   const budgetPlans = (budgetData?.content ?? []) as BudgetPlanResponseDto[];
   const budgetsByCategoryId = useMemo(() => {
@@ -378,6 +407,45 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
               Přidat kategorii
             </Button>
           </Box>
+          {tree.length > 0 && categoryIdsWithChildren.length > 0 && (
+            <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1 }}>
+              <Tooltip title={allCategoriesExpanded ? 'Sbalit všechny podstromy' : 'Rozbalit všechny podstromy'}>
+                <IconButton
+                  size="small"
+                  onClick={toggleExpandAllCategories}
+                  aria-expanded={allCategoriesExpanded}
+                  aria-label={allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                >
+                  <ChevronRightIcon
+                    fontSize="small"
+                    sx={{
+                      transition: (t) =>
+                        t.transitions.create('transform', { duration: t.transitions.duration.shorter }),
+                      transform: allCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                    }}
+                  />
+                </IconButton>
+              </Tooltip>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                component="button"
+                type="button"
+                onClick={toggleExpandAllCategories}
+                sx={{
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: 'none',
+                  font: 'inherit',
+                  p: 0,
+                  textDecoration: 'none',
+                  '&:hover': { textDecoration: 'underline' },
+                }}
+              >
+                {allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+              </Typography>
+            </Stack>
+          )}
           <Paper variant="outlined" sx={{ p: 2 }}>
             {tree.length === 0 ? (
               <Typography color="text.secondary">Zatím žádná kategorie — přidej první.</Typography>
@@ -401,6 +469,8 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                       return one + rec;
                     }}
                     getOneOffBudgets={(categoryId) => budgetsByCategoryId.get(categoryId) ?? []}
+                    expandedCategoryIds={expandedCategoryIds}
+                    onToggleCategoryExpand={toggleCategoryExpand}
                   />
                 ))}
               </Stack>
@@ -606,6 +676,8 @@ type RowProps = {
   onManageBudgets: (c: CategoryResponseDto) => void;
   getBudgetCount: (categoryId: string) => number;
   getOneOffBudgets: (categoryId: string) => BudgetPlanResponseDto[];
+  expandedCategoryIds: Set<string>;
+  onToggleCategoryExpand: (categoryId: string) => void;
 };
 
 const CategoryTreeRows: FC<RowProps> = ({
@@ -617,14 +689,16 @@ const CategoryTreeRows: FC<RowProps> = ({
   onManageBudgets,
   getBudgetCount,
   getOneOffBudgets,
+  expandedCategoryIds,
+  onToggleCategoryExpand,
 }) => {
-  const [expanded, setExpanded] = useState(false);
   const id = node.id;
   const children = asCategoryChildren(node.children);
   const hasChildren = children.length > 0;
+  const expanded = Boolean(id && expandedCategoryIds.has(id));
 
   const toggleExpanded = () => {
-    if (hasChildren) setExpanded((v) => !v);
+    if (hasChildren && id) onToggleCategoryExpand(id);
   };
 
   const budgetCount = id ? getBudgetCount(id) : 0;
@@ -787,6 +861,8 @@ const CategoryTreeRows: FC<RowProps> = ({
                 onManageBudgets={onManageBudgets}
                 getBudgetCount={getBudgetCount}
                 getOneOffBudgets={getOneOffBudgets}
+                expandedCategoryIds={expandedCategoryIds}
+                onToggleCategoryExpand={onToggleCategoryExpand}
               />
             ))}
           </Box>

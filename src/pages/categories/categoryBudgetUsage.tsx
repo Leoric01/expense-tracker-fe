@@ -45,6 +45,25 @@ function formatBudgetDateRangeCompact(validFrom?: string, validTo?: string): str
   return '';
 }
 
+/** Jen `dd.MM.–dd.MM.` (bez roku při stejném roce) — pro řádek kategorie. */
+function formatBudgetDateRangeDdMmOnly(validFrom?: string, validTo?: string): string {
+  const parse = (s?: string) => (s?.trim() ? new Date(s) : null);
+  const a = parse(validFrom);
+  const b = parse(validTo);
+  const ok = (d: Date | null) => Boolean(d && !Number.isNaN(d.getTime()));
+  const fmtFull = (d: Date) =>
+    `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+  const fmtDm = (d: Date) => `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.`;
+  if (ok(a) && ok(b)) {
+    const sameY = a!.getFullYear() === b!.getFullYear();
+    if (sameY) return `${fmtDm(a!)}–${fmtDm(b!)}`;
+    return `${fmtFull(a!)}–${fmtFull(b!)}`;
+  }
+  if (ok(a)) return `od ${fmtFull(a!)}`;
+  if (ok(b)) return `do ${fmtFull(b!)}`;
+  return '';
+}
+
 /**
  * Počet kalendářních dnů od max(dnes, platnost od) do platnost do (včetně).
  * Bez `validTo` vrací 0 (nelze odvodit tempo „na den“).
@@ -101,30 +120,31 @@ function BudgetUsageTube(props: { fillPercent: number; overBudget: boolean }) {
   );
 }
 
-function budgetListRowCaption(plan: BudgetPlanResponseDto): { text: string; title: string } {
+function budgetListRowSegments(plan: BudgetPlanResponseDto): {
+  spentAndRemaining: string;
+  periodDdMm: string;
+  perDay: string;
+  title: string;
+} {
   const amount = plan.amount ?? 0;
   const spent = plan.alreadySpent ?? 0;
   const currency = plan.currencyCode;
   const remaining = amount - spent;
-  const period = formatBudgetDateRangeCompact(plan.validFrom, plan.validTo);
+  const periodDdMm = formatBudgetDateRangeDdMmOnly(plan.validFrom, plan.validTo);
   const daysLeft = budgetDaysLeftInclusive(plan.validFrom, plan.validTo);
 
-  let perDen: string;
+  const spentAndRemaining = `${formatWalletAmount(spent, currency)} / ${formatWalletAmount(amount, currency)} · zbývá ${formatWalletAmount(remaining, currency)}`;
+
+  let perDay: string;
   if (daysLeft <= 0 || !plan.validTo?.trim()) {
-    perDen = '—';
+    perDay = '—';
   } else {
     const perDayMinor = Math.round(remaining / daysLeft);
-    perDen = `${formatWalletAmount(perDayMinor, currency)}/den`;
+    perDay = `${formatWalletAmount(perDayMinor, currency)}/den`;
   }
 
-  const parts: string[] = [];
-  if (period) parts.push(period);
-  parts.push(`${formatWalletAmount(spent, currency)} / ${formatWalletAmount(amount, currency)}`);
-  parts.push(`zbývá ${formatWalletAmount(remaining, currency)}`);
-  parts.push(perDen);
-
-  const text = parts.join(' · ');
-  return { text, title: text };
+  const title = [spentAndRemaining, periodDdMm || null, perDay].filter(Boolean).join(' · ');
+  return { spentAndRemaining, periodDdMm, perDay, title };
 }
 
 type UsageLineProps = {
@@ -146,33 +166,27 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
   const tubeFill = overBudget ? 100 : pct;
 
   if (variant === 'listRow') {
-    const { text, title } = budgetListRowCaption(plan);
+    const { spentAndRemaining, periodDdMm, perDay, title } = budgetListRowSegments(plan);
+    const captionBase = {
+      variant: 'caption' as const,
+      color: 'text.secondary' as const,
+    };
+    const captionTypo = {
+      lineHeight: 1.25,
+      fontVariantNumeric: 'tabular-nums' as const,
+      whiteSpace: 'nowrap' as const,
+    };
     return (
       <Stack
         direction="row"
         alignItems="center"
         spacing={1}
+        title={title}
         sx={{
           flex: '1 1 0%',
           minWidth: 0,
         }}
       >
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          title={title}
-          sx={{
-            flex: '1 1 auto',
-            minWidth: 0,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            lineHeight: 1.25,
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          {text}
-        </Typography>
         <Box
           sx={{
             width: 88,
@@ -183,6 +197,26 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
         >
           <BudgetUsageTube fillPercent={tubeFill} overBudget={overBudget} />
         </Box>
+        <Typography
+          {...captionBase}
+          sx={{
+            ...captionTypo,
+            flex: '1 1 auto',
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {spentAndRemaining}
+        </Typography>
+        {periodDdMm ? (
+          <Typography {...captionBase} sx={{ ...captionTypo, flexShrink: 0 }}>
+            {periodDdMm}
+          </Typography>
+        ) : null}
+        <Typography {...captionBase} sx={{ ...captionTypo, flexShrink: 0 }}>
+          {perDay}
+        </Typography>
       </Stack>
     );
   }
