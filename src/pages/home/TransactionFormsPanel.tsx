@@ -43,7 +43,7 @@ import {
   toIsoFromDatetimeLocal,
 } from './transactionFormUtils';
 
-const WALLET_LIST = { page: 0, size: 200 } as const;
+const WALLET_LIST = { page: 0, size: 10 } as const;
 
 export type TransactionFormsPanelProps = {
   trackerId: string;
@@ -52,6 +52,8 @@ export type TransactionFormsPanelProps = {
   embedded?: boolean;
   /** Skryje nadpis „Transakce“ (záložky na Domě). */
   hideTitle?: boolean;
+  /** Když false, dotaz na kategorie neběží (řetězení po načtení peněženek na Domě). */
+  categoriesQueryEnabled?: boolean;
 };
 
 export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
@@ -60,6 +62,7 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
   walletsFromParent,
   embedded,
   hideTitle,
+  categoriesQueryEnabled = true,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
@@ -70,7 +73,7 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
   const catParams = useMemo(
     () => ({
       page: 0,
-      size: 2000,
+      size: 200,
       ...(debouncedCategorySearch.trim() ? { search: debouncedCategorySearch.trim() } : {}),
     }),
     [debouncedCategorySearch],
@@ -85,7 +88,7 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
   const { data: catRes, isLoading: categoriesLoading } = useQuery({
     queryKey: [`/api/category/${trackerId}/active`, catParams],
     queryFn: () => categoryFindAllActive(trackerId, catParams),
-    enabled: Boolean(trackerId),
+    enabled: Boolean(trackerId) && categoriesQueryEnabled,
   });
 
   const walletsFromApi = ((walletsRes?.data as PagedModelWalletResponseDto | undefined)?.content ??
@@ -152,7 +155,7 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
           categorySearch={categorySearch}
           categorySearchDebounced={debouncedCategorySearch}
           onCategorySearchChange={setCategorySearch}
-          categoriesLoading={categoriesLoading}
+          categoriesLoading={!categoriesQueryEnabled || categoriesLoading}
           submitting={submitting}
           onSubmit={submit}
         />

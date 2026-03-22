@@ -24,7 +24,9 @@ import type {
 import type {
   CreateWalletRequestDto,
   UpdateWalletRequestDto,
+  WalletDashboardParams,
   WalletFindAllParams,
+  WalletSummaryParams,
   WalletUploadIconBody,
   WalletUploadIconParams,
 } from '../model';
@@ -802,3 +804,315 @@ export const useWalletUpdate = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getWalletUpdateMutationOptions(options), queryClient);
 };
+export type walletSummaryResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type walletSummaryResponseSuccess = walletSummaryResponse200 & {
+  headers: Headers;
+};
+export type walletSummaryResponse = walletSummaryResponseSuccess;
+
+export const getWalletSummaryUrl = (
+  trackerId: string,
+  walletId: string,
+  params?: WalletSummaryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/wallet/${trackerId}/${walletId}/summary?${stringifiedParams}`
+    : `/api/wallet/${trackerId}/${walletId}/summary`;
+};
+
+export const walletSummary = async (
+  trackerId: string,
+  walletId: string,
+  params?: WalletSummaryParams,
+  options?: RequestInit,
+): Promise<walletSummaryResponse> => {
+  const res = await fetch(getWalletSummaryUrl(trackerId, walletId, params), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: walletSummaryResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as walletSummaryResponse;
+};
+
+export const getWalletSummaryQueryKey = (
+  trackerId: string,
+  walletId: string,
+  params?: WalletSummaryParams,
+) => {
+  return [`/api/wallet/${trackerId}/${walletId}/summary`, ...(params ? [params] : [])] as const;
+};
+
+export const getWalletSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof walletSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  walletId: string,
+  params?: WalletSummaryParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletSummary>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getWalletSummaryQueryKey(trackerId, walletId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof walletSummary>>> = ({ signal }) =>
+    walletSummary(trackerId, walletId, params, { signal, ...fetchOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(trackerId && walletId),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof walletSummary>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type WalletSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof walletSummary>>>;
+export type WalletSummaryQueryError = unknown;
+
+export function useWalletSummary<
+  TData = Awaited<ReturnType<typeof walletSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  walletId: string,
+  params: undefined | WalletSummaryParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletSummary>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof walletSummary>>,
+          TError,
+          Awaited<ReturnType<typeof walletSummary>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useWalletSummary<
+  TData = Awaited<ReturnType<typeof walletSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  walletId: string,
+  params?: WalletSummaryParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletSummary>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof walletSummary>>,
+          TError,
+          Awaited<ReturnType<typeof walletSummary>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useWalletSummary<
+  TData = Awaited<ReturnType<typeof walletSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  walletId: string,
+  params?: WalletSummaryParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletSummary>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useWalletSummary<
+  TData = Awaited<ReturnType<typeof walletSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  walletId: string,
+  params?: WalletSummaryParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletSummary>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getWalletSummaryQueryOptions(trackerId, walletId, params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export type walletDashboardResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type walletDashboardResponseSuccess = walletDashboardResponse200 & {
+  headers: Headers;
+};
+export type walletDashboardResponse = walletDashboardResponseSuccess;
+
+export const getWalletDashboardUrl = (trackerId: string, params?: WalletDashboardParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/wallet/${trackerId}/dashboard?${stringifiedParams}`
+    : `/api/wallet/${trackerId}/dashboard`;
+};
+
+export const walletDashboard = async (
+  trackerId: string,
+  params?: WalletDashboardParams,
+  options?: RequestInit,
+): Promise<walletDashboardResponse> => {
+  const res = await fetch(getWalletDashboardUrl(trackerId, params), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: walletDashboardResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as walletDashboardResponse;
+};
+
+export const getWalletDashboardQueryKey = (trackerId: string, params?: WalletDashboardParams) => {
+  return [`/api/wallet/${trackerId}/dashboard`, ...(params ? [params] : [])] as const;
+};
+
+export const getWalletDashboardQueryOptions = <
+  TData = Awaited<ReturnType<typeof walletDashboard>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: WalletDashboardParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletDashboard>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getWalletDashboardQueryKey(trackerId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof walletDashboard>>> = ({ signal }) =>
+    walletDashboard(trackerId, params, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof walletDashboard>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type WalletDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof walletDashboard>>>;
+export type WalletDashboardQueryError = unknown;
+
+export function useWalletDashboard<
+  TData = Awaited<ReturnType<typeof walletDashboard>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params: undefined | WalletDashboardParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletDashboard>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof walletDashboard>>,
+          TError,
+          Awaited<ReturnType<typeof walletDashboard>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useWalletDashboard<
+  TData = Awaited<ReturnType<typeof walletDashboard>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: WalletDashboardParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletDashboard>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof walletDashboard>>,
+          TError,
+          Awaited<ReturnType<typeof walletDashboard>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useWalletDashboard<
+  TData = Awaited<ReturnType<typeof walletDashboard>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: WalletDashboardParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletDashboard>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useWalletDashboard<
+  TData = Awaited<ReturnType<typeof walletDashboard>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: WalletDashboardParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof walletDashboard>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getWalletDashboardQueryOptions(trackerId, params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

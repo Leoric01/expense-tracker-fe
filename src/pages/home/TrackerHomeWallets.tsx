@@ -1,9 +1,15 @@
 import { transactionCreate } from '@api/transaction-controller/transaction-controller';
-import { walletCreate, walletFindAll } from '@api/wallet-controller/wallet-controller';
-import type { CreateWalletRequestDto, PagedModelWalletResponseDto, WalletResponseDto } from '@api/model';
+import { widgetItemAdd, widgetItemReplace } from '@api/widget-item-controller/widget-item-controller';
+import {
+  getWalletDashboardQueryKey,
+  walletCreate,
+  walletDashboard,
+} from '@api/wallet-controller/wallet-controller';
+import type { CreateWalletRequestDto, WalletDashboardResponseDto, WalletResponseDto, WalletSummaryResponseDto } from '@api/model';
 import { CreateTransactionRequestDtoTransactionType } from '@api/model';
 import { CreateWalletRequestDtoWalletType } from '@api/model';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import {
   Alert,
   Box,
@@ -22,32 +28,56 @@ import {
   Stack,
   ButtonBase,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { PageHeading } from '@components/PageHeading';
 import { CategoriesForTracker } from '@pages/categories/CategoriesForTracker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
+import {
+  dateRangeLocalToIsoParams,
+  firstDayOfMonth,
+  lastDayOfMonth,
+  toYyyyMmDd,
+} from '@utils/dashboardPeriod';
 import { majorToMinorUnits } from '@utils/moneyMinorUnits';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { DragEvent, FC, FormEvent, useEffect, useRef, useState } from 'react';
+import { DragEvent, FC, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { RecentTransactionsPanel } from './RecentTransactionsPanel';
+import { TransferBetweenWalletsDialog, type TransferConfirmPayload } from './TransferBetweenWalletsDialog';
 import { TransactionFormsPanel } from './TransactionFormsPanel';
 import {
   defaultDatetimeLocal,
   parseAmount,
   toIsoFromDatetimeLocal,
 } from './transactionFormUtils';
-import { formatWalletAmount, walletTypeLabel, WALLET_TYPE_OPTIONS } from './walletDisplay';
+import { formatWalletAmount, WALLET_TYPE_OPTIONS } from './walletDisplay';
+import {
+  globalOrderAfterTrackerReorder,
+  orderedWalletIdsFromWidgetPayload,
+  reorderIdsInList,
+  walletsForTrackerInWidgetOrder,
+} from './walletOrderUtils';
 
 type Props = {
   trackerId: string;
   trackerName: string;
 };
 
-const LIST_PARAMS = { page: 0, size: 200 } as const;
 const WALLET_DRAG_MIME = 'application/x-wallet-id';
+const WALLET_REORDER_MIME = 'application/x-wallet-reorder';
+
+function dashboardSummaryToWallet(s: WalletSummaryResponseDto): WalletResponseDto {
+  return {
+    id: s.walletId,
+    name: s.walletName,
+    currencyCode: s.currencyCode,
+    currentBalance: s.endBalance,
+    active: true,
+  };
+}
 
 export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const { enqueueSnackbar } = useSnackbar();
@@ -81,10 +111,9 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropHoverId, setDropHoverId] = useState<string | null>(null);
+  const [reorderDraggingId, setReorderDraggingId] = useState<string | null>(null);
+  const [reorderDropHoverId, setReorderDropHoverId] = useState<string | null>(null);
   const [transferPair, setTransferPair] = useState<{ sourceId: string; targetId: string } | null>(null);
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferWhen, setTransferWhen] = useState(defaultDatetimeLocal);
-  const [transferDesc, setTransferDesc] = useState('');
   const [transferSubmitting, setTransferSubmitting] = useState(false);
 
   const [correctionWallet, setCorrectionWallet] = useState<WalletResponseDto | null>(null);
@@ -93,27 +122,73 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const [corrNote, setCorrNote] = useState('');
   const [corrSubmitting, setCorrSubmitting] = useState(false);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['/api/wallet', trackerId, LIST_PARAMS],
-    queryFn: () => walletFindAll(trackerId, LIST_PARAMS),
-    enabled: Boolean(trackerId),
+  const [rangeFrom, setRangeFrom] = useState(() => toYyyyMmDd(firstDayOfMonth()));
+  const [rangeTo, setRangeTo] = useState(() => toYyyyMmDd(lastDayOfMonth()));
+
+  const dashboardParams = useMemo(
+    () => dateRangeLocalToIsoParams(rangeFrom, rangeTo),
+    [rangeFrom, rangeTo],
+  );
+
+  const rangeValid = rangeFrom <= rangeTo;
+
+  const {
+    data: dashboardRes,
+    isLoading,
+    isError,
+    isFetched: dashboardFetched,
+  } = useQuery({
+    queryKey: getWalletDashboardQueryKey(trackerId, dashboardParams),
+    queryFn: async () => {
+      const res = await walletDashboard(trackerId, dashboardParams);
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error('dashboard');
+      }
+      return res.data as WalletDashboardResponseDto;
+    },
+    enabled: Boolean(trackerId) && rangeValid,
+    staleTime: 30_000,
   });
 
-  const paged = data?.data as PagedModelWalletResponseDto | undefined;
-  const items = (paged?.content ?? []) as WalletResponseDto[];
+  const dashboard = dashboardRes;
+  const summaries = dashboard?.wallets ?? [];
+  const items = useMemo(() => summaries.map(dashboardSummaryToWallet), [summaries]);
 
-  const invalidateFinance = async () => {
+  const summaryById = useMemo(() => {
+    const m = new Map<string, WalletSummaryResponseDto>();
+    for (const s of summaries) {
+      if (s.walletId) m.set(s.walletId, s);
+    }
+    return m;
+  }, [summaries]);
+
+  const globalWalletOrder = useMemo(
+    () => orderedWalletIdsFromWidgetPayload(dashboard?.widgetOrder),
+    [dashboard?.widgetOrder],
+  );
+
+  const orderedItems = useMemo(
+    () => walletsForTrackerInWidgetOrder(globalWalletOrder, items),
+    [globalWalletOrder, items],
+  );
+
+  const replaceWidgetOrder = useMutation({
+    mutationFn: async (nextGlobal: string[]) => {
+      const res = await widgetItemReplace('WALLET', nextGlobal);
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error('Nepodařilo se uložit pořadí');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
+    },
+  });
+
+  const invalidateFinance = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['/api/transaction', trackerId] });
     await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
-  };
-
-  useEffect(() => {
-    if (transferPair) {
-      setTransferAmount('');
-      setTransferWhen(defaultDatetimeLocal());
-      setTransferDesc('');
-    }
-  }, [transferPair]);
+    await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
+  }, [queryClient, trackerId]);
 
   useEffect(() => {
     if (correctionWallet) {
@@ -164,6 +239,18 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       enqueueSnackbar('Peněženka byla vytvořena', { variant: 'success' });
       setCreateOpen(false);
       resetForm();
+      const created = res.data as unknown as WalletResponseDto | undefined;
+      if (created?.id) {
+        try {
+          const addRes = await widgetItemAdd('WALLET', created.id);
+          if (addRes.status >= 200 && addRes.status < 300) {
+            await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
+          }
+        } catch {
+          /* widget seznam je volitelný */
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
       await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
     } catch {
       enqueueSnackbar('Peněženku se nepodařilo vytvořit', { variant: 'error' });
@@ -172,8 +259,8 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     }
   };
 
-  const sourceWallet = transferPair ? items.find((x) => x.id === transferPair.sourceId) : undefined;
-  const targetWallet = transferPair ? items.find((x) => x.id === transferPair.targetId) : undefined;
+  const sourceWallet = transferPair ? orderedItems.find((x) => x.id === transferPair.sourceId) : undefined;
+  const targetWallet = transferPair ? orderedItems.find((x) => x.id === transferPair.targetId) : undefined;
   const transferCurrenciesOk = (() => {
     if (!sourceWallet || !targetWallet) return false;
     const a = sourceWallet.currencyCode?.trim().toUpperCase() ?? '';
@@ -182,42 +269,34 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     return a === b;
   })();
 
-  const handleTransferSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!transferPair || !transferCurrenciesOk) return;
-    const amt = parseAmount(transferAmount);
-    if (amt == null || amt <= 0) {
-      enqueueSnackbar('Zadej kladnou částku', { variant: 'warning' });
-      return;
-    }
-    const transferIso = toIsoFromDatetimeLocal(transferWhen);
-    if (!transferIso) {
-      enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', { variant: 'warning' });
-      return;
-    }
-    setTransferSubmitting(true);
-    try {
-      const res = await transactionCreate(trackerId, {
-        transactionType: CreateTransactionRequestDtoTransactionType.TRANSFER,
-        sourceWalletId: transferPair.sourceId,
-        targetWalletId: transferPair.targetId,
-        amount: majorToMinorUnits(amt),
-        transactionDate: transferIso,
-        ...(transferDesc.trim() ? { description: transferDesc.trim() } : {}),
-      });
-      if (res.status < 200 || res.status >= 300) {
-        enqueueSnackbar(apiErrorMessage(res.data, 'Převod se nepodařil'), { variant: 'error' });
-        return;
+  const handleTransferConfirm = useCallback(
+    async (payload: TransferConfirmPayload) => {
+      if (!transferPair || !transferCurrenciesOk) return;
+      setTransferSubmitting(true);
+      try {
+        const res = await transactionCreate(trackerId, {
+          transactionType: CreateTransactionRequestDtoTransactionType.TRANSFER,
+          sourceWalletId: transferPair.sourceId,
+          targetWalletId: transferPair.targetId,
+          amount: majorToMinorUnits(payload.amountMajor),
+          transactionDate: payload.transactionDateIso,
+          ...(payload.description ? { description: payload.description } : {}),
+        });
+        if (res.status < 200 || res.status >= 300) {
+          enqueueSnackbar(apiErrorMessage(res.data, 'Převod se nepodařil'), { variant: 'error' });
+          return;
+        }
+        enqueueSnackbar('Převod byl zaznamenán', { variant: 'success' });
+        setTransferPair(null);
+        await invalidateFinance();
+      } catch {
+        enqueueSnackbar('Převod se nepodařil', { variant: 'error' });
+      } finally {
+        setTransferSubmitting(false);
       }
-      enqueueSnackbar('Převod byl zaznamenán', { variant: 'success' });
-      setTransferPair(null);
-      await invalidateFinance();
-    } catch {
-      enqueueSnackbar('Převod se nepodařil', { variant: 'error' });
-    } finally {
-      setTransferSubmitting(false);
-    }
-  };
+    },
+    [transferPair, transferCurrenciesOk, trackerId, enqueueSnackbar, invalidateFinance],
+  );
 
   const handleCorrectionSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -255,7 +334,25 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     }
   };
 
+  const clearDragVisual = () => {
+    setDraggingId(null);
+    setDropHoverId(null);
+    setReorderDraggingId(null);
+    setReorderDropHoverId(null);
+  };
+
+  const handleReorderDragStart = (e: DragEvent, walletId: string) => {
+    e.stopPropagation();
+    e.dataTransfer.setData(WALLET_REORDER_MIME, walletId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingId(null);
+    setDropHoverId(null);
+    setReorderDraggingId(walletId);
+  };
+
   const handleDragStart = (e: DragEvent, walletId: string) => {
+    setReorderDraggingId(null);
+    setReorderDropHoverId(null);
     e.dataTransfer.setData(WALLET_DRAG_MIME, walletId);
     e.dataTransfer.setData('text/plain', walletId);
     e.dataTransfer.effectAllowed = 'move';
@@ -263,15 +360,26 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   };
 
   const handleDragEnd = () => {
-    setDraggingId(null);
-    setDropHoverId(null);
+    clearDragVisual();
   };
 
-  const handleDragOver = (e: DragEvent, walletId: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (walletId !== draggingId) {
-      setDropHoverId(walletId);
+  const handleDragOver = (e: DragEvent, walletId: string, canReceiveTransfer: boolean) => {
+    const types = Array.from(e.dataTransfer.types);
+    if (types.includes(WALLET_REORDER_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (walletId !== reorderDraggingId) setReorderDropHoverId(walletId);
+      setDropHoverId(null);
+      return;
+    }
+    if (
+      canReceiveTransfer &&
+      (types.includes(WALLET_DRAG_MIME) || types.includes('text/plain'))
+    ) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (walletId !== draggingId) setDropHoverId(walletId);
+      setReorderDropHoverId(null);
     }
   };
 
@@ -279,17 +387,37 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     const related = e.relatedTarget as Node | null;
     if (related && e.currentTarget.contains(related)) return;
     setDropHoverId(null);
+    setReorderDropHoverId(null);
   };
 
   const handleDrop = (e: DragEvent, target: WalletResponseDto) => {
     e.preventDefault();
     e.stopPropagation();
     ignoreClickUntilRef.current = Date.now() + 500;
+    const reorderSource = e.dataTransfer.getData(WALLET_REORDER_MIME);
+    if (reorderSource && target.id) {
+      clearDragVisual();
+      if (replaceWidgetOrder.isPending) return;
+      const trackerIds = new Set(
+        orderedItems.map((w) => w.id).filter(Boolean) as string[],
+      );
+      const currentTrackerOrder = orderedItems.map((w) => w.id!).filter(Boolean);
+      const newLocalOrder = reorderIdsInList(currentTrackerOrder, reorderSource, target.id);
+      const nextGlobal = globalOrderAfterTrackerReorder(globalWalletOrder, trackerIds, newLocalOrder);
+      replaceWidgetOrder.mutate(nextGlobal, {
+        onError: () =>
+          enqueueSnackbar('Pořadí se nepodařilo uložit', { variant: 'error' }),
+      });
+      return;
+    }
+    setReorderDraggingId(null);
+    setReorderDropHoverId(null);
     setDraggingId(null);
     setDropHoverId(null);
+    if (target.active === false) return;
     const sourceId = e.dataTransfer.getData(WALLET_DRAG_MIME) || e.dataTransfer.getData('text/plain');
     if (!sourceId || !target.id || sourceId === target.id) return;
-    setTransferPair({ sourceId, targetId: target.id });
+    startTransition(() => setTransferPair({ sourceId, targetId: target.id }));
   };
 
   const handleCardClick = (w: WalletResponseDto) => {
@@ -318,15 +446,60 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         </Button>
       </Stack>
 
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={2}
+        alignItems={{ sm: 'flex-end' }}
+        sx={{ mb: 2, flexWrap: 'wrap' }}
+      >
+        <TextField
+          label="Od"
+          type="date"
+          value={rangeFrom}
+          onChange={(e) => setRangeFrom(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          size="small"
+        />
+        <TextField
+          label="Do"
+          type="date"
+          value={rangeTo}
+          onChange={(e) => setRangeTo(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          size="small"
+        />
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => {
+            setRangeFrom(toYyyyMmDd(firstDayOfMonth()));
+            setRangeTo(toYyyyMmDd(lastDayOfMonth()));
+          }}
+        >
+          Aktuální měsíc
+        </Button>
+      </Stack>
+      {!rangeValid && (
+        <Typography color="error" variant="body2" sx={{ mb: 2 }}>
+          Datum „od“ musí být před nebo stejné jako „do“.
+        </Typography>
+      )}
+      {dashboard?.periodFrom && dashboard?.periodTo && rangeValid && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Období dle serveru: {new Date(dashboard.periodFrom).toLocaleString('cs-CZ')} —{' '}
+          {new Date(dashboard.periodTo).toLocaleString('cs-CZ')}
+        </Typography>
+      )}
+
       {isError && (
         <Typography color="error" sx={{ mb: 2 }}>
           Nepodařilo se načíst peněženky.
         </Typography>
       )}
 
-      {isLoading ? (
+      {isLoading && rangeValid ? (
         <Typography color="text.secondary">Načítám peněženky…</Typography>
-      ) : items.length === 0 ? (
+      ) : !rangeValid ? null : items.length === 0 ? (
         <Typography color="text.secondary">Zatím žádná peněženka — přidej první.</Typography>
       ) : (
         <Box
@@ -336,22 +509,28 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
             gap: 2,
           }}
         >
-          {items.map((w) => {
+          {orderedItems.map((w) => {
             const wid = w.id ?? '';
-            const canDrag = Boolean(w.id) && w.active !== false;
-            const isDragging = draggingId === w.id;
-            const isDropHover = dropHoverId === w.id && draggingId && draggingId !== w.id;
+            const sm = wid ? summaryById.get(wid) : undefined;
+            const canDragTransfer = Boolean(w.id) && w.active !== false;
+            const canReorderGrip = Boolean(w.id) && !replaceWidgetOrder.isPending;
+            const isDragging = reorderDraggingId === w.id || draggingId === w.id;
+            const isDropHover =
+              (reorderDropHoverId === wid &&
+                Boolean(reorderDraggingId) &&
+                reorderDraggingId !== wid) ||
+              (dropHoverId === wid && Boolean(draggingId) && draggingId !== wid);
 
             return (
               <Card
                 key={w.id ?? w.name}
-                draggable={canDrag}
-                onDragStart={canDrag ? (e) => handleDragStart(e, w.id!) : undefined}
-                onDragEnd={canDrag ? handleDragEnd : undefined}
-                onDragOver={wid && w.active !== false ? (e) => handleDragOver(e, wid) : undefined}
+                onDragOver={wid ? (e) => handleDragOver(e, wid, w.active !== false) : undefined}
                 onDragLeave={wid ? handleDragLeave : undefined}
-                onDrop={wid && w.active !== false ? (e) => handleDrop(e, w) : undefined}
-                onClick={() => handleCardClick(w)}
+                onDrop={wid ? (e) => handleDrop(e, w) : undefined}
+                onClick={(ev) => {
+                  if ((ev.target as HTMLElement).closest('[data-wallet-reorder-grip]')) return;
+                  handleCardClick(w);
+                }}
                 variant="outlined"
                 sx={{
                   height: '100%',
@@ -362,26 +541,80 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                   outlineOffset: 2,
                 }}
               >
-                <CardContent>
-                  <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 1 }}>
-                    <Typography variant="h6" component="h3" sx={{ lineHeight: 1.3 }}>
-                      {w.name ?? '—'}
+                <Stack direction="row" alignItems="stretch">
+                  <Tooltip title="Změnit pořadí (uloží se na server)">
+                    <Box
+                      data-wallet-reorder-grip
+                      component="span"
+                      onClick={(e) => e.stopPropagation()}
+                      draggable={canReorderGrip}
+                      onDragStart={w.id ? (e) => handleReorderDragStart(e, w.id!) : undefined}
+                      onDragEnd={handleDragEnd}
+                      sx={{
+                        cursor: canReorderGrip ? 'grab' : 'default',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        pt: 2,
+                        pl: 1,
+                        pr: 0.5,
+                        flexShrink: 0,
+                      }}
+                      aria-label="Změnit pořadí peněženky"
+                    >
+                      <DragIndicatorIcon fontSize="small" color="action" />
+                    </Box>
+                  </Tooltip>
+                  <CardContent
+                    component="div"
+                    draggable={canDragTransfer}
+                    onDragStart={canDragTransfer ? (e) => handleDragStart(e, w.id!) : undefined}
+                    onDragEnd={handleDragEnd}
+                    sx={{
+                      flex: 1,
+                      minWidth: 0,
+                      pb: '16px !important',
+                      '&:last-child': { pb: '16px !important' },
+                    }}
+                  >
+                    <Stack
+                      direction="row"
+                      justifyContent="space-between"
+                      alignItems="flex-start"
+                      spacing={1}
+                      sx={{ mb: 1 }}
+                    >
+                      <Typography variant="h6" component="h3" sx={{ lineHeight: 1.3 }}>
+                        {w.name ?? '—'}
+                      </Typography>
+                      {w.active === false && <Chip size="small" label="Neaktivní" variant="outlined" />}
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                      {w.currencyCode ?? '—'}
                     </Typography>
-                    {w.active === false && <Chip size="small" label="Neaktivní" variant="outlined" />}
-                  </Stack>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    {walletTypeLabel(w.walletType)}
-                    {w.currencyCode ? ` · ${w.currencyCode}` : ''}
-                  </Typography>
-                  <Typography variant="h6" component="p" sx={{ fontWeight: 600 }}>
-                    {formatWalletAmount(w.currentBalance, w.currencyCode)}
-                  </Typography>
-                  {canDrag && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                      Přetáhni pro převod
+                    {sm && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                        Příjem {formatWalletAmount(sm.totalIncome, w.currencyCode)} · Výdaj{' '}
+                        {formatWalletAmount(sm.totalExpense, w.currencyCode)}
+                      </Typography>
+                    )}
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      Zůstatek (konec období)
                     </Typography>
-                  )}
-                </CardContent>
+                    <Typography variant="h6" component="p" sx={{ fontWeight: 600 }}>
+                      {formatWalletAmount(w.currentBalance, w.currencyCode)}
+                    </Typography>
+                    {canDragTransfer && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                        Úchyt vlevo: pořadí · přetáhni obsah karty na jinou peněženku pro převod
+                      </Typography>
+                    )}
+                    {!canDragTransfer && w.id && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                        Úchyt vlevo: pořadí karty
+                      </Typography>
+                    )}
+                  </CardContent>
+                </Stack>
               </Card>
             );
           })}
@@ -420,77 +653,37 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           hideTitle
           trackerId={trackerId}
           trackerName={trackerName}
-          walletsFromParent={items}
+          walletsFromParent={orderedItems}
+          categoriesQueryEnabled={dashboardFetched}
         />
       )}
 
       {mainTab === 1 && (
-        <CategoriesForTracker embedded trackerId={trackerId} trackerName={trackerName} />
+        <CategoriesForTracker
+          embedded
+          trackerId={trackerId}
+          trackerName={trackerName}
+          categoriesQueryEnabled={dashboardFetched}
+        />
       )}
 
       {mainTab === 2 && <RecentTransactionsPanel trackerId={trackerId} />}
 
-      <Dialog
+      <TransferBetweenWalletsDialog
         open={Boolean(transferPair)}
+        sourceWallet={sourceWallet}
+        targetWallet={targetWallet}
+        transferCurrenciesOk={transferCurrenciesOk}
+        submitting={transferSubmitting}
         onClose={() => !transferSubmitting && setTransferPair(null)}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>Převod mezi peněženkami</DialogTitle>
-        <Box component="form" onSubmit={handleTransferSubmit}>
-          <DialogContent>
-            <Stack spacing={2}>
-              <Typography variant="body2" color="text.secondary">
-                Z: <strong>{sourceWallet?.name ?? '—'}</strong>
-                {sourceWallet?.currencyCode ? ` (${sourceWallet.currencyCode})` : ''}
-                {' → '}
-                Do: <strong>{targetWallet?.name ?? '—'}</strong>
-                {targetWallet?.currencyCode ? ` (${targetWallet.currencyCode})` : ''}
-              </Typography>
-              {!transferCurrenciesOk && sourceWallet && targetWallet && (
-                <Alert severity="warning">
-                  Měny peněženek se liší — převod mezi nimi nelze tímto způsobem provést.
-                </Alert>
-              )}
-              <TextField
-                label="Částka"
-                value={transferAmount}
-                onChange={(e) => setTransferAmount(e.target.value)}
-                required
-                inputMode="decimal"
-                disabled={!transferCurrenciesOk}
-                fullWidth
-              />
-              <TextField
-                label="Datum a čas"
-                value={transferWhen}
-                onChange={(e) => setTransferWhen(e.target.value)}
-                placeholder="dd.MM.yyyy HH:mm"
-                helperText="Formát dd.MM.yyyy HH:mm"
-                InputLabelProps={{ shrink: true }}
-                required
-                fullWidth
-                disabled={!transferCurrenciesOk}
-              />
-              <TextField
-                label="Popis (volitelné)"
-                value={transferDesc}
-                onChange={(e) => setTransferDesc(e.target.value)}
-                fullWidth
-                disabled={!transferCurrenciesOk}
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button type="button" onClick={() => setTransferPair(null)} disabled={transferSubmitting}>
-              Zrušit
-            </Button>
-            <Button type="submit" variant="contained" disabled={transferSubmitting || !transferCurrenciesOk}>
-              Provést převod
-            </Button>
-          </DialogActions>
-        </Box>
-      </Dialog>
+        onConfirm={handleTransferConfirm}
+        onInvalidAmount={() => enqueueSnackbar('Zadej kladnou částku', { variant: 'warning' })}
+        onInvalidDate={() =>
+          enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', {
+            variant: 'warning',
+          })
+        }
+      />
 
       <Dialog
         open={Boolean(correctionWallet)}

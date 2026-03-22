@@ -52,7 +52,7 @@ import {
   toCategoryTree,
 } from './categoryTreeUtils';
 
-const LIST_PARAMS = { page: 0, size: 2000 } as const;
+const LIST_PARAMS = { page: 0, size: 200 } as const;
 
 type CreateMode = { type: 'root' } | { type: 'child'; parentId: string };
 
@@ -63,12 +63,15 @@ export type CategoriesForTrackerProps = {
   trackerName: string;
   /** V záložce na Domě — bez vlastního hlavního nadpisu „Kategorie“. */
   embedded?: boolean;
+  /** Když false, dotaz na kategorie neběží (řetězení po peněženkách na Domě). */
+  categoriesQueryEnabled?: boolean;
 };
 
 export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   trackerId,
   trackerName,
   embedded,
+  categoriesQueryEnabled = true,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
@@ -76,6 +79,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const { data, isLoading, isError } = useQuery({
     queryKey: [`/api/category/${trackerId}/active`, LIST_PARAMS],
     queryFn: () => categoryFindAllActive(trackerId, LIST_PARAMS),
+    enabled: Boolean(trackerId) && categoriesQueryEnabled,
   });
 
   const paged = data?.data as PagedModelCategoryResponseDto | undefined;
@@ -274,7 +278,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
         </Typography>
       )}
 
-      {isLoading ? (
+      {!categoriesQueryEnabled || isLoading ? (
         <>
           <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'} sx={{ mb: 2 }}>
             {budgetBlurb}
