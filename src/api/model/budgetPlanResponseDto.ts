@@ -18,6 +18,7 @@ export interface BudgetPlanResponseDto {
   validFrom?: string;
   validTo?: string;
   active?: boolean;
+  alreadySpent?: number;
   createdDate?: string;
   lastModifiedDate?: string;
 }

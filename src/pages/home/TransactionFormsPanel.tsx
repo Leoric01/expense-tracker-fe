@@ -103,6 +103,8 @@ export const TransactionFormsPanel: FC<TransactionFormsPanelProps> = ({
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['/api/transaction', trackerId] });
     await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
+    // Domovská stránka bere zůstatky z wallet dashboardu, ne z walletFindAll — bez toho se karty neaktualizují.
+    await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
   };
 
   const submit = async (payload: CreateTransactionRequestDto): Promise<boolean> => {

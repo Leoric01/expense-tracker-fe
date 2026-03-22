@@ -63,3 +63,16 @@ export function toIsoFromDateTimeInput(s: string): string | null {
   if (!d || Number.isNaN(d.getTime())) return null;
   return d.toISOString();
 }
+
+/**
+ * Začátek kalendářního dne jako UTC ISO podle lokálních Y/M/D z `d`.
+ * Použití: pole jen „dd.MM.yyyy“ — bez posunu dne při `.toISOString()` (např. 1.3. → `…-03-01T00:00:00.000Z`, ne předchozí den UTC).
+ */
+export function calendarDayStartUtcIso(d: Date): string {
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)).toISOString();
+}
+
+/** Konec kalendářního dne (23:59:59.999 UTC) pro stejné Y/M/D jako u `calendarDayStartUtcIso`. */
+export function calendarDayEndUtcIso(d: Date): string {
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)).toISOString();
+}

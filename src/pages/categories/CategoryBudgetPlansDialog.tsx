@@ -42,6 +42,8 @@ import {
 } from '@pages/home/transactionFormUtils';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import {
+  calendarDayEndUtcIso,
+  calendarDayStartUtcIso,
   formatDateDdMmYyyy,
   formatDateDdMmYyyyFromDate,
   parseCsDateTime,
@@ -66,14 +68,6 @@ type Props = {
 
 const PERIOD_OPTIONS = Object.values(CreateBudgetPlanRequestDtoPeriodType);
 
-function startOfDayIso(d: Date): string {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).toISOString();
-}
-
-function endOfDayIso(d: Date): string {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).toISOString();
-}
-
 function isoToDdMmYyyyInput(iso?: string): string {
   if (!iso?.trim()) return '';
   const d = new Date(iso);
@@ -84,13 +78,13 @@ function isoToDdMmYyyyInput(iso?: string): string {
 function parseDdMmYyyyToStartIso(s: string): string | null {
   const d = parseCsDateTime(s.trim());
   if (!d) return null;
-  return startOfDayIso(d);
+  return calendarDayStartUtcIso(d);
 }
 
 function parseDdMmYyyyToEndIso(s: string): string | null {
   const d = parseCsDateTime(s.trim());
   if (!d) return null;
-  return endOfDayIso(d);
+  return calendarDayEndUtcIso(d);
 }
 
 export const CategoryBudgetPlansDialog: FC<Props> = ({
