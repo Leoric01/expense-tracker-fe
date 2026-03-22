@@ -5,6 +5,7 @@
  * Swagger dokumentace pro ExpenseTracker backend
  * OpenAPI spec version: 1.0
  */
+import type { TransactionAttachmentResponseDto } from './transactionAttachmentResponseDto';
 import type { TransactionResponseDtoBalanceAdjustmentDirection } from './transactionResponseDtoBalanceAdjustmentDirection';
 import type { TransactionResponseDtoStatus } from './transactionResponseDtoStatus';
 import type { TransactionResponseDtoTransactionType } from './transactionResponseDtoTransactionType';
@@ -28,6 +29,7 @@ export interface TransactionResponseDto {
   description?: string;
   note?: string;
   externalRef?: string;
+  attachments?: TransactionAttachmentResponseDto[];
   createdDate?: string;
   lastModifiedDate?: string;
 }

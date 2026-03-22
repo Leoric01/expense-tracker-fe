@@ -24,6 +24,7 @@ import type {
 import type {
   CreateTransactionRequestDto,
   TransactionFindAllParams,
+  TransactionUploadAttachmentBody,
   UpdateTransactionRequestDto,
 } from '../model';
 
@@ -274,6 +275,253 @@ export const useTransactionCreate = <TError = unknown, TContext = unknown>(
   TContext
 > => {
   return useMutation(getTransactionCreateMutationOptions(options), queryClient);
+};
+export type transactionFindAttachmentsResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type transactionFindAttachmentsResponseSuccess = transactionFindAttachmentsResponse200 & {
+  headers: Headers;
+};
+export type transactionFindAttachmentsResponse = transactionFindAttachmentsResponseSuccess;
+
+export const getTransactionFindAttachmentsUrl = (trackerId: string, transactionId: string) => {
+  return `/api/transaction/${trackerId}/${transactionId}/attachments`;
+};
+
+export const transactionFindAttachments = async (
+  trackerId: string,
+  transactionId: string,
+  options?: RequestInit,
+): Promise<transactionFindAttachmentsResponse> => {
+  const res = await fetch(getTransactionFindAttachmentsUrl(trackerId, transactionId), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: transactionFindAttachmentsResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as transactionFindAttachmentsResponse;
+};
+
+export const getTransactionFindAttachmentsQueryKey = (trackerId: string, transactionId: string) => {
+  return [`/api/transaction/${trackerId}/${transactionId}/attachments`] as const;
+};
+
+export const getTransactionFindAttachmentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof transactionFindAttachments>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  transactionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAttachments>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getTransactionFindAttachmentsQueryKey(trackerId, transactionId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof transactionFindAttachments>>> = ({
+    signal,
+  }) => transactionFindAttachments(trackerId, transactionId, { signal, ...fetchOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(trackerId && transactionId),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof transactionFindAttachments>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type TransactionFindAttachmentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof transactionFindAttachments>>
+>;
+export type TransactionFindAttachmentsQueryError = unknown;
+
+export function useTransactionFindAttachments<
+  TData = Awaited<ReturnType<typeof transactionFindAttachments>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  transactionId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAttachments>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof transactionFindAttachments>>,
+          TError,
+          Awaited<ReturnType<typeof transactionFindAttachments>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useTransactionFindAttachments<
+  TData = Awaited<ReturnType<typeof transactionFindAttachments>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  transactionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAttachments>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof transactionFindAttachments>>,
+          TError,
+          Awaited<ReturnType<typeof transactionFindAttachments>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useTransactionFindAttachments<
+  TData = Awaited<ReturnType<typeof transactionFindAttachments>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  transactionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAttachments>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useTransactionFindAttachments<
+  TData = Awaited<ReturnType<typeof transactionFindAttachments>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  transactionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAttachments>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getTransactionFindAttachmentsQueryOptions(trackerId, transactionId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export type transactionUploadAttachmentResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type transactionUploadAttachmentResponseSuccess = transactionUploadAttachmentResponse200 & {
+  headers: Headers;
+};
+export type transactionUploadAttachmentResponse = transactionUploadAttachmentResponseSuccess;
+
+export const getTransactionUploadAttachmentUrl = (trackerId: string, transactionId: string) => {
+  return `/api/transaction/${trackerId}/${transactionId}/attachments`;
+};
+
+export const transactionUploadAttachment = async (
+  trackerId: string,
+  transactionId: string,
+  transactionUploadAttachmentBody: TransactionUploadAttachmentBody,
+  options?: RequestInit,
+): Promise<transactionUploadAttachmentResponse> => {
+  const res = await fetch(getTransactionUploadAttachmentUrl(trackerId, transactionId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(transactionUploadAttachmentBody),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: transactionUploadAttachmentResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as transactionUploadAttachmentResponse;
+};
+
+export const getTransactionUploadAttachmentMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transactionUploadAttachment>>,
+    TError,
+    { trackerId: string; transactionId: string; data: TransactionUploadAttachmentBody },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof transactionUploadAttachment>>,
+  TError,
+  { trackerId: string; transactionId: string; data: TransactionUploadAttachmentBody },
+  TContext
+> => {
+  const mutationKey = ['transactionUploadAttachment'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof transactionUploadAttachment>>,
+    { trackerId: string; transactionId: string; data: TransactionUploadAttachmentBody }
+  > = (props) => {
+    const { trackerId, transactionId, data } = props ?? {};
+
+    return transactionUploadAttachment(trackerId, transactionId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TransactionUploadAttachmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof transactionUploadAttachment>>
+>;
+export type TransactionUploadAttachmentMutationBody = TransactionUploadAttachmentBody;
+export type TransactionUploadAttachmentMutationError = unknown;
+
+export const useTransactionUploadAttachment = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof transactionUploadAttachment>>,
+      TError,
+      { trackerId: string; transactionId: string; data: TransactionUploadAttachmentBody },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof transactionUploadAttachment>>,
+  TError,
+  { trackerId: string; transactionId: string; data: TransactionUploadAttachmentBody },
+  TContext
+> => {
+  return useMutation(getTransactionUploadAttachmentMutationOptions(options), queryClient);
 };
 export type transactionFindByIdResponse200 = {
   data: Blob;
@@ -611,4 +859,103 @@ export const useTransactionUpdate = <TError = unknown, TContext = unknown>(
   TContext
 > => {
   return useMutation(getTransactionUpdateMutationOptions(options), queryClient);
+};
+export type transactionDeleteAttachmentResponse200 = {
+  data: void;
+  status: 200;
+};
+
+export type transactionDeleteAttachmentResponseSuccess = transactionDeleteAttachmentResponse200 & {
+  headers: Headers;
+};
+export type transactionDeleteAttachmentResponse = transactionDeleteAttachmentResponseSuccess;
+
+export const getTransactionDeleteAttachmentUrl = (
+  trackerId: string,
+  transactionId: string,
+  attachmentId: string,
+) => {
+  return `/api/transaction/${trackerId}/${transactionId}/attachments/${attachmentId}`;
+};
+
+export const transactionDeleteAttachment = async (
+  trackerId: string,
+  transactionId: string,
+  attachmentId: string,
+  options?: RequestInit,
+): Promise<transactionDeleteAttachmentResponse> => {
+  const res = await fetch(
+    getTransactionDeleteAttachmentUrl(trackerId, transactionId, attachmentId),
+    {
+      ...options,
+      method: 'DELETE',
+    },
+  );
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: transactionDeleteAttachmentResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as transactionDeleteAttachmentResponse;
+};
+
+export const getTransactionDeleteAttachmentMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transactionDeleteAttachment>>,
+    TError,
+    { trackerId: string; transactionId: string; attachmentId: string },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof transactionDeleteAttachment>>,
+  TError,
+  { trackerId: string; transactionId: string; attachmentId: string },
+  TContext
+> => {
+  const mutationKey = ['transactionDeleteAttachment'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof transactionDeleteAttachment>>,
+    { trackerId: string; transactionId: string; attachmentId: string }
+  > = (props) => {
+    const { trackerId, transactionId, attachmentId } = props ?? {};
+
+    return transactionDeleteAttachment(trackerId, transactionId, attachmentId, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TransactionDeleteAttachmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof transactionDeleteAttachment>>
+>;
+
+export type TransactionDeleteAttachmentMutationError = unknown;
+
+export const useTransactionDeleteAttachment = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof transactionDeleteAttachment>>,
+      TError,
+      { trackerId: string; transactionId: string; attachmentId: string },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof transactionDeleteAttachment>>,
+  TError,
+  { trackerId: string; transactionId: string; attachmentId: string },
+  TContext
+> => {
+  return useMutation(getTransactionDeleteAttachmentMutationOptions(options), queryClient);
 };
