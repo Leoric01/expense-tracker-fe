@@ -1,4 +1,5 @@
 import { budgetPlanFindAllActive } from '@api/budget-plan-controller/budget-plan-controller';
+import { recurringBudgetFindAllActive } from '@api/recurring-budget-controller/recurring-budget-controller';
 import {
   categoryCreate,
   categoryDeactivate,
@@ -11,6 +12,8 @@ import type {
   CreateCategoryRequestDto,
   PagedModelBudgetPlanResponseDto,
   PagedModelCategoryResponseDto,
+  PagedModelRecurringBudgetResponseDto,
+  RecurringBudgetResponseDto,
   UpdateCategoryRequestDto,
 } from '@api/model';
 import { CreateCategoryRequestDtoCategoryKind } from '@api/model';
@@ -99,6 +102,17 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     staleTime: 30_000,
   });
 
+  const { data: recurringBudgetData } = useQuery({
+    queryKey: [`/api/recurring-budget/${trackerId}/active`, BUDGET_LIST_PARAMS],
+    queryFn: async () => {
+      const res = await recurringBudgetFindAllActive(trackerId, BUDGET_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('recurring-budget');
+      return res.data as PagedModelRecurringBudgetResponseDto;
+    },
+    enabled: Boolean(trackerId) && categoriesQueryEnabled,
+    staleTime: 30_000,
+  });
+
   const paged = data?.data as PagedModelCategoryResponseDto | undefined;
   const flat = paged?.content ?? [];
   const tree = useMemo(() => toCategoryTree(flat), [flat]);
@@ -115,6 +129,19 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     }
     return m;
   }, [budgetPlans]);
+
+  const recurringBudgets = (recurringBudgetData?.content ?? []) as RecurringBudgetResponseDto[];
+  const recurringByCategoryId = useMemo(() => {
+    const m = new Map<string, RecurringBudgetResponseDto[]>();
+    for (const r of recurringBudgets) {
+      const cid = r.categoryId;
+      if (!cid) continue;
+      const arr = m.get(cid) ?? [];
+      arr.push(r);
+      m.set(cid, arr);
+    }
+    return m;
+  }, [recurringBudgets]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>({ type: 'root' });
@@ -136,6 +163,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
 
   const invalidateBudgets = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: [`/api/budget-plan/${trackerId}/active`] });
+    queryClient.invalidateQueries({ queryKey: [`/api/recurring-budget/${trackerId}/active`] });
   }, [queryClient, trackerId]);
 
   const openCreateRoot = () => {
@@ -366,7 +394,11 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                       setDeleteId(id);
                     }}
                     onManageBudgets={setBudgetCategory}
-                    getBudgetCount={(categoryId) => budgetsByCategoryId.get(categoryId)?.length ?? 0}
+                    getBudgetCount={(categoryId) => {
+                      const one = budgetsByCategoryId.get(categoryId)?.length ?? 0;
+                      const rec = recurringByCategoryId.get(categoryId)?.length ?? 0;
+                      return one + rec;
+                    }}
                   />
                 ))}
               </Stack>
@@ -553,6 +585,9 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
         category={budgetCategory}
         trackerId={trackerId}
         plans={budgetCategory?.id ? budgetsByCategoryId.get(budgetCategory.id) ?? [] : []}
+        recurringPlans={
+          budgetCategory?.id ? recurringByCategoryId.get(budgetCategory.id) ?? [] : []
+        }
         onClose={() => setBudgetCategory(null)}
         onInvalidate={invalidateBudgets}
       />

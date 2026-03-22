@@ -7,6 +7,7 @@ import type {
   BudgetPlanResponseDto,
   CategoryResponseDto,
   CreateBudgetPlanRequestDto,
+  RecurringBudgetResponseDto,
   UpdateBudgetPlanRequestDto,
 } from '@api/model';
 import { CreateBudgetPlanRequestDtoPeriodType } from '@api/model';
@@ -27,6 +28,8 @@ import {
   MenuItem,
   Select,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -47,12 +50,16 @@ import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
 import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useCallback, useEffect, useState } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
+import { CategoryRecurringBudgetTab } from './CategoryRecurringBudgetTab';
 
 type Props = {
   open: boolean;
   category: CategoryResponseDto | null;
   trackerId: string;
+  /** Jednorázové rozpočty (budget-plan). */
   plans: BudgetPlanResponseDto[];
+  /** Opakující se šablony (recurring-budget). */
+  recurringPlans: RecurringBudgetResponseDto[];
   onClose: () => void;
   onInvalidate: () => void;
 };
@@ -91,11 +98,13 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
   category,
   trackerId,
   plans,
+  recurringPlans,
   onClose,
   onInvalidate,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const [submitting, setSubmitting] = useState(false);
+  const [budgetTab, setBudgetTab] = useState(0);
   const [editing, setEditing] = useState<BudgetPlanResponseDto | null>(null);
 
   const [createName, setCreateName] = useState('');
@@ -126,6 +135,14 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
     resetCreate(category);
     setEditing(null);
   }, [open, category?.id, resetCreate, category]);
+
+  useEffect(() => {
+    if (open) setBudgetTab(0);
+  }, [open, category?.id]);
+
+  useEffect(() => {
+    setEditing(null);
+  }, [budgetTab]);
 
   useEffect(() => {
     if (!editing) return;
@@ -284,10 +301,25 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
   const catName = category?.name ?? '—';
 
   return (
-    <Dialog open={open} onClose={() => !submitting && onClose()} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={() => !submitting && onClose()} fullWidth maxWidth="md">
       <DialogTitle>Rozpočty — {catName}</DialogTitle>
       <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
+        <Tabs value={budgetTab} onChange={(_, v) => setBudgetTab(v)} sx={{ mb: 2 }}>
+          <Tab label="Opakující se limit" id="budget-tab-recurring" aria-controls="budget-panel-recurring" />
+          <Tab label="Jednorázový rozpočet" id="budget-tab-oneoff" aria-controls="budget-panel-oneoff" />
+        </Tabs>
+
+        {budgetTab === 0 && (
+          <CategoryRecurringBudgetTab
+            category={category}
+            trackerId={trackerId}
+            plans={recurringPlans}
+            onInvalidate={onInvalidate}
+          />
+        )}
+
+        {budgetTab === 1 && (
+        <Stack spacing={2} sx={{ pt: 0 }}>
           {plans.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               K této kategorii zatím není žádný aktivní rozpočet.
@@ -493,6 +525,7 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
             </>
           )}
         </Stack>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={submitting}>

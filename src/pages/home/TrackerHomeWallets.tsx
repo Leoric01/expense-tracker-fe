@@ -39,7 +39,7 @@ import {
   firstDayOfMonth,
   lastDayOfMonth,
 } from '@utils/dashboardPeriod';
-import { CS_DATE_FORMAT_LABEL, formatDateDdMmYyyyFromDate, parseCsDateTime } from '@utils/dateTimeCs';
+import { formatDateDdMmYyyyFromDate, parseCsDateTime } from '@utils/dateTimeCs';
 import { majorToMinorUnits } from '@utils/moneyMinorUnits';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
@@ -443,7 +443,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           label="Od"
           value={rangeFrom}
           onChange={(e) => setRangeFrom(e.target.value)}
-          placeholder="dd.MM.yyyy"
           InputLabelProps={{ shrink: true }}
           size="small"
         />
@@ -451,7 +450,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           label="Do"
           value={rangeTo}
           onChange={(e) => setRangeTo(e.target.value)}
-          placeholder="dd.MM.yyyy"
           InputLabelProps={{ shrink: true }}
           size="small"
         />
@@ -474,7 +472,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       )}
       {!rangeParamsOk && !rangeOrderInvalid && (rangeFrom.trim() || rangeTo.trim()) && (
         <Typography color="error" variant="body2" sx={{ mb: 2 }}>
-          Zadej obě platná data ({CS_DATE_FORMAT_LABEL}).
+          Zadej obě platná data.
         </Typography>
       )}
       {isError && (
