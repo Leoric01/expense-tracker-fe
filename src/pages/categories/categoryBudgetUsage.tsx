@@ -1,5 +1,6 @@
 import type { BudgetPlanResponseDto } from '@api/model';
 import { Box, LinearProgress, Stack, Tooltip, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { formatDateDdMmYyyy } from '@utils/dateTimeCs';
 import { FC, ReactNode } from 'react';
@@ -20,6 +21,37 @@ export function formatBudgetValidityRange(validFrom?: string, validTo?: string):
 function budgetUsagePercent(amountMinor: number, spentMinor: number): number {
   if (amountMinor <= 0) return 0;
   return Math.min(100, (spentMinor / amountMinor) * 100);
+}
+
+/** Kompaktní „trubička“ místo úzké linky — výška řádku pořád dávají ikony/chip. */
+function BudgetUsageTube(props: { fillPercent: number; overBudget: boolean }) {
+  const { fillPercent, overBudget } = props;
+  const w = Math.min(100, Math.max(0, fillPercent));
+  return (
+    <Box
+      sx={{
+        width: '100%',
+        height: 12,
+        borderRadius: 999,
+        overflow: 'hidden',
+        bgcolor: (t) => alpha(t.palette.action.hover, t.palette.mode === 'dark' ? 0.45 : 1),
+        border: '1px solid',
+        borderColor: 'divider',
+        boxShadow: (t) => `inset 0 2px 5px ${alpha(t.palette.common.black, 0.08)}`,
+      }}
+    >
+      <Box
+        sx={{
+          height: '100%',
+          width: `${w}%`,
+          borderRadius: 999,
+          bgcolor: overBudget ? 'error.main' : 'primary.main',
+          boxShadow: (t) => `inset 0 1px 0 ${alpha(t.palette.common.white, 0.28)}`,
+          transition: (t) => t.transitions.create('width', { duration: t.transitions.duration.shorter }),
+        }}
+      />
+    </Box>
+  );
 }
 
 function budgetTooltipContent(
@@ -81,21 +113,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
   const pct = budgetUsagePercent(amount, spent);
   const validity = formatBudgetValidityRange(plan.validFrom, plan.validTo);
 
-  const bar = (
-    <LinearProgress
-      variant="determinate"
-      value={overBudget ? 100 : pct}
-      sx={{
-        height: variant === 'listRow' ? 4 : 6,
-        borderRadius: 1,
-        width: '100%',
-        ...(overBudget && {
-          bgcolor: 'action.hover',
-          '& .MuiLinearProgress-bar': { bgcolor: 'error.main' },
-        }),
-      }}
-    />
-  );
+  const tubeFill = overBudget ? 100 : pct;
 
   if (variant === 'listRow') {
     return (
@@ -114,14 +132,29 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
             flex: '1 1 64px',
             display: 'flex',
             alignItems: 'center',
-            py: 0.25,
           }}
         >
-          {bar}
+          <BudgetUsageTube fillPercent={tubeFill} overBudget={overBudget} />
         </Box>
       </Tooltip>
     );
   }
+
+  const bar = (
+    <LinearProgress
+      variant="determinate"
+      value={overBudget ? 100 : pct}
+      sx={{
+        height: 6,
+        borderRadius: 1,
+        width: '100%',
+        ...(overBudget && {
+          bgcolor: 'action.hover',
+          '& .MuiLinearProgress-bar': { bgcolor: 'error.main' },
+        }),
+      }}
+    />
+  );
 
   return (
     <Stack spacing={0.5} sx={{ minWidth: 0 }}>
