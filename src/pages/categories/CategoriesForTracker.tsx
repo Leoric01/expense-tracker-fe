@@ -674,7 +674,8 @@ const CategoryTreeRows: FC<RowProps> = ({
         </Box>
         <Typography
           sx={{
-            flex: 1,
+            flex: '0 1 auto',
+            maxWidth: { xs: '38%', sm: '32%' },
             minWidth: 0,
             cursor: hasChildren ? 'pointer' : 'default',
             userSelect: 'none',
@@ -688,22 +689,26 @@ const CategoryTreeRows: FC<RowProps> = ({
         {oneOffPlans.length > 0 && (
           <Stack
             direction="row"
-            spacing={0.5}
+            spacing={1}
             alignItems="center"
             sx={{
-              flex: '0 1 auto',
+              flex: '1 1 0%',
               minWidth: 0,
-              maxWidth: { xs: 'min(38%, 200px)', sm: 'min(40%, 280px)' },
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              py: 0,
             }}
           >
             {oneOffPlans.map((p) => (
-              <CategoryBudgetPlanUsageLine
+              <Box
                 key={p.id ?? p.name}
-                plan={p}
-                variant="listRow"
-                tooltipShowPlanName={oneOffPlans.length > 1}
-                showPeriodType
-              />
+                sx={{
+                  flex: '1 1 0%',
+                  minWidth: oneOffPlans.length > 1 ? 260 : 0,
+                }}
+              >
+                <CategoryBudgetPlanUsageLine plan={p} variant="listRow" />
+              </Box>
             ))}
           </Stack>
         )}

@@ -1,10 +1,18 @@
 import type { BudgetPlanResponseDto } from '@api/model';
-import { Box, LinearProgress, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, LinearProgress, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { formatDateDdMmYyyy } from '@utils/dateTimeCs';
-import { FC, ReactNode } from 'react';
+import { FC } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
+
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
 
 /** Platnost rozpočtu pro zobrazení (kalendářní řádek). */
 export function formatBudgetValidityRange(validFrom?: string, validTo?: string): string {
@@ -18,12 +26,51 @@ export function formatBudgetValidityRange(validFrom?: string, validTo?: string):
   return '';
 }
 
+/** Kompaktní řádek: `01.03.–31.03.2026` nebo s plnými roky. */
+function formatBudgetDateRangeCompact(validFrom?: string, validTo?: string): string {
+  const parse = (s?: string) => (s?.trim() ? new Date(s) : null);
+  const a = parse(validFrom);
+  const b = parse(validTo);
+  const ok = (d: Date | null) => Boolean(d && !Number.isNaN(d.getTime()));
+  const fmtFull = (d: Date) =>
+    `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+  const fmtDm = (d: Date) => `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.`;
+  if (ok(a) && ok(b)) {
+    const sameY = a!.getFullYear() === b!.getFullYear();
+    if (sameY) return `${fmtDm(a!)}–${fmtDm(b!)}${a!.getFullYear()}`;
+    return `${fmtFull(a!)}–${fmtFull(b!)}`;
+  }
+  if (ok(a)) return `od ${fmtFull(a!)}`;
+  if (ok(b)) return `do ${fmtFull(b!)}`;
+  return '';
+}
+
+/**
+ * Počet kalendářních dnů od max(dnes, platnost od) do platnost do (včetně).
+ * Bez `validTo` vrací 0 (nelze odvodit tempo „na den“).
+ */
+export function budgetDaysLeftInclusive(validFrom?: string, validTo?: string): number {
+  const to = validTo?.trim();
+  if (!to) return 0;
+  const end = startOfLocalDay(new Date(to));
+  if (Number.isNaN(end.getTime())) return 0;
+
+  const today = startOfLocalDay(new Date());
+  const fromParsed = validFrom?.trim() ? startOfLocalDay(new Date(validFrom)) : null;
+  const rangeStart =
+    fromParsed && !Number.isNaN(fromParsed.getTime()) ? fromParsed : today;
+
+  const effectiveStart = today > rangeStart ? today : rangeStart;
+  if (effectiveStart > end) return 0;
+  return Math.floor((end.getTime() - effectiveStart.getTime()) / 86_400_000) + 1;
+}
+
 function budgetUsagePercent(amountMinor: number, spentMinor: number): number {
   if (amountMinor <= 0) return 0;
   return Math.min(100, (spentMinor / amountMinor) * 100);
 }
 
-/** Kompaktní „trubička“ místo úzké linky — výška řádku pořád dávají ikony/chip. */
+/** Kompaktní „trubička“ — výšku řádku pořád dávají ikony/chip. */
 function BudgetUsageTube(props: { fillPercent: number; overBudget: boolean }) {
   const { fillPercent, overBudget } = props;
   const w = Math.min(100, Math.max(0, fillPercent));
@@ -54,89 +101,89 @@ function BudgetUsageTube(props: { fillPercent: number; overBudget: boolean }) {
   );
 }
 
-function budgetTooltipContent(
-  plan: BudgetPlanResponseDto,
-  options: { showPlanName?: boolean; showPeriodType?: boolean },
-): ReactNode {
+function budgetListRowCaption(plan: BudgetPlanResponseDto): { text: string; title: string } {
   const amount = plan.amount ?? 0;
   const spent = plan.alreadySpent ?? 0;
   const currency = plan.currencyCode;
-  const validity = formatBudgetValidityRange(plan.validFrom, plan.validTo);
+  const remaining = amount - spent;
+  const period = formatBudgetDateRangeCompact(plan.validFrom, plan.validTo);
+  const daysLeft = budgetDaysLeftInclusive(plan.validFrom, plan.validTo);
 
-  return (
-    <Stack component="span" spacing={0.5} sx={{ py: 0.25, color: 'inherit' }}>
-      {options.showPlanName && plan.name ? (
-        <Typography component="span" variant="caption" display="block" fontWeight={600}>
-          {plan.name}
-        </Typography>
-      ) : null}
-      <Typography component="span" variant="caption" display="block" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-        {formatWalletAmount(spent, currency)} / {formatWalletAmount(amount, currency)}
-      </Typography>
-      {options.showPeriodType && plan.periodType ? (
-        <Typography component="span" variant="caption" display="block" sx={{ opacity: 0.85 }}>
-          {budgetPeriodLabelCs(plan.periodType)}
-        </Typography>
-      ) : null}
-      {validity ? (
-        <Typography component="span" variant="caption" display="block" sx={{ opacity: 0.85 }}>
-          Platnost: {validity}
-        </Typography>
-      ) : null}
-    </Stack>
-  );
+  let perDen: string;
+  if (daysLeft <= 0 || !plan.validTo?.trim()) {
+    perDen = '—';
+  } else {
+    const perDayMinor = Math.round(remaining / daysLeft);
+    perDen = `${formatWalletAmount(perDayMinor, currency)}/den`;
+  }
+
+  const parts: string[] = [];
+  if (period) parts.push(period);
+  parts.push(`${formatWalletAmount(spent, currency)} / ${formatWalletAmount(amount, currency)}`);
+  parts.push(`zbývá ${formatWalletAmount(remaining, currency)}`);
+  parts.push(perDen);
+
+  const text = parts.join(' · ');
+  return { text, title: text };
 }
 
 type UsageLineProps = {
   plan: BudgetPlanResponseDto;
-  /** Typ období — v dialogu pod částkami; v tooltipu u varianty listRow volitelně */
   showPeriodType?: boolean;
-  /**
-   * `detail` — dialog (název, částky, pruh, platnost).
-   * `listRow` — jen pruh v řádku kategorie, částky v tooltipu.
-   */
   variant?: 'detail' | 'listRow';
-  /** U `listRow`: název rozpočtu jen v tooltipu (např. když je víc rozpočtů) */
-  tooltipShowPlanName?: boolean;
 };
 
 export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
   plan,
   showPeriodType,
   variant = 'detail',
-  tooltipShowPlanName,
 }) => {
   const amount = plan.amount ?? 0;
   const spent = plan.alreadySpent ?? 0;
-  const currency = plan.currencyCode;
   const overBudget = amount > 0 && spent > amount;
   const pct = budgetUsagePercent(amount, spent);
   const validity = formatBudgetValidityRange(plan.validFrom, plan.validTo);
-
   const tubeFill = overBudget ? 100 : pct;
 
   if (variant === 'listRow') {
+    const { text, title } = budgetListRowCaption(plan);
     return (
-      <Tooltip
-        title={budgetTooltipContent(plan, {
-          showPlanName: tooltipShowPlanName,
-          showPeriodType,
-        })}
-        placement="top"
-        enterNextDelay={400}
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1}
+        sx={{
+          flex: '1 1 0%',
+          minWidth: 0,
+        }}
       >
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          title={title}
+          sx={{
+            flex: '1 1 auto',
+            minWidth: 0,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            lineHeight: 1.25,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {text}
+        </Typography>
         <Box
           sx={{
-            minWidth: 56,
-            maxWidth: 112,
-            flex: '1 1 64px',
+            width: 88,
+            flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
           }}
         >
           <BudgetUsageTube fillPercent={tubeFill} overBudget={overBudget} />
         </Box>
-      </Tooltip>
+      </Stack>
     );
   }
 
@@ -179,7 +226,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
             whiteSpace: 'nowrap',
           }}
         >
-          {formatWalletAmount(spent, currency)} / {formatWalletAmount(amount, currency)}
+          {formatWalletAmount(spent, plan.currencyCode)} / {formatWalletAmount(amount, plan.currencyCode)}
         </Typography>
       </Stack>
       {bar}
