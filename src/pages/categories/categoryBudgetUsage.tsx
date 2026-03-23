@@ -4,7 +4,7 @@ import { alpha } from '@mui/material/styles';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { formatDateDdMmYyyy } from '@utils/dateTimeCs';
 import { FC } from 'react';
-import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
+import { budgetPeriodLabelCs, budgetPlanPeriodChipSx } from './categoryBudgetPeriodLabels';
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -228,15 +228,16 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
             size="small"
             variant="outlined"
             label={periodBadge}
-            sx={{
+            sx={(theme) => ({
               height: 18,
+              ...budgetPlanPeriodChipSx(theme, plan.periodType),
               '& .MuiChip-label': {
                 px: 0.8,
                 fontSize: '0.62rem',
                 letterSpacing: 0.2,
                 textTransform: 'uppercase',
               },
-            }}
+            })}
           />
           <Typography
             {...captionBase}

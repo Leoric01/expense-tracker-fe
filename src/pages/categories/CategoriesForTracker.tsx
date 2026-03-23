@@ -53,6 +53,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { PageHeading } from '@components/PageHeading';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -1348,7 +1349,15 @@ const CategoryTreeRows: FC<RowProps> = ({
           display: 'grid',
           alignItems: 'center',
           columnGap: 0.5,
-          gridTemplateColumns: '36px minmax(140px, 1.2fr) auto minmax(220px, 2fr) auto auto',
+          gridTemplateColumns: '36px minmax(195px, 2fr) 36px minmax(345px, 2.2fr) 72px 160px',
+          transition: (t) =>
+            t.transitions.create('background-color', { duration: t.transitions.duration.shortest }),
+          '&:hover': {
+            bgcolor: (t) =>
+              t.palette.mode === 'dark'
+                ? alpha(t.palette.common.white, 0.1)
+                : alpha(t.palette.common.black, 0.055),
+          },
         }}
       >
         <Box
@@ -1382,8 +1391,7 @@ const CategoryTreeRows: FC<RowProps> = ({
         </Box>
         <Typography
           sx={{
-            flex: '0 1 auto',
-            maxWidth: { xs: '38%', sm: '32%' },
+            width: '100%',
             minWidth: 0,
             pl: depth * 2.5,
             cursor: hasChildren ? 'pointer' : 'default',

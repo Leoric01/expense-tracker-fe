@@ -1,5 +1,5 @@
 docker build \
   --build-arg VITE_API_URL=http://localhost:8080 \
-  -t leorickk/expensetracker-frontend:latest .
+  -t leorickk/expense-tracker-frontend:latest .
 
-docker push leorickk/expensetracker-frontend:latest
+docker push leorickk/expense-tracker-frontend:latest
