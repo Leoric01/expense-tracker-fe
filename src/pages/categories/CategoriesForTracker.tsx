@@ -51,6 +51,7 @@ import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useCallback, useMemo, useRef, useState } from 'react';
 import { CategoryBudgetPlansDialog } from './CategoryBudgetPlansDialog';
 import { CategoryBudgetPlanUsageLine } from './categoryBudgetUsage';
+import { formatWalletAmount } from '@pages/home/walletDisplay';
 import {
   asCategoryChildren,
   categoryKindChipColor,
@@ -172,6 +173,104 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     }
     return m;
   }, [recurringBudgets]);
+
+  const daysInThisMonth = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  }, []);
+
+  const weeksInThisMonth = useMemo(() => daysInThisMonth / 7, [daysInThisMonth]);
+
+  const rootExpenseCategoryIds = useMemo(() => {
+    // "top level" = kořeny stromu (hloubka 0).
+    // Požadavek: do součtu se počítají jen EXPENSE rodiče, děti ne.
+    return flat
+      .filter((n) => Boolean(n.id) && n.categoryKind === 'EXPENSE' && !n.parentId)
+      .map((n) => n.id as string);
+  }, [flat]);
+
+  const rootIncomeCategoryIds = useMemo(() => {
+    return flat
+      .filter((n) => Boolean(n.id) && n.categoryKind === 'INCOME' && !n.parentId)
+      .map((n) => n.id as string);
+  }, [flat]);
+
+  const toMonthlyMinor = useCallback(
+    (amountMinor: number, periodType: string | undefined, intervalValue?: number): number => {
+      if (!Number.isFinite(amountMinor)) return 0;
+      const n = intervalValue == null || intervalValue < 1 ? 1 : Math.floor(intervalValue);
+      switch (periodType) {
+        case 'DAILY':
+          return Math.round((amountMinor * daysInThisMonth) / n);
+        case 'WEEKLY':
+          return Math.round((amountMinor * weeksInThisMonth) / n);
+        case 'MONTHLY':
+          return Math.round(amountMinor / n);
+        case 'QUARTERLY':
+          return Math.round(amountMinor / (3 * n));
+        case 'YEARLY':
+          return Math.round(amountMinor / (12 * n));
+        default:
+          return 0;
+      }
+    },
+    [daysInThisMonth, weeksInThisMonth],
+  );
+
+  const predictedMonthlyExpenseBuckets = useMemo(() => {
+    const sums = new Map<string, number>();
+    const add = (currency: string | undefined, amountMinor: number) => {
+      const cur = (currency ?? 'CZK').toUpperCase();
+      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
+    };
+
+    for (const categoryId of rootExpenseCategoryIds) {
+      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
+        add(p.currencyCode, toMonthlyMinor(p.amount ?? 0, p.periodType, 1));
+      }
+    }
+    return sums;
+  }, [rootExpenseCategoryIds, budgetsByCategoryId, toMonthlyMinor]);
+
+  const predictedMonthlyExpenseText = useMemo(() => {
+    if (predictedMonthlyExpenseBuckets.size === 0) return '—';
+    const entries = Array.from(predictedMonthlyExpenseBuckets.entries());
+    if (entries.length === 1) {
+      const [currency, sum] = entries[0];
+      return formatWalletAmount(sum, currency);
+    }
+    return entries
+      .map(([currency, sum]) => formatWalletAmount(sum, currency))
+      .join(', ');
+  }, [predictedMonthlyExpenseBuckets]);
+
+  const predictedMonthlyIncomeBuckets = useMemo(() => {
+    const sums = new Map<string, number>();
+    const add = (currency: string | undefined, amountMinor: number) => {
+      const cur = (currency ?? 'CZK').toUpperCase();
+      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
+    };
+
+    for (const categoryId of rootIncomeCategoryIds) {
+      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
+        add(p.currencyCode, toMonthlyMinor(p.amount ?? 0, p.periodType, 1));
+      }
+    }
+
+    return sums;
+  }, [rootIncomeCategoryIds, budgetsByCategoryId, toMonthlyMinor]);
+
+  const predictedMonthlyIncomeText = useMemo(() => {
+    if (predictedMonthlyIncomeBuckets.size === 0) return '—';
+    const entries = Array.from(predictedMonthlyIncomeBuckets.entries());
+    if (entries.length === 1) {
+      const [currency, sum] = entries[0];
+      return formatWalletAmount(sum, currency);
+    }
+    return entries
+      .map(([currency, sum]) => formatWalletAmount(sum, currency))
+      .join(', ');
+  }, [predictedMonthlyIncomeBuckets]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>({ type: 'root' });
@@ -391,13 +490,20 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
               flexWrap: 'wrap',
             }}
           >
-            <Typography
-              color="text.secondary"
-              variant={embedded ? 'body2' : 'body1'}
-              sx={{ flex: '1 1 200px', minWidth: 0 }}
-            >
-              {budgetBlurb}
-            </Typography>
+            <Stack spacing={0.5} sx={{ flex: '1 1 200px', minWidth: 0 }}>
+              <Typography
+                color="text.secondary"
+                variant={embedded ? 'body2' : 'body1'}
+              >
+                {budgetBlurb}
+              </Typography>
+              <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
+                Predpokládané měsíční výdaje: <strong>{predictedMonthlyExpenseText}</strong>
+              </Typography>
+              <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
+                Predpokládané měsíční příjmy: <strong>{predictedMonthlyIncomeText}</strong>
+              </Typography>
+            </Stack>
             <Button
               variant="contained"
               startIcon={<AddOutlinedIcon />}
