@@ -7,6 +7,12 @@ export const CS_DATE_FORMAT_LABEL = 'dd.MM.yyyy';
 
 export const CS_DATE_HELPER_TEXT = `Formát ${CS_DATE_FORMAT_LABEL}`;
 
+/** První den aktuálního kalendářního měsíce (lokální čas). */
+export function startOfCurrentLocalMonthDate(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
 /** Lokální kalendářní datum → `dd.MM.yyyy` pro vstupní pole. */
 export function formatDateDdMmYyyyFromDate(d: Date): string {
   if (Number.isNaN(d.getTime())) return '';

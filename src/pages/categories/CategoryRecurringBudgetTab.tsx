@@ -38,6 +38,7 @@ import {
   formatDateDdMmYyyyFromDate,
   formatDateTimeDdMmYyyyHhMm,
   parseCsDateTime,
+  startOfCurrentLocalMonthDate,
 } from '@utils/dateTimeCs';
 import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
 import { useSnackbar } from 'notistack';
@@ -100,7 +101,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
     setCCurrency('CZK');
     setCPeriod(CreateRecurringBudgetRequestDtoPeriodType.MONTHLY);
     setCInterval('1');
-    setCStart(formatDateDdMmYyyyFromDate(new Date()));
+    setCStart(formatDateDdMmYyyyFromDate(startOfCurrentLocalMonthDate()));
     setCEnd('');
   }, []);
 
@@ -286,12 +287,6 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
 
   return (
     <Stack spacing={2}>
-      <Typography variant="body2" color="text.secondary">
-        Nastav maximální částku za zvolené období. Server podle toho založí rozpočet vždy na začátku dalšího
-        cyklu (např. 1. dne v měsíci u měsíčního limitu). Interval určuje, zda jde o každé období, každé druhé
-        atd.
-      </Typography>
-
       {plans.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           Zatím žádný opakující se limit.
@@ -316,15 +311,32 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
                   max. {formatWalletAmount(p.amount, p.currencyCode)} ·{' '}
                   {recurringIntervalDescriptionCs(p.periodType, p.intervalValue ?? 1)}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  {p.startDate ? `Od ${formatDateDdMmYyyy(p.startDate)}` : ''}
-                  {p.endDate ? ` · do ${formatDateDdMmYyyy(p.endDate)}` : ''}
-                </Typography>
-                {p.nextRunDate && (
-                  <Typography variant="caption" color="primary" display="block" sx={{ mt: 0.25 }}>
-                    Další běh / nový rozpočet: {formatDateTimeDdMmYyyyHhMm(p.nextRunDate)}
-                  </Typography>
-                )}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'baseline',
+                    columnGap: 0.75,
+                    rowGap: 0.25,
+                  }}
+                >
+                  {(p.startDate || p.endDate) && (
+                    <Typography component="span" variant="caption" color="text.secondary">
+                      {[
+                        p.startDate ? `Od ${formatDateDdMmYyyy(p.startDate)}` : null,
+                        p.endDate ? `do ${formatDateDdMmYyyy(p.endDate)}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Typography>
+                  )}
+                  {p.nextRunDate && (
+                    <Typography component="span" variant="caption" color="primary">
+                      {(p.startDate || p.endDate) && '· '}
+                      Další běh / nový rozpočet: {formatDateTimeDdMmYyyyHhMm(p.nextRunDate)}
+                    </Typography>
+                  )}
+                </Box>
               </Box>
               <Tooltip title="Upravit">
                 <IconButton

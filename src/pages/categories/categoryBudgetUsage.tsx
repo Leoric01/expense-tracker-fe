@@ -3,7 +3,7 @@ import { Box, Chip, LinearProgress, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { formatDateDdMmYyyy } from '@utils/dateTimeCs';
-import { FC } from 'react';
+import { FC, Fragment } from 'react';
 import { budgetPeriodLabelCs, budgetPlanPeriodChipSx } from './categoryBudgetPeriodLabels';
 
 function pad2(n: number) {
@@ -89,6 +89,40 @@ function budgetUsagePercent(amountMinor: number, spentMinor: number): number {
   return Math.min(100, (spentMinor / amountMinor) * 100);
 }
 
+function daysInCurrentLocalMonth(): number {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+}
+
+/**
+ * Limit rozpočtu přepočtený na běžný kalendářní měsíc (minor units).
+ * Denní × počet dní v tomto měsíci, týdenní × (dny v měsíci / 7), měsíčně/čtvrtletně/ročně jako v součtech kategorií.
+ */
+export function budgetAmountToMonthlyEquivalentMinor(
+  amountMinor: number,
+  periodType: string | undefined,
+  intervalValue = 1,
+): number {
+  if (!Number.isFinite(amountMinor)) return 0;
+  const n = intervalValue == null || intervalValue < 1 ? 1 : Math.floor(intervalValue);
+  const days = daysInCurrentLocalMonth();
+  const weeksInMonth = days / 7;
+  switch (periodType) {
+    case 'DAILY':
+      return Math.round((amountMinor * days) / n);
+    case 'WEEKLY':
+      return Math.round((amountMinor * weeksInMonth) / n);
+    case 'MONTHLY':
+      return Math.round(amountMinor / n);
+    case 'QUARTERLY':
+      return Math.round(amountMinor / (3 * n));
+    case 'YEARLY':
+      return Math.round(amountMinor / (12 * n));
+    default:
+      return 0;
+  }
+}
+
 /** Kompaktní „trubička“ — výšku řádku pořád dávají ikony/chip. */
 function BudgetUsageTube(props: { fillPercent: number; overBudget: boolean }) {
   const { fillPercent, overBudget } = props;
@@ -149,22 +183,38 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
     perDay = `${formatWalletAmount(perDayMinor, currency)}/den`;
   }
 
-  const title = [`${spentVsLimit} ${periodBadge} · ${remainingText}`, periodDdMm || null, perDay]
+  const detailTitle = [`${spentVsLimit} ${periodBadge} · ${remainingText}`, periodDdMm || null, perDay]
     .filter(Boolean)
     .join(' · ');
+
+  const monthlyLine = plan.periodType
+    ? `Přepočet na měsíc: ${formatWalletAmount(
+        budgetAmountToMonthlyEquivalentMinor(amount, plan.periodType, 1),
+        currency,
+      )}`
+    : null;
+
+  const title = monthlyLine ? `${monthlyLine}\n${detailTitle}` : detailTitle;
   return { spentVsLimit, remainingText, periodDdMm, periodBadge, perDay, title };
 }
+
+/** Sloupce řádku kategorie: trubice+částky | období | zbývá | platnost | /den (zarovnání napříč řádky). */
+export const CATEGORY_BUDGET_LIST_ROW_GRID_INNER =
+  'minmax(0, 1fr) 96px 132px 110px 120px' as const;
 
 type UsageLineProps = {
   plan: BudgetPlanResponseDto;
   showPeriodType?: boolean;
   variant?: 'detail' | 'listRow';
+  /** Když `true` u `listRow`, vrátí 5 sourozenců pro vložení do rodičovského CSS gridu (bez obalujícího Stacku). */
+  gridCells?: boolean;
 };
 
 export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
   plan,
   showPeriodType,
   variant = 'detail',
+  gridCells = false,
 }) => {
   const amount = plan.amount ?? 0;
   const spent = plan.alreadySpent ?? 0;
@@ -184,6 +234,102 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
       fontVariantNumeric: 'tabular-nums' as const,
       whiteSpace: 'nowrap' as const,
     };
+
+    if (gridCells) {
+      return (
+        <Fragment>
+          <Box
+            title={title}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              minWidth: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              sx={{
+                width: 88,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <BudgetUsageTube fillPercent={tubeFill} overBudget={overBudget} />
+            </Box>
+            <Typography
+              {...captionBase}
+              sx={{
+                ...captionTypo,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {spentVsLimit}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'center', minWidth: 0, alignItems: 'center' }}>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={periodBadge}
+              sx={(theme) => ({
+                height: 18,
+                maxWidth: '100%',
+                ...budgetPlanPeriodChipSx(theme, plan.periodType),
+                '& .MuiChip-label': {
+                  px: 0.8,
+                  fontSize: '0.62rem',
+                  letterSpacing: 0.2,
+                  textTransform: 'uppercase',
+                },
+              })}
+            />
+          </Box>
+          <Typography
+            {...captionBase}
+            sx={{
+              ...captionTypo,
+              justifySelf: 'end',
+              textAlign: 'right',
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {remainingText}
+          </Typography>
+          <Typography
+            {...captionBase}
+            sx={{
+              ...captionTypo,
+              textAlign: 'center',
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {periodDdMm || '—'}
+          </Typography>
+          <Typography
+            {...captionBase}
+            sx={{
+              ...captionTypo,
+              justifySelf: 'end',
+              textAlign: 'right',
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {perDay}
+          </Typography>
+        </Fragment>
+      );
+    }
+
     return (
       <Stack
         direction="row"

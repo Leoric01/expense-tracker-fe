@@ -45,6 +45,7 @@ import {
   calendarDayStartUtcIso,
   formatDateDdMmYyyyFromDate,
   parseCsDateTime,
+  startOfCurrentLocalMonthDate,
 } from '@utils/dateTimeCs';
 import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
 import { useSnackbar } from 'notistack';
@@ -119,7 +120,7 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
     setCreateAmountCanon('');
     setCreateCurrency('CZK');
     setCreatePeriod(CreateBudgetPlanRequestDtoPeriodType.MONTHLY);
-    setCreateValidFrom(formatDateDdMmYyyyFromDate(new Date()));
+    setCreateValidFrom(formatDateDdMmYyyyFromDate(startOfCurrentLocalMonthDate()));
     setCreateValidTo('');
   }, []);
 

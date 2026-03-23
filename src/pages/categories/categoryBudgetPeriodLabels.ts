@@ -1,5 +1,6 @@
 import type { BudgetPlanResponseDtoPeriodType } from '@api/model';
-import type { SxProps, Theme } from '@mui/material/styles';
+import type { Theme } from '@mui/material/styles';
+import type { SystemStyleObject } from '@mui/system';
 import { alpha } from '@mui/material/styles';
 
 export const BUDGET_PERIOD_LABEL_CS: Record<string, string> = {
@@ -10,21 +11,21 @@ export const BUDGET_PERIOD_LABEL_CS: Record<string, string> = {
   YEARLY: 'Ročně',
 };
 
-/** Roční nejsvětlejší → denní nejtmavší (stejné pořadí jako enum v API). */
-const PERIOD_CHIP_BG_ALPHA_LIGHT: Record<string, number> = {
-  YEARLY: 0.05,
-  QUARTERLY: 0.085,
-  MONTHLY: 0.12,
-  WEEKLY: 0.155,
-  DAILY: 0.19,
+/**
+ * Měsíčně = zelená (hlavní), týdně/denně = modrá (denní sytější), čtvrtletně/ročně = červená (ročně slabší).
+ */
+type PeriodChipTone = {
+  hue: 'success' | 'info' | 'error';
+  bgAlphaLight: number;
+  bgAlphaDark: number;
 };
 
-const PERIOD_CHIP_BG_ALPHA_DARK: Record<string, number> = {
-  YEARLY: 0.1,
-  QUARTERLY: 0.155,
-  MONTHLY: 0.21,
-  WEEKLY: 0.265,
-  DAILY: 0.32,
+const PERIOD_CHIP_TONE: Record<string, PeriodChipTone> = {
+  MONTHLY: { hue: 'success', bgAlphaLight: 0.13, bgAlphaDark: 0.24 },
+  WEEKLY: { hue: 'info', bgAlphaLight: 0.09, bgAlphaDark: 0.17 },
+  DAILY: { hue: 'info', bgAlphaLight: 0.15, bgAlphaDark: 0.28 },
+  QUARTERLY: { hue: 'error', bgAlphaLight: 0.12, bgAlphaDark: 0.22 },
+  YEARLY: { hue: 'error', bgAlphaLight: 0.07, bgAlphaDark: 0.14 },
 };
 
 export function budgetPeriodLabelCs(period?: BudgetPlanResponseDtoPeriodType | string): string {
@@ -36,19 +37,31 @@ export function budgetPeriodLabelCs(period?: BudgetPlanResponseDtoPeriodType | s
 export function budgetPlanPeriodChipSx(
   theme: Theme,
   period?: BudgetPlanResponseDtoPeriodType | string | null,
-): SxProps<Theme> {
+): SystemStyleObject<Theme> {
   const key = period?.trim() ?? '';
-  const map = theme.palette.mode === 'dark' ? PERIOD_CHIP_BG_ALPHA_DARK : PERIOD_CHIP_BG_ALPHA_LIGHT;
-  const bgA = map[key] ?? (theme.palette.mode === 'dark' ? 0.18 : 0.1);
-  const borderA = Math.min(theme.palette.mode === 'dark' ? 0.55 : 0.45, bgA + (theme.palette.mode === 'dark' ? 0.14 : 0.11));
-  const base = theme.palette.primary.main;
+  const isDark = theme.palette.mode === 'dark';
+  const tone = PERIOD_CHIP_TONE[key];
+
+  if (!tone) {
+    const bgA = isDark ? 0.16 : 0.09;
+    const base = theme.palette.primary.main;
+    const borderA = Math.min(isDark ? 0.52 : 0.42, bgA + (isDark ? 0.12 : 0.1));
+    return {
+      bgcolor: alpha(base, bgA),
+      borderColor: alpha(base, borderA),
+      color: isDark ? alpha(theme.palette.common.white, 0.9) : theme.palette.primary.dark,
+    };
+  }
+
+  const bgA = isDark ? tone.bgAlphaDark : tone.bgAlphaLight;
+  const { hue } = tone;
+  const base = theme.palette[hue].main;
+  const borderA = Math.min(isDark ? 0.52 : 0.42, bgA + (isDark ? 0.12 : 0.1));
+  const labelColor = isDark ? theme.palette[hue].light : theme.palette[hue].dark;
 
   return {
     bgcolor: alpha(base, bgA),
     borderColor: alpha(base, borderA),
-    color:
-      theme.palette.mode === 'dark'
-        ? alpha(theme.palette.common.white, 0.92)
-        : theme.palette.primary.dark,
+    color: labelColor,
   };
 }

@@ -41,6 +41,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   FormControlLabel,
   IconButton,
@@ -58,9 +59,13 @@ import { PageHeading } from '@components/PageHeading';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useCallback, useMemo, useRef, useState } from 'react';
+import { FC, FormEvent, Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 import { CategoryBudgetPlansDialog } from './CategoryBudgetPlansDialog';
-import { CategoryBudgetPlanUsageLine } from './categoryBudgetUsage';
+import {
+  budgetAmountToMonthlyEquivalentMinor,
+  CATEGORY_BUDGET_LIST_ROW_GRID_INNER,
+  CategoryBudgetPlanUsageLine,
+} from './categoryBudgetUsage';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { majorToMinorUnits } from '@utils/moneyMinorUnits';
 import {
@@ -331,13 +336,6 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     return m;
   }, [recurringBudgets]);
 
-  const daysInThisMonth = useMemo(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  }, []);
-
-  const weeksInThisMonth = useMemo(() => daysInThisMonth / 7, [daysInThisMonth]);
-
   const rootExpenseCategoryIds = useMemo(() => {
     // "top level" = kořeny stromu (hloubka 0).
     // Požadavek: do součtu se počítají jen EXPENSE rodiče, děti ne.
@@ -353,25 +351,9 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   }, [flat]);
 
   const toMonthlyMinor = useCallback(
-    (amountMinor: number, periodType: string | undefined, intervalValue?: number): number => {
-      if (!Number.isFinite(amountMinor)) return 0;
-      const n = intervalValue == null || intervalValue < 1 ? 1 : Math.floor(intervalValue);
-      switch (periodType) {
-        case 'DAILY':
-          return Math.round((amountMinor * daysInThisMonth) / n);
-        case 'WEEKLY':
-          return Math.round((amountMinor * weeksInThisMonth) / n);
-        case 'MONTHLY':
-          return Math.round(amountMinor / n);
-        case 'QUARTERLY':
-          return Math.round(amountMinor / (3 * n));
-        case 'YEARLY':
-          return Math.round(amountMinor / (12 * n));
-        default:
-          return 0;
-      }
-    },
-    [daysInThisMonth, weeksInThisMonth],
+    (amountMinor: number, periodType: string | undefined, intervalValue?: number): number =>
+      budgetAmountToMonthlyEquivalentMinor(amountMinor, periodType, intervalValue ?? 1),
+    [],
   );
 
   const predictedMonthlyExpenseBuckets = useMemo(() => {
@@ -397,6 +379,19 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
       return formatWalletAmount(sum, currency);
     }
     return entries.map(([currency, sum]) => formatWalletAmount(sum, currency)).join(', ');
+  }, []);
+
+  const diffBuckets = useCallback((income: Map<string, number>, expense: Map<string, number>): Map<string, number> => {
+    const out = new Map<string, number>();
+    const keys = new Set([...income.keys(), ...expense.keys()]);
+    for (const k of keys) {
+      out.set(k, (income.get(k) ?? 0) - (expense.get(k) ?? 0));
+    }
+    return out;
+  }, []);
+
+  const scaleBuckets = useCallback((buckets: Map<string, number>, factor: number): Map<string, number> => {
+    return new Map([...buckets.entries()].map(([c, v]) => [c, Math.round(v * factor)]));
   }, []);
 
   const predictedMonthlyExpenseText = useMemo(() => {
@@ -458,6 +453,45 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const actualMonthlyIncomeText = useMemo(() => {
     return formatCurrencyBuckets(actualMonthlyIncomeBuckets);
   }, [actualMonthlyIncomeBuckets, formatCurrencyBuckets]);
+
+  const predictedMonthlySavingsBuckets = useMemo(
+    () => diffBuckets(predictedMonthlyIncomeBuckets, predictedMonthlyExpenseBuckets),
+    [diffBuckets, predictedMonthlyIncomeBuckets, predictedMonthlyExpenseBuckets],
+  );
+
+  const actualMonthlySavingsBuckets = useMemo(
+    () => diffBuckets(actualMonthlyIncomeBuckets, actualMonthlyExpenseBuckets),
+    [actualMonthlyIncomeBuckets, actualMonthlyExpenseBuckets, diffBuckets],
+  );
+
+  const predictedSavingsYearlyText = useMemo(
+    () => formatCurrencyBuckets(scaleBuckets(predictedMonthlySavingsBuckets, 12)),
+    [formatCurrencyBuckets, predictedMonthlySavingsBuckets, scaleBuckets],
+  );
+
+  const actualSavingsYearlyText = useMemo(
+    () => formatCurrencyBuckets(scaleBuckets(actualMonthlySavingsBuckets, 12)),
+    [actualMonthlySavingsBuckets, formatCurrencyBuckets, scaleBuckets],
+  );
+
+  const renderColoredSavingsAmounts = useCallback((buckets: Map<string, number>): ReactNode => {
+    const entries = [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b));
+    if (entries.length === 0) return '—';
+    return entries.map(([cur, val], i) => (
+      <Fragment key={cur}>
+        {i > 0 ? ', ' : null}
+        <Box
+          component="span"
+          sx={{
+            color: val > 0 ? 'success.main' : val < 0 ? 'error.main' : 'text.secondary',
+            fontWeight: 600,
+          }}
+        >
+          {formatWalletAmount(val, cur)}
+        </Box>
+      </Fragment>
+    ));
+  }, []);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -832,17 +866,138 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
               flexWrap: 'wrap',
             }}
           >
-            <Stack spacing={0.5} sx={{ flex: '1 1 200px', minWidth: 0 }}>
-              <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
-                Predpokládané měsíční výdaje: <strong>{predictedMonthlyExpenseText}</strong>
-                {' · '}
-                Skutečné měsíční výdaje: <strong>{actualMonthlyExpenseText}</strong>
-              </Typography>
-              <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
-                Predpokládané měsíční příjmy: <strong>{predictedMonthlyIncomeText}</strong>
-                {' · '}
-                Skutečné měsíční příjmy: <strong>{actualMonthlyIncomeText}</strong>
-              </Typography>
+            <Stack spacing={0.5} sx={{ flex: '1 1 280px', minWidth: 0 }}>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                  columnGap: 2,
+                  alignItems: 'start',
+                }}
+              >
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto',
+                    columnGap: 1,
+                    rowGap: 0.5,
+                    alignItems: 'baseline',
+                    minWidth: 0,
+                  }}
+                >
+                  <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
+                    Predpokládané měsíční výdaje:
+                  </Typography>
+                  <Typography
+                    color="text.secondary"
+                    variant={embedded ? 'body2' : 'body1'}
+                    sx={{ fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                  >
+                    {predictedMonthlyExpenseText}
+                  </Typography>
+                  <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
+                    Predpokládané měsíční příjmy:
+                  </Typography>
+                  <Typography
+                    color="text.secondary"
+                    variant={embedded ? 'body2' : 'body1'}
+                    sx={{ fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                  >
+                    {predictedMonthlyIncomeText}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto',
+                    columnGap: 1,
+                    rowGap: 0.5,
+                    alignItems: 'baseline',
+                    minWidth: 0,
+                  }}
+                >
+                  <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
+                    Skutečné měsíční výdaje:
+                  </Typography>
+                  <Typography
+                    color="text.secondary"
+                    variant={embedded ? 'body2' : 'body1'}
+                    sx={{ fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                  >
+                    {actualMonthlyExpenseText}
+                  </Typography>
+                  <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
+                    Skutečné měsíční příjmy:
+                  </Typography>
+                  <Typography
+                    color="text.secondary"
+                    variant={embedded ? 'body2' : 'body1'}
+                    sx={{ fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                  >
+                    {actualMonthlyIncomeText}
+                  </Typography>
+                </Box>
+              </Box>
+              <Divider sx={{ my: 0.5 }} />
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                  columnGap: 2,
+                  alignItems: 'start',
+                }}
+              >
+                <Tooltip title={`Při tomto tempu za rok: ${predictedSavingsYearlyText}`}>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr) auto',
+                      columnGap: 1,
+                      alignItems: 'baseline',
+                      minWidth: 0,
+                      cursor: 'help',
+                    }}
+                  >
+                    <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
+                      Predpokládaná měsíční úspora:
+                    </Typography>
+                    <Box
+                      sx={{
+                        textAlign: 'right',
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {renderColoredSavingsAmounts(predictedMonthlySavingsBuckets)}
+                    </Box>
+                  </Box>
+                </Tooltip>
+                <Tooltip title={`Při tomto tempu za rok: ${actualSavingsYearlyText}`}>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr) auto',
+                      columnGap: 1,
+                      alignItems: 'baseline',
+                      minWidth: 0,
+                      cursor: 'help',
+                    }}
+                  >
+                    <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
+                      Skutečná měsíční úspora:
+                    </Typography>
+                    <Box
+                      sx={{
+                        textAlign: 'right',
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {renderColoredSavingsAmounts(actualMonthlySavingsBuckets)}
+                    </Box>
+                  </Box>
+                </Tooltip>
+              </Box>
             </Stack>
             <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
               <Button variant="outlined" onClick={openBulkCreate}>
@@ -1349,7 +1504,7 @@ const CategoryTreeRows: FC<RowProps> = ({
           display: 'grid',
           alignItems: 'center',
           columnGap: 0.5,
-          gridTemplateColumns: '36px minmax(195px, 2fr) 36px minmax(345px, 2.2fr) 72px 160px',
+          gridTemplateColumns: `36px minmax(150px, 2fr) 36px ${CATEGORY_BUDGET_LIST_ROW_GRID_INNER} 72px 170px`,
           transition: (t) =>
             t.transitions.create('background-color', { duration: t.transitions.duration.shortest }),
           '&:hover': {
@@ -1421,36 +1576,45 @@ const CategoryTreeRows: FC<RowProps> = ({
             <Box sx={{ width: 32 }} />
           )}
         </Box>
-        <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
-          {oneOffPlans.length > 0 ? (
-            <Stack
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              sx={{
-                minWidth: 0,
-                overflowX: 'auto',
-                overflowY: 'hidden',
-              }}
-            >
+        {oneOffPlans.length === 0 ? (
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ whiteSpace: 'nowrap', gridColumn: '4 / 9', alignSelf: 'center' }}
+          >
+            —
+          </Typography>
+        ) : oneOffPlans.length === 1 ? (
+          <CategoryBudgetPlanUsageLine plan={oneOffPlans[0]} variant="listRow" gridCells />
+        ) : (
+          <Box
+            sx={{
+              gridColumn: '4 / 9',
+              minWidth: 0,
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              alignSelf: 'center',
+            }}
+          >
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ py: 0.25 }}>
               {oneOffPlans.map((p) => (
                 <Box
                   key={p.id ?? p.name}
                   sx={{
-                    flex: '1 1 0%',
-                    minWidth: oneOffPlans.length > 1 ? 260 : 0,
+                    display: 'grid',
+                    gridTemplateColumns: CATEGORY_BUDGET_LIST_ROW_GRID_INNER,
+                    columnGap: 0.5,
+                    alignItems: 'center',
+                    flexShrink: 0,
+                    minWidth: 0,
                   }}
                 >
-                  <CategoryBudgetPlanUsageLine plan={p} variant="listRow" />
+                  <CategoryBudgetPlanUsageLine plan={p} variant="listRow" gridCells />
                 </Box>
               ))}
             </Stack>
-          ) : (
-            <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
-              —
-            </Typography>
-          )}
-        </Box>
+          </Box>
+        )}
         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
           <Chip
             size="small"
