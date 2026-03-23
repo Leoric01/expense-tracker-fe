@@ -1,5 +1,7 @@
 import { budgetPlanFindAllActive } from '@api/budget-plan-controller/budget-plan-controller';
 import { recurringBudgetFindAllActive } from '@api/recurring-budget-controller/recurring-budget-controller';
+import { transactionCreate } from '@api/transaction-controller/transaction-controller';
+import { walletFindAll } from '@api/wallet-controller/wallet-controller';
 import {
   categoryCreateBulk,
   categoryCreate,
@@ -10,6 +12,9 @@ import {
 import type {
   BudgetPlanResponseDto,
   CategoryResponseDto,
+  CreateTransactionRequestDto,
+  PagedModelWalletResponseDto,
+  WalletResponseDto,
   CreateCategoryBulkRequestDto,
   CreateCategoryRequestDto,
   PagedModelBudgetPlanResponseDto,
@@ -18,12 +23,12 @@ import type {
   RecurringBudgetResponseDto,
   UpdateCategoryRequestDto,
 } from '@api/model';
-import { CreateCategoryRequestDtoCategoryKind } from '@api/model';
 import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import PostAddIcon from '@mui/icons-material/PostAdd';
 import {
   Box,
   Button,
@@ -54,6 +59,7 @@ import { FC, FormEvent, useCallback, useMemo, useRef, useState } from 'react';
 import { CategoryBudgetPlansDialog } from './CategoryBudgetPlansDialog';
 import { CategoryBudgetPlanUsageLine } from './categoryBudgetUsage';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
+import { majorToMinorUnits } from '@utils/moneyMinorUnits';
 import {
   asCategoryChildren,
   categoryKindChipColor,
@@ -64,6 +70,14 @@ import {
   rootAncestorCategory,
   toCategoryTree,
 } from './categoryTreeUtils';
+import {
+  canonicalAmountFromUserInput,
+  defaultDatetimeLocal,
+  formatAmountDisplayCs,
+  parseAmount,
+  toIsoFromDatetimeLocal,
+} from '@pages/home/transactionFormUtils';
+import { CreateCategoryRequestDtoCategoryKind, CreateTransactionRequestDtoTransactionType } from '@api/model';
 
 const LIST_PARAMS = { page: 0, size: 200 } as const;
 const BUDGET_LIST_PARAMS = { page: 0, size: 500 } as const;
@@ -77,6 +91,11 @@ type BulkDraftNode = {
   name: string;
   level: number;
   children: BulkDraftNode[];
+};
+
+type BulkPreviewRow = {
+  name: string;
+  level: number;
 };
 
 function parseBulkCategoryText(
@@ -143,9 +162,53 @@ function parseBulkCategoryText(
   return { items: toDto(roots, kind) };
 }
 
+function parseBulkPreviewText(text: string): { rows: BulkPreviewRow[]; error?: string } {
+  const lines = text
+    .split(/\r?\n/)
+    .map((raw) => raw.replace(/\s+$/g, ''))
+    .filter((raw) => raw.trim().length > 0);
+  if (lines.length === 0) return { rows: [] };
+
+  const rows: BulkPreviewRow[] = [];
+  const stackLevels: number[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const lineNo = i + 1;
+    const raw = lines[i];
+    const ws = raw.match(/^[\t ]*/)?.[0] ?? '';
+    if (ws.includes(' ') && ws.includes('\t')) {
+      return { rows, error: `Řádek ${lineNo}: nepoužívej taby a mezery zároveň.` };
+    }
+    const level = ws.includes('\t') ? ws.length : Math.floor(ws.length / 2);
+    if (!ws.includes('\t') && ws.length % 2 !== 0) {
+      return { rows, error: `Řádek ${lineNo}: pro odsazení použij násobky 2 mezer.` };
+    }
+    if (level > BULK_MAX_LEVEL) {
+      return { rows, error: `Řádek ${lineNo}: max hloubka je ${BULK_MAX_LEVEL}.` };
+    }
+
+    const name = raw.trim().replace(/^[-*•]\s*/, '');
+    if (!name) {
+      return { rows, error: `Řádek ${lineNo}: chybí název kategorie.` };
+    }
+
+    while (stackLevels.length > 0 && stackLevels[stackLevels.length - 1] >= level) stackLevels.pop();
+    if (level > 0 && (stackLevels.length === 0 || stackLevels[stackLevels.length - 1] !== level - 1)) {
+      return { rows, error: `Řádek ${lineNo}: chybí nadřazená úroveň.` };
+    }
+
+    rows.push({ name, level });
+    stackLevels.push(level);
+  }
+
+  return { rows };
+}
+
 export type CategoriesForTrackerProps = {
   trackerId: string;
   trackerName: string;
+  /** Volitelné peněženky z rodiče (např. dashboard na Domě) pro vynechání extra `walletFindAll`. */
+  walletsFromParent?: WalletResponseDto[];
   /** V záložce na Domě — bez vlastního hlavního nadpisu „Kategorie“. */
   embedded?: boolean;
   /** Když false, dotaz na kategorie neběží (řetězení po peněženkách na Domě). */
@@ -155,6 +218,7 @@ export type CategoriesForTrackerProps = {
 export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   trackerId,
   trackerName,
+  walletsFromParent,
   embedded,
   categoriesQueryEnabled = true,
 }) => {
@@ -186,6 +250,17 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
       return res.data as PagedModelRecurringBudgetResponseDto;
     },
     enabled: Boolean(trackerId) && categoriesQueryEnabled,
+    staleTime: 30_000,
+  });
+
+  const { data: walletsData } = useQuery({
+    queryKey: ['/api/wallet', trackerId, BUDGET_LIST_PARAMS],
+    queryFn: async () => {
+      const res = await walletFindAll(trackerId, BUDGET_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('wallets');
+      return res.data as PagedModelWalletResponseDto;
+    },
+    enabled: Boolean(trackerId) && categoriesQueryEnabled && walletsFromParent === undefined,
     staleTime: 30_000,
   });
 
@@ -387,6 +462,11 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const [deleteCascade, setDeleteCascade] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [budgetCategory, setBudgetCategory] = useState<CategoryResponseDto | null>(null);
+  const [quickTxCategory, setQuickTxCategory] = useState<CategoryResponseDto | null>(null);
+  const [quickTxWalletId, setQuickTxWalletId] = useState('');
+  const [quickTxAmountCanon, setQuickTxAmountCanon] = useState('');
+  const [quickTxWhen, setQuickTxWhen] = useState(defaultDatetimeLocal());
+  const [quickTxDescription, setQuickTxDescription] = useState('');
 
   const [formName, setFormName] = useState('');
   const [formKind, setFormKind] = useState<CreateCategoryRequestDtoCategoryKind>(
@@ -394,6 +474,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   );
   const [formParentId, setFormParentId] = useState<string>('');
   const createNameInputRef = useRef<HTMLInputElement | null>(null);
+  const bulkPreview = useMemo(() => parseBulkPreviewText(bulkText), [bulkText]);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
@@ -402,6 +483,13 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     queryClient.invalidateQueries({ queryKey: [`/api/budget-plan/${trackerId}/active`] });
     queryClient.invalidateQueries({ queryKey: [`/api/recurring-budget/${trackerId}/active`] });
   }, [queryClient, trackerId]);
+
+  const activeWallets = useMemo(() => {
+    const wallets =
+      walletsFromParent ??
+      (((walletsData?.content ?? []) as WalletResponseDto[]) ?? []);
+    return wallets.filter((w) => w.active !== false && w.id);
+  }, [walletsFromParent, walletsData]);
 
   const openCreateRoot = () => {
     setCreateMode({ type: 'root' });
@@ -599,6 +687,72 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     }
   };
 
+  const handleQuickTxOpen = (category: CategoryResponseDto) => {
+    setQuickTxCategory(category);
+    setQuickTxWalletId('');
+    setQuickTxAmountCanon('');
+    setQuickTxWhen(defaultDatetimeLocal());
+    setQuickTxDescription('');
+  };
+
+  const handleQuickTxSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!quickTxCategory?.id) return;
+    if (!quickTxWalletId) {
+      enqueueSnackbar('Vyber peněženku', { variant: 'warning' });
+      return;
+    }
+    const amount = parseAmount(quickTxAmountCanon);
+    if (amount == null || amount <= 0) {
+      enqueueSnackbar('Zadej kladnou částku', { variant: 'warning' });
+      return;
+    }
+    const txDateIso = toIsoFromDatetimeLocal(quickTxWhen);
+    if (!txDateIso) {
+      enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', { variant: 'warning' });
+      return;
+    }
+    const kind = quickTxCategory.categoryKind;
+    if (
+      kind !== CreateCategoryRequestDtoCategoryKind.EXPENSE &&
+      kind !== CreateCategoryRequestDtoCategoryKind.INCOME
+    ) {
+      enqueueSnackbar('Kategorie nemá platný typ příjem/výdaj', { variant: 'warning' });
+      return;
+    }
+
+    const payload: CreateTransactionRequestDto = {
+      categoryId: quickTxCategory.id,
+      walletId: quickTxWalletId,
+      amount: majorToMinorUnits(amount),
+      transactionDate: txDateIso,
+      transactionType:
+        kind === CreateCategoryRequestDtoCategoryKind.EXPENSE
+          ? CreateTransactionRequestDtoTransactionType.EXPENSE
+          : CreateTransactionRequestDtoTransactionType.INCOME,
+      ...(quickTxDescription.trim() ? { description: quickTxDescription.trim() } : {}),
+    };
+
+    setSubmitting(true);
+    try {
+      const res = await transactionCreate(trackerId, payload);
+      if (res.status < 200 || res.status >= 300) {
+        enqueueSnackbar(apiErrorMessage(res.data, 'Transakci se nepodařilo uložit'), { variant: 'error' });
+        return;
+      }
+      enqueueSnackbar('Transakce byla zaznamenána', { variant: 'success' });
+      setQuickTxCategory(null);
+      await queryClient.invalidateQueries({ queryKey: ['/api/transaction', trackerId] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
+      await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
+      await invalidateBudgets();
+    } catch {
+      enqueueSnackbar('Transakci se nepodařilo uložit', { variant: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <Box>
       {!embedded && (
@@ -710,6 +864,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                       setDeleteId(id);
                     }}
                     onManageBudgets={setBudgetCategory}
+                    onQuickAddTransaction={handleQuickTxOpen}
                     getBudgetCount={(categoryId) => {
                       const one = budgetsByCategoryId.get(categoryId)?.length ?? 0;
                       const rec = recurringByCategoryId.get(categoryId)?.length ?? 0;
@@ -801,6 +956,73 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
         </Box>
       </Dialog>
 
+      <Dialog
+        open={Boolean(quickTxCategory)}
+        onClose={() => !submitting && setQuickTxCategory(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Přidat transakci</DialogTitle>
+        <Box component="form" onSubmit={handleQuickTxSubmit}>
+          <DialogContent>
+            <Stack spacing={2}>
+              <Typography variant="body2" color="text.secondary">
+                Kategorie: <strong>{quickTxCategory?.name ?? '—'}</strong>
+              </Typography>
+              <FormControl fullWidth required size="small">
+                <InputLabel id="quick-tx-wallet">Peněženka</InputLabel>
+                <Select
+                  labelId="quick-tx-wallet"
+                  label="Peněženka"
+                  value={quickTxWalletId}
+                  onChange={(e) => setQuickTxWalletId(e.target.value as string)}
+                >
+                  {activeWallets.map((w) => (
+                    <MenuItem key={w.id} value={w.id}>
+                      {w.name ?? w.id} {w.currencyCode ? `(${w.currencyCode})` : ''}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                label="Částka"
+                value={formatAmountDisplayCs(quickTxAmountCanon)}
+                onChange={(e) => setQuickTxAmountCanon(canonicalAmountFromUserInput(e.target.value))}
+                required
+                fullWidth
+                size="small"
+                inputMode="decimal"
+              />
+              <TextField
+                label="Datum a čas"
+                value={quickTxWhen}
+                onChange={(e) => setQuickTxWhen(e.target.value)}
+                placeholder="dd.MM.yyyy HH:mm"
+                helperText="Formát dd.MM.yyyy HH:mm (24 h)"
+                required
+                fullWidth
+                size="small"
+              />
+              <TextField
+                label="Popis (volitelné)"
+                value={quickTxDescription}
+                onChange={(e) => setQuickTxDescription(e.target.value)}
+                fullWidth
+                size="small"
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setQuickTxCategory(null)} disabled={submitting}>
+              Zrušit
+            </Button>
+            <Button type="submit" variant="contained" disabled={submitting}>
+              Uložit transakci
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
       <Dialog open={bulkOpen} onClose={() => !submitting && setBulkOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>Hromadné vytvoření kategorií</DialogTitle>
         <Box component="form" onSubmit={handleBulkCreate}>
@@ -829,6 +1051,60 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                 fullWidth
                 required
               />
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                  Náhled stromu
+                </Typography>
+                <Paper variant="outlined" sx={{ p: 1, maxHeight: 220, overflow: 'auto' }}>
+                  {bulkPreview.rows.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Napiš kategorie a hierarchii odsazením; náhled se zobrazí průběžně.
+                    </Typography>
+                  ) : (
+                    <Stack spacing={0.25}>
+                      {bulkPreview.rows.map((row, idx) => (
+                        <Box key={`${idx}-${row.name}`} sx={{ display: 'flex', alignItems: 'center', minHeight: 22 }}>
+                          {row.level > 0 && (
+                            <>
+                              <Box sx={{ display: 'flex', alignSelf: 'stretch', mr: 0.25 }}>
+                                {Array.from({ length: row.level }).map((_, i) => (
+                                  <Box
+                                    key={i}
+                                    sx={{
+                                      width: 12,
+                                      borderLeft: 1,
+                                      borderColor: 'divider',
+                                      opacity: 0.7,
+                                    }}
+                                  />
+                                ))}
+                              </Box>
+                              <Box
+                                sx={{
+                                  width: 8,
+                                  borderTop: 1,
+                                  borderColor: 'divider',
+                                  opacity: 0.7,
+                                  mr: 0.5,
+                                  flexShrink: 0,
+                                }}
+                              />
+                            </>
+                          )}
+                          <Typography variant="body2" sx={{ minWidth: 0 }}>
+                            {row.name}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  )}
+                </Paper>
+                {bulkPreview.error ? (
+                  <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
+                    {bulkPreview.error}
+                  </Typography>
+                ) : null}
+              </Box>
             </Stack>
           </DialogContent>
           <DialogActions>
@@ -962,6 +1238,7 @@ type RowProps = {
   onEdit: (c: CategoryResponseDto) => void;
   onDelete: (id: string) => void;
   onManageBudgets: (c: CategoryResponseDto) => void;
+  onQuickAddTransaction: (c: CategoryResponseDto) => void;
   getBudgetCount: (categoryId: string) => number;
   getOneOffBudgets: (categoryId: string) => BudgetPlanResponseDto[];
   expandedCategoryIds: Set<string>;
@@ -975,6 +1252,7 @@ const CategoryTreeRows: FC<RowProps> = ({
   onEdit,
   onDelete,
   onManageBudgets,
+  onQuickAddTransaction,
   getBudgetCount,
   getOneOffBudgets,
   expandedCategoryIds,
@@ -994,15 +1272,15 @@ const CategoryTreeRows: FC<RowProps> = ({
 
   return (
     <Box>
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={0.5}
+      <Box
         sx={{
-          pl: depth * 2.5,
           py: 0.75,
           borderBottom: 1,
           borderColor: 'divider',
+          display: 'grid',
+          alignItems: 'center',
+          columnGap: 0.5,
+          gridTemplateColumns: '36px minmax(140px, 1.2fr) auto minmax(220px, 2fr) auto auto',
         }}
       >
         <Box
@@ -1039,6 +1317,7 @@ const CategoryTreeRows: FC<RowProps> = ({
             flex: '0 1 auto',
             maxWidth: { xs: '38%', sm: '32%' },
             minWidth: 0,
+            pl: depth * 2.5,
             cursor: hasChildren ? 'pointer' : 'default',
             userSelect: 'none',
           }}
@@ -1048,93 +1327,119 @@ const CategoryTreeRows: FC<RowProps> = ({
         >
           {node.name ?? '—'}
         </Typography>
-        {oneOffPlans.length > 0 && (
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            sx={{
-              flex: '1 1 0%',
-              minWidth: 0,
-              overflowX: 'auto',
-              overflowY: 'hidden',
-              py: 0,
-            }}
-          >
-            {oneOffPlans.map((p) => (
-              <Box
-                key={p.id ?? p.name}
-                sx={{
-                  flex: '1 1 0%',
-                  minWidth: oneOffPlans.length > 1 ? 260 : 0,
-                }}
-              >
-                <CategoryBudgetPlanUsageLine plan={p} variant="listRow" />
-              </Box>
-            ))}
-          </Stack>
-        )}
-        <Chip
-          size="small"
-          label={categoryKindLabel(node.categoryKind)}
-          variant="outlined"
-          color={categoryKindChipColor(node.categoryKind)}
-        />
-        {id && (
-          <>
-            <Tooltip title={budgetCount > 0 ? `Rozpočty (${budgetCount})` : 'Rozpočet ke kategorii'}>
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          {id ? (
+            <Tooltip title="Přidat transakci do této kategorie">
               <IconButton
                 size="small"
-                aria-label="rozpočty kategorie"
+                aria-label="přidat transakci"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onManageBudgets(node);
-                }}
-                color={budgetCount > 0 ? 'primary' : 'default'}
-              >
-                <AccountBalanceWalletOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Podkategorie">
-              <IconButton
-                size="small"
-                aria-label="přidat podkategorii"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddChild(id);
+                  onQuickAddTransaction(node);
                 }}
               >
-                <AddOutlinedIcon fontSize="small" />
+                <PostAddIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Upravit">
-              <IconButton
-                size="small"
-                aria-label="upravit"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(node);
-                }}
-              >
-                <EditOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Odstranit">
-              <IconButton
-                size="small"
-                aria-label="odstranit"
-                color="error"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(id);
-                }}
-              >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </>
-        )}
-      </Stack>
+          ) : (
+            <Box sx={{ width: 32 }} />
+          )}
+        </Box>
+        <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
+          {oneOffPlans.length > 0 ? (
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              sx={{
+                minWidth: 0,
+                overflowX: 'auto',
+                overflowY: 'hidden',
+              }}
+            >
+              {oneOffPlans.map((p) => (
+                <Box
+                  key={p.id ?? p.name}
+                  sx={{
+                    flex: '1 1 0%',
+                    minWidth: oneOffPlans.length > 1 ? 260 : 0,
+                  }}
+                >
+                  <CategoryBudgetPlanUsageLine plan={p} variant="listRow" />
+                </Box>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
+              —
+            </Typography>
+          )}
+        </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <Chip
+            size="small"
+            label={categoryKindLabel(node.categoryKind)}
+            variant="outlined"
+            color={categoryKindChipColor(node.categoryKind)}
+          />
+        </Box>
+        <Stack direction="row" spacing={0} alignItems="center" sx={{ justifySelf: 'end' }}>
+          {id && (
+            <>
+              <Tooltip title={budgetCount > 0 ? `Rozpočty (${budgetCount})` : 'Rozpočet ke kategorii'}>
+                <IconButton
+                  size="small"
+                  aria-label="rozpočty kategorie"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onManageBudgets(node);
+                  }}
+                  color={budgetCount > 0 ? 'primary' : 'default'}
+                >
+                  <AccountBalanceWalletOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Podkategorie">
+                <IconButton
+                  size="small"
+                  aria-label="přidat podkategorii"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddChild(id);
+                  }}
+                >
+                  <AddOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Upravit">
+                <IconButton
+                  size="small"
+                  aria-label="upravit"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(node);
+                  }}
+                >
+                  <EditOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Odstranit">
+                <IconButton
+                  size="small"
+                  aria-label="odstranit"
+                  color="error"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(id);
+                  }}
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+        </Stack>
+      </Box>
       {hasChildren && (
         <Collapse in={expanded} timeout="auto" unmountOnExit>
           <Box>
@@ -1147,6 +1452,7 @@ const CategoryTreeRows: FC<RowProps> = ({
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onManageBudgets={onManageBudgets}
+                onQuickAddTransaction={onQuickAddTransaction}
                 getBudgetCount={getBudgetCount}
                 getOneOffBudgets={getOneOffBudgets}
                 expandedCategoryIds={expandedCategoryIds}

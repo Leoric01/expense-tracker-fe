@@ -656,6 +656,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           embedded
           trackerId={trackerId}
           trackerName={trackerName}
+          walletsFromParent={orderedItems}
           categoriesQueryEnabled={dashboardFetched}
         />
       )}
