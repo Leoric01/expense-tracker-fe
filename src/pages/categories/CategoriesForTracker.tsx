@@ -224,6 +224,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
+  const [budgetCategory, setBudgetCategory] = useState<CategoryResponseDto | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [`/api/category/${trackerId}/active`, LIST_PARAMS],
@@ -249,7 +250,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
       if (res.status < 200 || res.status >= 300) throw new Error('recurring-budget');
       return res.data as PagedModelRecurringBudgetResponseDto;
     },
-    enabled: Boolean(trackerId) && categoriesQueryEnabled,
+    enabled: Boolean(trackerId) && categoriesQueryEnabled && Boolean(budgetCategory?.id),
     staleTime: 30_000,
   });
 
@@ -461,7 +462,6 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteCascade, setDeleteCascade] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [budgetCategory, setBudgetCategory] = useState<CategoryResponseDto | null>(null);
   const [quickTxCategory, setQuickTxCategory] = useState<CategoryResponseDto | null>(null);
   const [quickTxWalletId, setQuickTxWalletId] = useState('');
   const [quickTxAmountCanon, setQuickTxAmountCanon] = useState('');
@@ -866,9 +866,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                     onManageBudgets={setBudgetCategory}
                     onQuickAddTransaction={handleQuickTxOpen}
                     getBudgetCount={(categoryId) => {
-                      const one = budgetsByCategoryId.get(categoryId)?.length ?? 0;
-                      const rec = recurringByCategoryId.get(categoryId)?.length ?? 0;
-                      return one + rec;
+                      return budgetsByCategoryId.get(categoryId)?.length ?? 0;
                     }}
                     getOneOffBudgets={(categoryId) => budgetsByCategoryId.get(categoryId) ?? []}
                     expandedCategoryIds={expandedCategoryIds}
