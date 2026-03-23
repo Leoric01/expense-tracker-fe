@@ -27,6 +27,7 @@ import type {
   CategoryFindAllParams,
   CategoryUploadIconBody,
   CategoryUploadIconParams,
+  CreateCategoryBulkRequestDto,
   CreateCategoryRequestDto,
   UpdateCategoryRequestDto,
 } from '../model';
@@ -493,6 +494,99 @@ export const useCategoryDeleteIcon = <TError = unknown, TContext = unknown>(
   TContext
 > => {
   return useMutation(getCategoryDeleteIconMutationOptions(options), queryClient);
+};
+export type categoryCreateBulkResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type categoryCreateBulkResponseSuccess = categoryCreateBulkResponse200 & {
+  headers: Headers;
+};
+export type categoryCreateBulkResponse = categoryCreateBulkResponseSuccess;
+
+export const getCategoryCreateBulkUrl = (trackerId: string) => {
+  return `/api/category/${trackerId}/bulk`;
+};
+
+export const categoryCreateBulk = async (
+  trackerId: string,
+  createCategoryBulkRequestDto: CreateCategoryBulkRequestDto[],
+  options?: RequestInit,
+): Promise<categoryCreateBulkResponse> => {
+  const res = await fetch(getCategoryCreateBulkUrl(trackerId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createCategoryBulkRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: categoryCreateBulkResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as categoryCreateBulkResponse;
+};
+
+export const getCategoryCreateBulkMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof categoryCreateBulk>>,
+    TError,
+    { trackerId: string; data: CreateCategoryBulkRequestDto[] },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof categoryCreateBulk>>,
+  TError,
+  { trackerId: string; data: CreateCategoryBulkRequestDto[] },
+  TContext
+> => {
+  const mutationKey = ['categoryCreateBulk'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof categoryCreateBulk>>,
+    { trackerId: string; data: CreateCategoryBulkRequestDto[] }
+  > = (props) => {
+    const { trackerId, data } = props ?? {};
+
+    return categoryCreateBulk(trackerId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CategoryCreateBulkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof categoryCreateBulk>>
+>;
+export type CategoryCreateBulkMutationBody = CreateCategoryBulkRequestDto[];
+export type CategoryCreateBulkMutationError = unknown;
+
+export const useCategoryCreateBulk = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof categoryCreateBulk>>,
+      TError,
+      { trackerId: string; data: CreateCategoryBulkRequestDto[] },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof categoryCreateBulk>>,
+  TError,
+  { trackerId: string; data: CreateCategoryBulkRequestDto[] },
+  TContext
+> => {
+  return useMutation(getCategoryCreateBulkMutationOptions(options), queryClient);
 };
 export type categoryFindByIdResponse200 = {
   data: Blob;

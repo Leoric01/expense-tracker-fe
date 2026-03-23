@@ -1,6 +1,7 @@
 import { budgetPlanFindAllActive } from '@api/budget-plan-controller/budget-plan-controller';
 import { recurringBudgetFindAllActive } from '@api/recurring-budget-controller/recurring-budget-controller';
 import {
+  categoryCreateBulk,
   categoryCreate,
   categoryDeactivate,
   categoryFindAllActive,
@@ -9,6 +10,7 @@ import {
 import type {
   BudgetPlanResponseDto,
   CategoryResponseDto,
+  CreateCategoryBulkRequestDto,
   CreateCategoryRequestDto,
   PagedModelBudgetPlanResponseDto,
   PagedModelCategoryResponseDto,
@@ -65,10 +67,81 @@ import {
 
 const LIST_PARAMS = { page: 0, size: 200 } as const;
 const BUDGET_LIST_PARAMS = { page: 0, size: 500 } as const;
+const BULK_MAX_LEVEL = 5;
 
 type CreateMode = { type: 'root' } | { type: 'child'; parentId: string };
 
 type EditMode = { category: CategoryResponseDto };
+
+type BulkDraftNode = {
+  name: string;
+  level: number;
+  children: BulkDraftNode[];
+};
+
+function parseBulkCategoryText(
+  text: string,
+  kind: 'INCOME' | 'EXPENSE',
+): { items: CreateCategoryBulkRequestDto[]; error?: string } {
+  const lines = text
+    .split(/\r?\n/)
+    .map((raw) => raw.replace(/\s+$/g, ''))
+    .filter((raw) => raw.trim().length > 0);
+  if (lines.length === 0) return { items: [], error: 'Zadej aspoň jednu kategorii.' };
+
+  const roots: BulkDraftNode[] = [];
+  const stack: BulkDraftNode[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const lineNo = i + 1;
+    const raw = lines[i];
+    const ws = raw.match(/^[\t ]*/)?.[0] ?? '';
+    if (ws.includes(' ') && ws.includes('\t')) {
+      return { items: [], error: `Řádek ${lineNo}: nepoužívej taby a mezery zároveň.` };
+    }
+
+    const level = ws.includes('\t') ? ws.length : Math.floor(ws.length / 2);
+    if (!ws.includes('\t') && ws.length % 2 !== 0) {
+      return { items: [], error: `Řádek ${lineNo}: pro odsazení použij násobky 2 mezer.` };
+    }
+    if (level > BULK_MAX_LEVEL) {
+      return { items: [], error: `Řádek ${lineNo}: max hloubka je ${BULK_MAX_LEVEL}.` };
+    }
+
+    const name = raw.trim().replace(/^[-*•]\s*/, '');
+    if (!name) return { items: [], error: `Řádek ${lineNo}: chybí název kategorie.` };
+
+    const node: BulkDraftNode = { name, level, children: [] };
+    if (level === 0) {
+      roots.push(node);
+      stack.length = 0;
+      stack.push(node);
+      continue;
+    }
+
+    const parentLevel = level - 1;
+    while (stack.length > 0 && stack[stack.length - 1].level >= level) stack.pop();
+    const parent = stack[stack.length - 1];
+    if (!parent || parent.level !== parentLevel) {
+      return {
+        items: [],
+        error: `Řádek ${lineNo}: chybí nadřazená kategorie pro hloubku ${level}.`,
+      };
+    }
+    parent.children.push(node);
+    stack.push(node);
+  }
+
+  const toDto = (nodes: BulkDraftNode[], kind: 'INCOME' | 'EXPENSE'): CreateCategoryBulkRequestDto[] =>
+    nodes.map((n, idx) => ({
+      name: n.name,
+      categoryKind: kind,
+      sortOrder: idx,
+      ...(n.children.length > 0 ? { children: toDto(n.children, kind) } : {}),
+    }));
+
+  return { items: toDto(roots, kind) };
+}
 
 export type CategoriesForTrackerProps = {
   trackerId: string;
@@ -232,17 +305,19 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     return sums;
   }, [rootExpenseCategoryIds, budgetsByCategoryId, toMonthlyMinor]);
 
-  const predictedMonthlyExpenseText = useMemo(() => {
-    if (predictedMonthlyExpenseBuckets.size === 0) return '—';
-    const entries = Array.from(predictedMonthlyExpenseBuckets.entries());
+  const formatCurrencyBuckets = useCallback((buckets: Map<string, number>): string => {
+    if (buckets.size === 0) return '—';
+    const entries = Array.from(buckets.entries());
     if (entries.length === 1) {
       const [currency, sum] = entries[0];
       return formatWalletAmount(sum, currency);
     }
-    return entries
-      .map(([currency, sum]) => formatWalletAmount(sum, currency))
-      .join(', ');
-  }, [predictedMonthlyExpenseBuckets]);
+    return entries.map(([currency, sum]) => formatWalletAmount(sum, currency)).join(', ');
+  }, []);
+
+  const predictedMonthlyExpenseText = useMemo(() => {
+    return formatCurrencyBuckets(predictedMonthlyExpenseBuckets);
+  }, [predictedMonthlyExpenseBuckets, formatCurrencyBuckets]);
 
   const predictedMonthlyIncomeBuckets = useMemo(() => {
     const sums = new Map<string, number>();
@@ -261,18 +336,51 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   }, [rootIncomeCategoryIds, budgetsByCategoryId, toMonthlyMinor]);
 
   const predictedMonthlyIncomeText = useMemo(() => {
-    if (predictedMonthlyIncomeBuckets.size === 0) return '—';
-    const entries = Array.from(predictedMonthlyIncomeBuckets.entries());
-    if (entries.length === 1) {
-      const [currency, sum] = entries[0];
-      return formatWalletAmount(sum, currency);
+    return formatCurrencyBuckets(predictedMonthlyIncomeBuckets);
+  }, [predictedMonthlyIncomeBuckets, formatCurrencyBuckets]);
+
+  const actualMonthlyExpenseBuckets = useMemo(() => {
+    const sums = new Map<string, number>();
+    const add = (currency: string | undefined, amountMinor: number) => {
+      const cur = (currency ?? 'CZK').toUpperCase();
+      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
+    };
+    for (const categoryId of rootExpenseCategoryIds) {
+      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
+        add(p.currencyCode, p.alreadySpent ?? 0);
+      }
     }
-    return entries
-      .map(([currency, sum]) => formatWalletAmount(sum, currency))
-      .join(', ');
-  }, [predictedMonthlyIncomeBuckets]);
+    return sums;
+  }, [rootExpenseCategoryIds, budgetsByCategoryId]);
+
+  const actualMonthlyIncomeBuckets = useMemo(() => {
+    const sums = new Map<string, number>();
+    const add = (currency: string | undefined, amountMinor: number) => {
+      const cur = (currency ?? 'CZK').toUpperCase();
+      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
+    };
+    for (const categoryId of rootIncomeCategoryIds) {
+      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
+        add(p.currencyCode, p.alreadySpent ?? 0);
+      }
+    }
+    return sums;
+  }, [rootIncomeCategoryIds, budgetsByCategoryId]);
+
+  const actualMonthlyExpenseText = useMemo(() => {
+    return formatCurrencyBuckets(actualMonthlyExpenseBuckets);
+  }, [actualMonthlyExpenseBuckets, formatCurrencyBuckets]);
+
+  const actualMonthlyIncomeText = useMemo(() => {
+    return formatCurrencyBuckets(actualMonthlyIncomeBuckets);
+  }, [actualMonthlyIncomeBuckets, formatCurrencyBuckets]);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkKind, setBulkKind] = useState<CreateCategoryRequestDtoCategoryKind>(
+    CreateCategoryRequestDtoCategoryKind.EXPENSE,
+  );
   const [createMode, setCreateMode] = useState<CreateMode>({ type: 'root' });
   const [editState, setEditState] = useState<EditMode | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -301,6 +409,12 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     setFormKind(CreateCategoryRequestDtoCategoryKind.EXPENSE);
     setFormParentId('');
     setCreateOpen(true);
+  };
+
+  const openBulkCreate = () => {
+    setBulkKind(CreateCategoryRequestDtoCategoryKind.EXPENSE);
+    setBulkText('');
+    setBulkOpen(true);
   };
 
   const openCreateChild = (parentId: string) => {
@@ -395,6 +509,41 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     }
   };
 
+  const handleBulkCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    const kind = bulkKind === CreateCategoryRequestDtoCategoryKind.INCOME ? 'INCOME' : 'EXPENSE';
+    const parsed = parseBulkCategoryText(bulkText, kind);
+    if (parsed.error) {
+      enqueueSnackbar(parsed.error, { variant: 'warning' });
+      return;
+    }
+    if (parsed.items.length === 0) {
+      enqueueSnackbar('Zadej aspoň jednu kategorii.', { variant: 'warning' });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await categoryCreateBulk(trackerId, parsed.items);
+      if (res.status < 200 || res.status >= 300) {
+        const err = res.data as { message?: string; businessErrorDescription?: string } | undefined;
+        enqueueSnackbar(
+          err?.message ?? err?.businessErrorDescription ?? 'Hromadné vytvoření kategorií se nepodařilo',
+          { variant: 'error' },
+        );
+        return;
+      }
+      enqueueSnackbar('Kategorie byly vytvořeny', { variant: 'success' });
+      setBulkOpen(false);
+      setBulkText('');
+      await invalidate();
+    } catch {
+      enqueueSnackbar('Hromadné vytvoření kategorií se nepodařilo', { variant: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleUpdate = async (e: FormEvent) => {
     e.preventDefault();
     if (!editState?.category?.id) return;
@@ -483,19 +632,27 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
             <Stack spacing={0.5} sx={{ flex: '1 1 200px', minWidth: 0 }}>
               <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
                 Predpokládané měsíční výdaje: <strong>{predictedMonthlyExpenseText}</strong>
+                {' · '}
+                Skutečné měsíční výdaje: <strong>{actualMonthlyExpenseText}</strong>
               </Typography>
               <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
                 Predpokládané měsíční příjmy: <strong>{predictedMonthlyIncomeText}</strong>
+                {' · '}
+                Skutečné měsíční příjmy: <strong>{actualMonthlyIncomeText}</strong>
               </Typography>
             </Stack>
-            <Button
-              variant="contained"
-              startIcon={<AddOutlinedIcon />}
-              onClick={openCreateRoot}
-              sx={{ flexShrink: 0 }}
-            >
-              Přidat kategorii
-            </Button>
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+              <Button variant="outlined" onClick={openBulkCreate}>
+                Hromadně přidat
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddOutlinedIcon />}
+                onClick={openCreateRoot}
+              >
+                Přidat kategorii
+              </Button>
+            </Stack>
           </Box>
           {tree.length > 0 && categoryIdsWithChildren.length > 0 && (
             <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1 }}>
@@ -639,6 +796,47 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
             </Button>
             <Button type="submit" variant="contained" disabled={submitting}>
               Vytvořit
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      <Dialog open={bulkOpen} onClose={() => !submitting && setBulkOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Hromadné vytvoření kategorií</DialogTitle>
+        <Box component="form" onSubmit={handleBulkCreate}>
+          <DialogContent>
+            <Stack spacing={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="bulk-kind">Druh</InputLabel>
+                <Select
+                  labelId="bulk-kind"
+                  label="Druh"
+                  value={bulkKind}
+                  onChange={(e) => setBulkKind(e.target.value as CreateCategoryRequestDtoCategoryKind)}
+                >
+                  <MenuItem value={CreateCategoryRequestDtoCategoryKind.EXPENSE}>Výdaj</MenuItem>
+                  <MenuItem value={CreateCategoryRequestDtoCategoryKind.INCOME}>Příjem</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Kategorie (po řádcích)"
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                placeholder={'Domácnost\n  Nájem\n  Energie\nJídlo\n  Restaurace'}
+                helperText="Hierarchie: 2 mezery (nebo tab) = 1 úroveň. Max 5 úrovní."
+                multiline
+                minRows={10}
+                fullWidth
+                required
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button type="button" onClick={() => setBulkOpen(false)} disabled={submitting}>
+              Zrušit
+            </Button>
+            <Button type="submit" variant="contained" disabled={submitting}>
+              Vytvořit hromadně
             </Button>
           </DialogActions>
         </Box>
