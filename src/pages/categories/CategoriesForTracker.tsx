@@ -29,6 +29,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PostAddIcon from '@mui/icons-material/PostAdd';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import {
   Box,
   Button,
@@ -101,6 +103,7 @@ type BulkPreviewRow = {
 function parseBulkCategoryText(
   text: string,
   kind: 'INCOME' | 'EXPENSE',
+  rootSortStart = 0,
 ): { items: CreateCategoryBulkRequestDto[]; error?: string } {
   const lines = text
     .split(/\r?\n/)
@@ -151,15 +154,19 @@ function parseBulkCategoryText(
     stack.push(node);
   }
 
-  const toDto = (nodes: BulkDraftNode[], kind: 'INCOME' | 'EXPENSE'): CreateCategoryBulkRequestDto[] =>
+  const toDto = (
+    nodes: BulkDraftNode[],
+    kind: 'INCOME' | 'EXPENSE',
+    sortStart = 0,
+  ): CreateCategoryBulkRequestDto[] =>
     nodes.map((n, idx) => ({
       name: n.name,
       categoryKind: kind,
-      sortOrder: idx,
-      ...(n.children.length > 0 ? { children: toDto(n.children, kind) } : {}),
+      sortOrder: sortStart + idx,
+      ...(n.children.length > 0 ? { children: toDto(n.children, kind, 0) } : {}),
     }));
 
-  return { items: toDto(roots, kind) };
+  return { items: toDto(roots, kind, rootSortStart) };
 }
 
 function parseBulkPreviewText(text: string): { rows: BulkPreviewRow[]; error?: string } {
@@ -559,6 +566,21 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     return walk(tree, 0);
   }, [tree]);
 
+  const nextSortOrderForParent = useCallback(
+    (parentId?: string): number => {
+      const parentKey = parentId ?? '';
+      let maxSort = -1;
+      for (const c of flat) {
+        const cParent = c.parentId ?? '';
+        if (cParent !== parentKey) continue;
+        const s = c.sortOrder ?? -1;
+        if (s > maxSort) maxSort = s;
+      }
+      return maxSort + 1;
+    },
+    [flat],
+  );
+
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     const name = formName.trim();
@@ -575,6 +597,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     } else if (formParentId) {
       payload.parentId = formParentId;
     }
+    payload.sortOrder = nextSortOrderForParent(payload.parentId);
 
     setSubmitting(true);
     try {
@@ -600,7 +623,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const handleBulkCreate = async (e: FormEvent) => {
     e.preventDefault();
     const kind = bulkKind === CreateCategoryRequestDtoCategoryKind.INCOME ? 'INCOME' : 'EXPENSE';
-    const parsed = parseBulkCategoryText(bulkText, kind);
+    const parsed = parseBulkCategoryText(bulkText, kind, nextSortOrderForParent(undefined));
     if (parsed.error) {
       enqueueSnackbar(parsed.error, { variant: 'warning' });
       return;
@@ -627,6 +650,31 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
       await invalidate();
     } catch {
       enqueueSnackbar('Hromadné vytvoření kategorií se nepodařilo', { variant: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSwapSiblingOrder = async (
+    categoryId: string,
+    siblingId: string,
+    categorySortOrder: number,
+    siblingSortOrder: number,
+  ) => {
+    setSubmitting(true);
+    try {
+      const [resA, resB] = await Promise.all([
+        categoryUpdate(trackerId, categoryId, { sortOrder: siblingSortOrder }),
+        categoryUpdate(trackerId, siblingId, { sortOrder: categorySortOrder }),
+      ]);
+
+      if (resA.status < 200 || resA.status >= 300 || resB.status < 200 || resB.status >= 300) {
+        enqueueSnackbar('Změna pořadí se nepodařila', { variant: 'error' });
+        return;
+      }
+      await invalidate();
+    } catch {
+      enqueueSnackbar('Změna pořadí se nepodařila', { variant: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -852,11 +900,14 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
               <Typography color="text.secondary">Zatím žádná kategorie — přidej první.</Typography>
             ) : (
               <Stack spacing={0}>
-                {tree.map((node) => (
+                {tree.map((node, idx) => (
                   <CategoryTreeRows
                     key={node.id ?? node.name}
                     node={node}
                     depth={0}
+                    siblingIndex={idx}
+                    siblings={tree}
+                    rowSubmitting={submitting}
                     onAddChild={openCreateChild}
                     onEdit={openEdit}
                     onDelete={(id) => {
@@ -865,6 +916,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                     }}
                     onManageBudgets={setBudgetCategory}
                     onQuickAddTransaction={handleQuickTxOpen}
+                    onSwapSiblingOrder={handleSwapSiblingOrder}
                     getBudgetCount={(categoryId) => {
                       return budgetsByCategoryId.get(categoryId)?.length ?? 0;
                     }}
@@ -1232,11 +1284,20 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
 type RowProps = {
   node: CategoryResponseDto;
   depth: number;
+  siblingIndex: number;
+  siblings: CategoryResponseDto[];
+  rowSubmitting: boolean;
   onAddChild: (parentId: string) => void;
   onEdit: (c: CategoryResponseDto) => void;
   onDelete: (id: string) => void;
   onManageBudgets: (c: CategoryResponseDto) => void;
   onQuickAddTransaction: (c: CategoryResponseDto) => void;
+  onSwapSiblingOrder: (
+    categoryId: string,
+    siblingId: string,
+    categorySortOrder: number,
+    siblingSortOrder: number,
+  ) => void;
   getBudgetCount: (categoryId: string) => number;
   getOneOffBudgets: (categoryId: string) => BudgetPlanResponseDto[];
   expandedCategoryIds: Set<string>;
@@ -1246,11 +1307,15 @@ type RowProps = {
 const CategoryTreeRows: FC<RowProps> = ({
   node,
   depth,
+  siblingIndex,
+  siblings,
+  rowSubmitting,
   onAddChild,
   onEdit,
   onDelete,
   onManageBudgets,
   onQuickAddTransaction,
+  onSwapSiblingOrder,
   getBudgetCount,
   getOneOffBudgets,
   expandedCategoryIds,
@@ -1267,6 +1332,11 @@ const CategoryTreeRows: FC<RowProps> = ({
 
   const budgetCount = id ? getBudgetCount(id) : 0;
   const oneOffPlans = id ? getOneOffBudgets(id) : [];
+  const prevSibling = siblingIndex > 0 ? siblings[siblingIndex - 1] : undefined;
+  const nextSibling = siblingIndex < siblings.length - 1 ? siblings[siblingIndex + 1] : undefined;
+  const currentSort = node.sortOrder ?? siblingIndex;
+  const prevSort = prevSibling?.sortOrder ?? siblingIndex - 1;
+  const nextSort = nextSibling?.sortOrder ?? siblingIndex + 1;
 
   return (
     <Box>
@@ -1384,6 +1454,38 @@ const CategoryTreeRows: FC<RowProps> = ({
         <Stack direction="row" spacing={0} alignItems="center" sx={{ justifySelf: 'end' }}>
           {id && (
             <>
+              <Tooltip title="Posunout výš">
+                <span>
+                  <IconButton
+                    size="small"
+                    aria-label="posunout kategorii výš"
+                    disabled={!prevSibling?.id || rowSubmitting}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!prevSibling?.id) return;
+                      onSwapSiblingOrder(id, prevSibling.id, currentSort, prevSort);
+                    }}
+                  >
+                    <ArrowUpwardIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title="Posunout níž">
+                <span>
+                  <IconButton
+                    size="small"
+                    aria-label="posunout kategorii níž"
+                    disabled={!nextSibling?.id || rowSubmitting}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!nextSibling?.id) return;
+                      onSwapSiblingOrder(id, nextSibling.id, currentSort, nextSort);
+                    }}
+                  >
+                    <ArrowDownwardIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
               <Tooltip title={budgetCount > 0 ? `Rozpočty (${budgetCount})` : 'Rozpočet ke kategorii'}>
                 <IconButton
                   size="small"
@@ -1441,16 +1543,20 @@ const CategoryTreeRows: FC<RowProps> = ({
       {hasChildren && (
         <Collapse in={expanded} timeout="auto" unmountOnExit>
           <Box>
-            {children.map((ch) => (
+            {children.map((ch, idx) => (
               <CategoryTreeRows
                 key={ch.id ?? ch.name}
                 node={ch}
                 depth={depth + 1}
+                siblingIndex={idx}
+                siblings={children}
+                rowSubmitting={rowSubmitting}
                 onAddChild={onAddChild}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onManageBudgets={onManageBudgets}
                 onQuickAddTransaction={onQuickAddTransaction}
+                onSwapSiblingOrder={onSwapSiblingOrder}
                 getBudgetCount={getBudgetCount}
                 getOneOffBudgets={getOneOffBudgets}
                 expandedCategoryIds={expandedCategoryIds}
