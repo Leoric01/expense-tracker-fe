@@ -450,13 +450,6 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     }
   };
 
-  const budgetBlurb = (
-    <>
-      Tracker <strong>{trackerName}</strong> — aktivní kategorie; typ příjem / výdaj, podkategorie a rozpočty
-      u jednotlivých kategorií (ikona peněženky).
-    </>
-  );
-
   return (
     <Box>
       {!embedded && (
@@ -473,9 +466,6 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
 
       {!categoriesQueryEnabled || isLoading ? (
         <>
-          <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'} sx={{ mb: 2 }}>
-            {budgetBlurb}
-          </Typography>
           <Typography color="text.secondary">Načítám…</Typography>
         </>
       ) : (
@@ -491,12 +481,6 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
             }}
           >
             <Stack spacing={0.5} sx={{ flex: '1 1 200px', minWidth: 0 }}>
-              <Typography
-                color="text.secondary"
-                variant={embedded ? 'body2' : 'body1'}
-              >
-                {budgetBlurb}
-              </Typography>
               <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
                 Predpokládané měsíční výdaje: <strong>{predictedMonthlyExpenseText}</strong>
               </Typography>

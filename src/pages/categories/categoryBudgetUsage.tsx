@@ -1,5 +1,5 @@
 import type { BudgetPlanResponseDto } from '@api/model';
-import { Box, LinearProgress, Stack, Typography } from '@mui/material';
+import { Box, Chip, LinearProgress, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { formatDateDdMmYyyy } from '@utils/dateTimeCs';
@@ -121,8 +121,10 @@ function BudgetUsageTube(props: { fillPercent: number; overBudget: boolean }) {
 }
 
 function budgetListRowSegments(plan: BudgetPlanResponseDto): {
-  spentAndRemaining: string;
+  spentVsLimit: string;
+  remainingText: string;
   periodDdMm: string;
+  periodBadge: string;
   perDay: string;
   title: string;
 } {
@@ -133,7 +135,11 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
   const periodDdMm = formatBudgetDateRangeDdMmOnly(plan.validFrom, plan.validTo);
   const daysLeft = budgetDaysLeftInclusive(plan.validFrom, plan.validTo);
 
-  const spentAndRemaining = `${formatWalletAmount(spent, currency)} / ${formatWalletAmount(amount, currency)} · zbývá ${formatWalletAmount(remaining, currency)}`;
+  const spentVsLimit = `${formatWalletAmount(spent, currency)} / ${formatWalletAmount(amount, currency)}`;
+  const remainingText = `zbývá ${formatWalletAmount(remaining, currency)}`;
+  const periodBadge = plan.periodType
+    ? budgetPeriodLabelCs(plan.periodType).toLocaleUpperCase('cs-CZ')
+    : '—';
 
   let perDay: string;
   if (daysLeft <= 0 || !plan.validTo?.trim()) {
@@ -143,8 +149,10 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
     perDay = `${formatWalletAmount(perDayMinor, currency)}/den`;
   }
 
-  const title = [spentAndRemaining, periodDdMm || null, perDay].filter(Boolean).join(' · ');
-  return { spentAndRemaining, periodDdMm, perDay, title };
+  const title = [`${spentVsLimit} ${periodBadge} · ${remainingText}`, periodDdMm || null, perDay]
+    .filter(Boolean)
+    .join(' · ');
+  return { spentVsLimit, remainingText, periodDdMm, periodBadge, perDay, title };
 }
 
 type UsageLineProps = {
@@ -166,7 +174,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
   const tubeFill = overBudget ? 100 : pct;
 
   if (variant === 'listRow') {
-    const { spentAndRemaining, periodDdMm, perDay, title } = budgetListRowSegments(plan);
+    const { spentVsLimit, remainingText, periodDdMm, periodBadge, perDay, title } = budgetListRowSegments(plan);
     const captionBase = {
       variant: 'caption' as const,
       color: 'text.secondary' as const,
@@ -197,18 +205,51 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
         >
           <BudgetUsageTube fillPercent={tubeFill} overBudget={overBudget} />
         </Box>
-        <Typography
-          {...captionBase}
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={0.5}
           sx={{
-            ...captionTypo,
             flex: '1 1 auto',
             minWidth: 0,
             overflow: 'hidden',
-            textOverflow: 'ellipsis',
           }}
         >
-          {spentAndRemaining}
-        </Typography>
+          <Typography
+            {...captionBase}
+            sx={{
+              ...captionTypo,
+              flexShrink: 0,
+            }}
+          >
+            {spentVsLimit}
+          </Typography>
+          <Chip
+            size="small"
+            variant="outlined"
+            label={periodBadge}
+            sx={{
+              height: 18,
+              '& .MuiChip-label': {
+                px: 0.8,
+                fontSize: '0.62rem',
+                letterSpacing: 0.2,
+                textTransform: 'uppercase',
+              },
+            }}
+          />
+          <Typography
+            {...captionBase}
+            sx={{
+              ...captionTypo,
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            · {remainingText}
+          </Typography>
+        </Stack>
         {periodDdMm ? (
           <Typography {...captionBase} sx={{ ...captionTypo, flexShrink: 0 }}>
             {periodDdMm}
