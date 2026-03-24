@@ -29,6 +29,8 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PostAddIcon from '@mui/icons-material/PostAdd';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import {
   Box,
   Button,
@@ -237,6 +239,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [budgetCategory, setBudgetCategory] = useState<CategoryResponseDto | null>(null);
+  const [showOnlyCategoriesWithMovements, setShowOnlyCategoriesWithMovements] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [`/api/category/${trackerId}/active`, LIST_PARAMS],
@@ -269,9 +272,35 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const paged = data?.data as PagedModelCategoryResponseDto | undefined;
   const flat = paged?.content ?? [];
   const tree = useMemo(() => toCategoryTree(flat), [flat]);
-
-  const categoryIdsWithChildren = useMemo(() => collectIdsWithChildren(tree), [tree]);
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(() => new Set());
+
+  const budgetsByCategoryId = useMemo(() => budgetsByCategoryIdFromFlat(flat), [flat]);
+  const hasMovementInCategory = useCallback(
+    (categoryId?: string): boolean => {
+      if (!categoryId) return false;
+      const plans = budgetsByCategoryId.get(categoryId) ?? [];
+      return plans.some((p) => (p.amount ?? 0) > 0 && (p.alreadySpent ?? 0) > 0);
+    },
+    [budgetsByCategoryId],
+  );
+
+  const filteredTree = useMemo(() => {
+    if (!showOnlyCategoriesWithMovements) return tree;
+    const filterNodes = (nodes: CategoryResponseDto[]): CategoryResponseDto[] => {
+      const out: CategoryResponseDto[] = [];
+      for (const node of nodes) {
+        const children = filterNodes(asCategoryChildren(node.children));
+        const selfHasMovement = hasMovementInCategory(node.id);
+        if (selfHasMovement || children.length > 0) {
+          out.push({ ...node, children });
+        }
+      }
+      return out;
+    };
+    return filterNodes(tree);
+  }, [showOnlyCategoriesWithMovements, tree, hasMovementInCategory]);
+
+  const categoryIdsWithChildren = useMemo(() => collectIdsWithChildren(filteredTree), [filteredTree]);
 
   const allCategoriesExpanded = useMemo(
     () =>
@@ -297,8 +326,6 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
       setExpandedCategoryIds(new Set(categoryIdsWithChildren));
     }
   }, [categoryIdsWithChildren, allCategoriesExpanded]);
-
-  const budgetsByCategoryId = useMemo(() => budgetsByCategoryIdFromFlat(flat), [flat]);
 
   const recurringBudgets = (recurringBudgetData?.content ?? []) as RecurringBudgetResponseDto[];
   const recurringByCategoryId = useMemo(() => {
@@ -838,17 +865,17 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
               display: 'flex',
               alignItems: 'flex-start',
               justifyContent: 'space-between',
-              gap: 2,
+              gap: 4,
               mb: 2,
               flexWrap: 'wrap',
             }}
           >
-            <Stack spacing={0.5} sx={{ flex: '1 1 280px', minWidth: 0 }}>
+            <Stack spacing={0.5} sx={{ flex: '0 1 780px', minWidth: 0 }}>
               <Box
                 sx={{
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-                  columnGap: 2,
+                  gridTemplateColumns: 'minmax(210px, 0.9fr) minmax(210px, 0.9fr)',
+                  columnGap: 4,
                   alignItems: 'start',
                 }}
               >
@@ -856,7 +883,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                   sx={{
                     display: 'grid',
                     gridTemplateColumns: 'minmax(0, 1fr) auto',
-                    columnGap: 1,
+                    columnGap: 0.5,
                     rowGap: 0.5,
                     alignItems: 'baseline',
                     minWidth: 0,
@@ -887,10 +914,13 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                   sx={{
                     display: 'grid',
                     gridTemplateColumns: 'minmax(0, 1fr) auto',
-                    columnGap: 1,
+                    columnGap: 0.5,
                     rowGap: 0.5,
                     alignItems: 'baseline',
                     minWidth: 0,
+                    borderLeft: 1,
+                    borderColor: 'divider',
+                    pl: 2,
                   }}
                 >
                   <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
@@ -919,8 +949,8 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
               <Box
                 sx={{
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-                  columnGap: 2,
+                  gridTemplateColumns: 'minmax(210px, 0.9fr) minmax(210px, 0.9fr)',
+                  columnGap: 4,
                   alignItems: 'start',
                 }}
               >
@@ -929,7 +959,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                     sx={{
                       display: 'grid',
                       gridTemplateColumns: 'minmax(0, 1fr) auto',
-                      columnGap: 1,
+                      columnGap: 0.5,
                       alignItems: 'baseline',
                       minWidth: 0,
                       cursor: 'help',
@@ -954,10 +984,13 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                     sx={{
                       display: 'grid',
                       gridTemplateColumns: 'minmax(0, 1fr) auto',
-                      columnGap: 1,
+                      columnGap: 0.5,
                       alignItems: 'baseline',
                       minWidth: 0,
                       cursor: 'help',
+                      borderLeft: 1,
+                      borderColor: 'divider',
+                      pl: 2,
                     }}
                   >
                     <Typography color="text.secondary" variant={embedded ? 'body2' : 'body1'}>
@@ -976,70 +1009,77 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                 </Tooltip>
               </Box>
             </Stack>
+          </Box>
+          <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+            <Box>
+              {tree.length > 0 && categoryIdsWithChildren.length > 0 ? (
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Tooltip title={allCategoriesExpanded ? 'Sbalit všechny podstromy' : 'Rozbalit všechny podstromy'}>
+                    <IconButton
+                      size="small"
+                      onClick={toggleExpandAllCategories}
+                      aria-expanded={allCategoriesExpanded}
+                      aria-label={allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                    >
+                      <ChevronRightIcon
+                        fontSize="small"
+                        sx={{
+                          transition: (t) =>
+                            t.transitions.create('transform', { duration: t.transitions.duration.shorter }),
+                          transform: allCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                        }}
+                      />
+                    </IconButton>
+                  </Tooltip>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    component="button"
+                    type="button"
+                    onClick={toggleExpandAllCategories}
+                    sx={{
+                      cursor: 'pointer',
+                      border: 'none',
+                      background: 'none',
+                      font: 'inherit',
+                      p: 0,
+                      textDecoration: 'none',
+                      '&:hover': { textDecoration: 'underline' },
+                    }}
+                  >
+                    {allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                  </Typography>
+                </Stack>
+              ) : null}
+            </Box>
             <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+              <Button
+                variant="text"
+                startIcon={showOnlyCategoriesWithMovements ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                onClick={() => setShowOnlyCategoriesWithMovements((prev) => !prev)}
+              >
+                {showOnlyCategoriesWithMovements ? 'Zobrazit vše' : 'Zobrazit jen pohyby'}
+              </Button>
               <Button variant="outlined" onClick={openBulkCreate}>
                 Hromadně přidat
               </Button>
-              <Button
-                variant="contained"
-                startIcon={<AddOutlinedIcon />}
-                onClick={openCreateRoot}
-              >
+              <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreateRoot}>
                 Přidat kategorii
               </Button>
             </Stack>
           </Box>
-          {tree.length > 0 && categoryIdsWithChildren.length > 0 && (
-            <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1 }}>
-              <Tooltip title={allCategoriesExpanded ? 'Sbalit všechny podstromy' : 'Rozbalit všechny podstromy'}>
-                <IconButton
-                  size="small"
-                  onClick={toggleExpandAllCategories}
-                  aria-expanded={allCategoriesExpanded}
-                  aria-label={allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
-                >
-                  <ChevronRightIcon
-                    fontSize="small"
-                    sx={{
-                      transition: (t) =>
-                        t.transitions.create('transform', { duration: t.transitions.duration.shorter }),
-                      transform: allCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                    }}
-                  />
-                </IconButton>
-              </Tooltip>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                component="button"
-                type="button"
-                onClick={toggleExpandAllCategories}
-                sx={{
-                  cursor: 'pointer',
-                  border: 'none',
-                  background: 'none',
-                  font: 'inherit',
-                  p: 0,
-                  textDecoration: 'none',
-                  '&:hover': { textDecoration: 'underline' },
-                }}
-              >
-                {allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
-              </Typography>
-            </Stack>
-          )}
           <Paper variant="outlined" sx={{ p: 2 }}>
-            {tree.length === 0 ? (
+            {filteredTree.length === 0 ? (
               <Typography color="text.secondary">Zatím žádná kategorie — přidej první.</Typography>
             ) : (
               <Stack spacing={0}>
-                {tree.map((node, idx) => (
+                {filteredTree.map((node, idx) => (
                   <CategoryTreeRows
                     key={node.id ?? node.name}
                     node={node}
                     depth={0}
                     siblingIndex={idx}
-                    siblings={tree}
+                    siblings={filteredTree}
                     rowSubmitting={submitting}
                     onAddChild={openCreateChild}
                     onEdit={openEdit}
