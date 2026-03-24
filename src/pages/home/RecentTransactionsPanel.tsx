@@ -2,7 +2,11 @@ import type { PagedModelTransactionResponseDto, TransactionResponseDto } from '@
 import { TransactionResponseDtoTransactionType } from '@api/model';
 import { transactionFindAll } from '@api/transaction-controller/transaction-controller';
 import {
+  Box,
+  Collapse,
+  Link,
   Paper,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -15,7 +19,9 @@ import { useTheme } from '@mui/material/styles';
 import { formatDateTimeDdMmYyyyHhMm } from '@utils/dateTimeCs';
 import { formatWalletAmount } from './walletDisplay';
 import { useQuery } from '@tanstack/react-query';
-import { FC } from 'react';
+import { FC, Fragment, type ReactNode, useCallback, useState } from 'react';
+import { TransactionResponseDtoBalanceAdjustmentDirection } from '@api/model';
+import { TransactionResponseDtoStatus } from '@api/model';
 
 const TX_LIST = { page: 0, size: 25, sort: ['transactionDate,desc'] } as const;
 
@@ -31,6 +37,30 @@ function txTypeLabel(t?: string): string {
       return 'Korekce';
     default:
       return t ?? '—';
+  }
+}
+
+function statusLabel(s?: string): string {
+  switch (s) {
+    case TransactionResponseDtoStatus.PENDING:
+      return 'Čeká';
+    case TransactionResponseDtoStatus.COMPLETED:
+      return 'Dokončeno';
+    case TransactionResponseDtoStatus.CANCELLED:
+      return 'Zrušeno';
+    default:
+      return s ?? '—';
+  }
+}
+
+function balanceDirectionLabel(d?: string): string {
+  switch (d) {
+    case TransactionResponseDtoBalanceAdjustmentDirection.DEDUCTION:
+      return 'Snížení zůstatku';
+    case TransactionResponseDtoBalanceAdjustmentDirection.ADDITION:
+      return 'Navýšení zůstatku';
+    default:
+      return d ?? '—';
   }
 }
 
@@ -50,8 +80,130 @@ function amountColorForType(t: string | undefined, theme: Theme): string {
   }
 }
 
+function walletCellText(row: TransactionResponseDto): string {
+  const t = row.transactionType as string | undefined;
+  if (t === TransactionResponseDtoTransactionType.TRANSFER) {
+    const from = row.sourceWalletName?.trim() || row.sourceWalletId || '';
+    const to = row.targetWalletName?.trim() || row.targetWalletId || '';
+    if (from && to) return `${from} → ${to}`;
+    if (from) return from;
+    if (to) return to;
+    return '—';
+  }
+  const name = row.walletName?.trim();
+  if (name) return name;
+  if (row.walletId) return row.walletId;
+  return '—';
+}
+
+function dash(s?: string | null): string {
+  const t = s?.trim();
+  return t ? t : '—';
+}
+
+function TransactionDetailBlock({ row }: { row: TransactionResponseDto }) {
+  const kv = (label: string, value: ReactNode) => (
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      spacing={{ xs: 0, sm: 1 }}
+      sx={{ py: 0.35, alignItems: { sm: 'baseline' } }}
+    >
+      <Typography
+        component="span"
+        variant="body2"
+        color="text.secondary"
+        sx={{ minWidth: { sm: 180 }, flexShrink: 0 }}
+      >
+        {label}
+      </Typography>
+      <Typography component="span" variant="body2" sx={{ wordBreak: 'break-word' }}>
+        {value}
+      </Typography>
+    </Stack>
+  );
+
+  const t = row.transactionType as string | undefined;
+  const attachments = row.attachments ?? [];
+
+  return (
+    <Box sx={{ py: 1.5, px: 0.5 }}>
+      <Stack spacing={0}>
+        {kv('ID', dash(row.id))}
+        {kv('Stav', statusLabel(row.status))}
+        {kv('Typ', txTypeLabel(t))}
+        {kv('Datum transakce', formatDateTimeDdMmYyyyHhMm(row.transactionDate))}
+        {kv('Částka', formatWalletAmount(row.amount, row.currencyCode))}
+        {row.balanceAdjustmentDirection
+          ? kv('Směr korekce', balanceDirectionLabel(row.balanceAdjustmentDirection))
+          : null}
+        {t === TransactionResponseDtoTransactionType.TRANSFER ? (
+          <>
+            {kv('Peněženka zdroj', dash(row.sourceWalletName || row.sourceWalletId))}
+            {kv('ID zdrojové peněženky', dash(row.sourceWalletId))}
+            {kv('Peněženka cíl', dash(row.targetWalletName || row.targetWalletId))}
+            {kv('ID cílové peněženky', dash(row.targetWalletId))}
+          </>
+        ) : (
+          <>
+            {kv('Peněženka', dash(row.walletName || row.walletId))}
+            {kv('ID peněženky', dash(row.walletId))}
+          </>
+        )}
+        {kv('Kategorie', dash(row.categoryName || row.categoryId))}
+        {kv('ID kategorie', dash(row.categoryId))}
+        {kv('Popis', dash(row.description))}
+        {kv('Poznámka', dash(row.note))}
+        {kv('Externí reference', dash(row.externalRef))}
+        {kv(
+          'Vytvořeno',
+          row.createdDate?.trim() ? formatDateTimeDdMmYyyyHhMm(row.createdDate) : '—',
+        )}
+        {kv(
+          'Naposledy upraveno',
+          row.lastModifiedDate?.trim() ? formatDateTimeDdMmYyyyHhMm(row.lastModifiedDate) : '—',
+        )}
+        {attachments.length > 0
+          ? kv(
+              'Přílohy',
+              <Stack component="span" spacing={0.5} sx={{ display: 'inline-flex', flexDirection: 'column' }}>
+                {attachments.map((a, i) => (
+                  <span key={a.id ?? `${a.fileName}-${i}`}>
+                    {a.fileUrl ? (
+                      <Link href={a.fileUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                        {dash(a.fileName) !== '—' ? a.fileName : a.fileUrl}
+                      </Link>
+                    ) : (
+                      dash(a.fileName)
+                    )}
+                    {a.contentType ? (
+                      <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                        ({a.contentType}
+                        {a.fileSize != null ? `, ${a.fileSize} B` : ''})
+                      </Typography>
+                    ) : null}
+                  </span>
+                ))}
+              </Stack>,
+            )
+          : kv('Přílohy', '—')}
+      </Stack>
+    </Box>
+  );
+}
+
 export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }) => {
   const theme = useTheme();
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+
+  const toggleRow = useCallback((rowKey: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  }, []);
+
   const { data } = useQuery({
     queryKey: ['/api/transaction', trackerId, TX_LIST],
     queryFn: () => transactionFindAll(trackerId, TX_LIST),
@@ -67,13 +219,14 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
         Nedávné transakce
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Posledních {TX_LIST.size} záznamů, řazeno podle data.
+        Posledních {TX_LIST.size} záznamů, řazeno podle data. Kliknutím na řádek zobrazíš detail.
       </Typography>
       <Table size="small">
         <TableHead>
           <TableRow>
             <TableCell>Datum</TableCell>
             <TableCell>Typ</TableCell>
+            <TableCell>Peněženka</TableCell>
             <TableCell>Kategorie</TableCell>
             <TableCell>Popis</TableCell>
             <TableCell align="right">Částka</TableCell>
@@ -82,28 +235,55 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
         <TableBody>
           {recentTx.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5}>
+              <TableCell colSpan={6}>
                 <Typography color="text.secondary">Zatím žádné záznamy.</Typography>
               </TableCell>
             </TableRow>
           ) : (
-            recentTx.map((row) => (
-              <TableRow key={row.id ?? row.transactionDate}>
-                <TableCell>{formatDateTimeDdMmYyyyHhMm(row.transactionDate)}</TableCell>
-                <TableCell>{txTypeLabel(row.transactionType as string | undefined)}</TableCell>
-                <TableCell>{row.categoryName?.trim() ? row.categoryName : '—'}</TableCell>
-                <TableCell>{row.description ?? row.note ?? '—'}</TableCell>
-                <TableCell
-                  align="right"
-                  sx={{
-                    fontWeight: 600,
-                    color: amountColorForType(row.transactionType as string | undefined, theme),
-                  }}
-                >
-                  {formatWalletAmount(row.amount, row.currencyCode)}
-                </TableCell>
-              </TableRow>
-            ))
+            recentTx.map((row, index) => {
+              const walletLabel = walletCellText(row);
+              const rowKey = row.id ?? `idx-${index}`;
+              const open = expandedIds.has(rowKey);
+
+              return (
+                <Fragment key={rowKey}>
+                  <TableRow
+                    hover
+                    selected={open}
+                    onClick={() => toggleRow(rowKey)}
+                    sx={{ cursor: 'pointer' }}
+                    aria-expanded={open}
+                  >
+                    <TableCell>{formatDateTimeDdMmYyyyHhMm(row.transactionDate)}</TableCell>
+                    <TableCell>{txTypeLabel(row.transactionType as string | undefined)}</TableCell>
+                    <TableCell
+                      sx={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={walletLabel}
+                    >
+                      {walletLabel}
+                    </TableCell>
+                    <TableCell>{row.categoryName?.trim() ? row.categoryName : '—'}</TableCell>
+                    <TableCell>{row.description ?? row.note ?? '—'}</TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 600,
+                        color: amountColorForType(row.transactionType as string | undefined, theme),
+                      }}
+                    >
+                      {formatWalletAmount(row.amount, row.currencyCode)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell colSpan={6} sx={{ py: 0, borderBottom: open ? undefined : 'none' }}>
+                      <Collapse in={open} timeout="auto" unmountOnExit>
+                        <TransactionDetailBlock row={row} />
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </Fragment>
+              );
+            })
           )}
         </TableBody>
       </Table>
