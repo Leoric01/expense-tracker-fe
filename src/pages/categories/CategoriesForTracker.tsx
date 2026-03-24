@@ -1,4 +1,3 @@
-import { budgetPlanFindAllActive } from '@api/budget-plan-controller/budget-plan-controller';
 import { recurringBudgetFindAllActive } from '@api/recurring-budget-controller/recurring-budget-controller';
 import { transactionCreate } from '@api/transaction-controller/transaction-controller';
 import { walletFindAll } from '@api/wallet-controller/wallet-controller';
@@ -17,7 +16,6 @@ import type {
   WalletResponseDto,
   CreateCategoryBulkRequestDto,
   CreateCategoryRequestDto,
-  PagedModelBudgetPlanResponseDto,
   PagedModelCategoryResponseDto,
   PagedModelRecurringBudgetResponseDto,
   RecurringBudgetResponseDto,
@@ -70,6 +68,7 @@ import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { majorToMinorUnits } from '@utils/moneyMinorUnits';
 import {
   asCategoryChildren,
+  budgetsByCategoryIdFromFlat,
   categoryKindChipColor,
   categoryKindLabel,
   collectIdsInSubtree,
@@ -245,17 +244,6 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     enabled: Boolean(trackerId) && categoriesQueryEnabled,
   });
 
-  const { data: budgetData } = useQuery({
-    queryKey: [`/api/budget-plan/${trackerId}/active`, BUDGET_LIST_PARAMS],
-    queryFn: async () => {
-      const res = await budgetPlanFindAllActive(trackerId, BUDGET_LIST_PARAMS);
-      if (res.status < 200 || res.status >= 300) throw new Error('budget');
-      return res.data as PagedModelBudgetPlanResponseDto;
-    },
-    enabled: Boolean(trackerId) && categoriesQueryEnabled,
-    staleTime: 30_000,
-  });
-
   const { data: recurringBudgetData } = useQuery({
     queryKey: [`/api/recurring-budget/${trackerId}/active`, BUDGET_LIST_PARAMS],
     queryFn: async () => {
@@ -310,18 +298,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     }
   }, [categoryIdsWithChildren, allCategoriesExpanded]);
 
-  const budgetPlans = (budgetData?.content ?? []) as BudgetPlanResponseDto[];
-  const budgetsByCategoryId = useMemo(() => {
-    const m = new Map<string, BudgetPlanResponseDto[]>();
-    for (const b of budgetPlans) {
-      const cid = b.categoryId;
-      if (!cid) continue;
-      const arr = m.get(cid) ?? [];
-      arr.push(b);
-      m.set(cid, arr);
-    }
-    return m;
-  }, [budgetPlans]);
+  const budgetsByCategoryId = useMemo(() => budgetsByCategoryIdFromFlat(flat), [flat]);
 
   const recurringBudgets = (recurringBudgetData?.content ?? []) as RecurringBudgetResponseDto[];
   const recurringByCategoryId = useMemo(() => {
@@ -522,7 +499,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
 
   const invalidateBudgets = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: [`/api/budget-plan/${trackerId}/active`] });
+    queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
     queryClient.invalidateQueries({ queryKey: [`/api/recurring-budget/${trackerId}/active`] });
   }, [queryClient, trackerId]);
 
@@ -1585,7 +1562,12 @@ const CategoryTreeRows: FC<RowProps> = ({
             —
           </Typography>
         ) : oneOffPlans.length === 1 ? (
-          <CategoryBudgetPlanUsageLine plan={oneOffPlans[0]} variant="listRow" gridCells />
+          <CategoryBudgetPlanUsageLine
+            plan={oneOffPlans[0]}
+            categoryKind={node.categoryKind as 'INCOME' | 'EXPENSE' | undefined}
+            variant="listRow"
+            gridCells
+          />
         ) : (
           <Box
             sx={{
@@ -1609,7 +1591,12 @@ const CategoryTreeRows: FC<RowProps> = ({
                     minWidth: 0,
                   }}
                 >
-                  <CategoryBudgetPlanUsageLine plan={p} variant="listRow" gridCells />
+                  <CategoryBudgetPlanUsageLine
+                    plan={p}
+                    categoryKind={node.categoryKind as 'INCOME' | 'EXPENSE' | undefined}
+                    variant="listRow"
+                    gridCells
+                  />
                 </Box>
               ))}
             </Stack>

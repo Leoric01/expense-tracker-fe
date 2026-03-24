@@ -3,6 +3,7 @@ import { Box, Chip, LinearProgress, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { formatDateDdMmYyyy } from '@utils/dateTimeCs';
+import { minorUnitsToMajor } from '@utils/moneyMinorUnits';
 import { FC, Fragment } from 'react';
 import { budgetPeriodLabelCs, budgetPlanPeriodChipSx } from './categoryBudgetPeriodLabels';
 
@@ -123,33 +124,91 @@ export function budgetAmountToMonthlyEquivalentMinor(
   }
 }
 
-/** Kompaktní „trubička“ — výšku řádku pořád dávají ikony/chip. */
-function BudgetUsageTube(props: { fillPercent: number; overBudget: boolean }) {
-  const { fillPercent, overBudget } = props;
+/** Čísla v liště bez desetin (celé jednotky); přesnost je v `title` / tooltipu. */
+function formatBudgetBarAmountPairCs(spentMinor: number, limitMinor: number): string {
+  const fmt = (minor: number) => {
+    const major = minorUnitsToMajor(minor) ?? 0;
+    return new Intl.NumberFormat('cs-CZ', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Math.round(major));
+  };
+  return `${fmt(spentMinor)}/${fmt(limitMinor)}`;
+}
+
+/** Plnicí lišta s čísly uvnitř (bez měny); žádné svislé okraje navíc. */
+function BudgetUsageBarInlineAmounts(props: {
+  fillPercent: number;
+  overBudget: boolean;
+  incomeOverBudget?: boolean;
+  spentMinor: number;
+  limitMinor: number;
+}) {
+  const { fillPercent, overBudget, incomeOverBudget = false, spentMinor, limitMinor } = props;
   const w = Math.min(100, Math.max(0, fillPercent));
+  const label = formatBudgetBarAmountPairCs(spentMinor, limitMinor);
   return (
     <Box
       sx={{
+        position: 'relative',
         width: '100%',
-        height: 12,
+        height: 20,
         borderRadius: 999,
         overflow: 'hidden',
-        bgcolor: (t) => alpha(t.palette.action.hover, t.palette.mode === 'dark' ? 0.45 : 1),
+        bgcolor: (t) =>
+          incomeOverBudget
+            ? alpha(t.palette.warning.light, t.palette.mode === 'dark' ? 0.4 : 0.32)
+            : alpha(t.palette.action.hover, t.palette.mode === 'dark' ? 0.45 : 1),
         border: '1px solid',
-        borderColor: 'divider',
+        borderColor: incomeOverBudget ? 'warning.light' : 'divider',
         boxShadow: (t) => `inset 0 2px 5px ${alpha(t.palette.common.black, 0.08)}`,
+        flex: 1,
+        minWidth: 0,
       }}
     >
       <Box
         sx={{
-          height: '100%',
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
           width: `${w}%`,
           borderRadius: 999,
-          bgcolor: overBudget ? 'error.main' : 'primary.main',
+          bgcolor: incomeOverBudget ? 'warning.main' : overBudget ? 'error.main' : 'primary.main',
           boxShadow: (t) => `inset 0 1px 0 ${alpha(t.palette.common.white, 0.28)}`,
           transition: (t) => t.transitions.create('width', { duration: t.transitions.duration.shorter }),
         }}
       />
+      <Typography
+        variant="caption"
+        component="div"
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1,
+          fontSize: '0.68rem',
+          fontWeight: 700,
+          lineHeight: 1,
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: 0.02,
+          whiteSpace: 'nowrap',
+          px: 0.75,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          pointerEvents: 'none',
+          color: 'text.primary',
+          textShadow: (t) =>
+            t.palette.mode === 'dark'
+              ? `0 0 5px ${t.palette.background.paper}, 0 0 8px ${t.palette.common.black}`
+              : `0 0 4px ${t.palette.background.paper}, 0 1px 2px ${alpha(t.palette.common.white, 0.95)}`,
+        }}
+      >
+        {label}
+      </Typography>
     </Box>
   );
 }
@@ -204,6 +263,7 @@ export const CATEGORY_BUDGET_LIST_ROW_GRID_INNER =
 
 type UsageLineProps = {
   plan: BudgetPlanResponseDto;
+  categoryKind?: 'INCOME' | 'EXPENSE';
   showPeriodType?: boolean;
   variant?: 'detail' | 'listRow';
   /** Když `true` u `listRow`, vrátí 5 sourozenců pro vložení do rodičovského CSS gridu (bez obalujícího Stacku). */
@@ -212,6 +272,7 @@ type UsageLineProps = {
 
 export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
   plan,
+  categoryKind,
   showPeriodType,
   variant = 'detail',
   gridCells = false,
@@ -219,6 +280,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
   const amount = plan.amount ?? 0;
   const spent = plan.alreadySpent ?? 0;
   const overBudget = amount > 0 && spent > amount;
+  const incomeOverBudget = overBudget && categoryKind === 'INCOME';
   const pct = budgetUsagePercent(amount, spent);
   const validity = formatBudgetValidityRange(plan.validFrom, plan.validTo);
   const tubeFill = overBudget ? 100 : pct;
@@ -236,6 +298,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
     };
 
     if (gridCells) {
+      const cur = (plan.currencyCode ?? 'CZK').toUpperCase();
       return (
         <Fragment>
           <Box
@@ -248,26 +311,23 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
               overflow: 'hidden',
             }}
           >
-            <Box
-              sx={{
-                width: 88,
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              <BudgetUsageTube fillPercent={tubeFill} overBudget={overBudget} />
-            </Box>
+            <BudgetUsageBarInlineAmounts
+              fillPercent={tubeFill}
+              overBudget={overBudget}
+              incomeOverBudget={incomeOverBudget}
+              spentMinor={spent}
+              limitMinor={amount}
+            />
             <Typography
               {...captionBase}
               sx={{
                 ...captionTypo,
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                flexShrink: 0,
+                fontWeight: 600,
+                letterSpacing: 0.3,
               }}
             >
-              {spentVsLimit}
+              {cur}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'center', minWidth: 0, alignItems: 'center' }}>
@@ -330,6 +390,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
       );
     }
 
+    const curStack = (plan.currencyCode ?? 'CZK').toUpperCase();
     return (
       <Stack
         direction="row"
@@ -343,33 +404,43 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
       >
         <Box
           sx={{
-            width: 88,
-            flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
+            gap: 0.75,
+            flex: '1 1 0%',
+            minWidth: 96,
+            maxWidth: '100%',
           }}
         >
-          <BudgetUsageTube fillPercent={tubeFill} overBudget={overBudget} />
+          <BudgetUsageBarInlineAmounts
+            fillPercent={tubeFill}
+            overBudget={overBudget}
+            incomeOverBudget={incomeOverBudget}
+            spentMinor={spent}
+            limitMinor={amount}
+          />
+          <Typography
+            {...captionBase}
+            sx={{
+              ...captionTypo,
+              flexShrink: 0,
+              fontWeight: 600,
+              letterSpacing: 0.3,
+            }}
+          >
+            {curStack}
+          </Typography>
         </Box>
         <Stack
           direction="row"
           alignItems="center"
           spacing={0.5}
           sx={{
-            flex: '1 1 auto',
+            flex: '0 1 auto',
             minWidth: 0,
             overflow: 'hidden',
           }}
         >
-          <Typography
-            {...captionBase}
-            sx={{
-              ...captionTypo,
-              flexShrink: 0,
-            }}
-          >
-            {spentVsLimit}
-          </Typography>
           <Chip
             size="small"
             variant="outlined"
@@ -418,8 +489,8 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
         borderRadius: 1,
         width: '100%',
         ...(overBudget && {
-          bgcolor: 'action.hover',
-          '& .MuiLinearProgress-bar': { bgcolor: 'error.main' },
+          bgcolor: incomeOverBudget ? 'warning.light' : 'action.hover',
+          '& .MuiLinearProgress-bar': { bgcolor: incomeOverBudget ? 'warning.main' : 'error.main' },
         }),
       }}
     />

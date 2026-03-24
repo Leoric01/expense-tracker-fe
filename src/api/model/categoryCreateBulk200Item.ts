@@ -5,6 +5,7 @@
  * Swagger dokumentace pro ExpenseTracker backend
  * OpenAPI spec version: 1.0
  */
+import type { CategoryActiveBudgetPlanDto } from './categoryActiveBudgetPlanDto';
 import type { CategoryCreateBulk200ItemCategoryKind } from './categoryCreateBulk200ItemCategoryKind';
 
 export type CategoryCreateBulk200Item = {
@@ -17,6 +18,7 @@ export type CategoryCreateBulk200Item = {
   active?: boolean;
   iconUrl?: string;
   iconColor?: string;
+  activeBudgetPlan?: CategoryActiveBudgetPlanDto;
   children?: unknown[];
   createdDate?: string;
   lastModifiedDate?: string;

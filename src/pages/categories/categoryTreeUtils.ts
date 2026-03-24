@@ -1,4 +1,4 @@
-import type { CategoryResponseDto } from '@api/model';
+import type { BudgetPlanResponseDto, CategoryActiveBudgetPlanDto, CategoryResponseDto } from '@api/model';
 
 export function asCategoryChildren(ch: unknown): CategoryResponseDto[] {
   if (!Array.isArray(ch)) return [];
@@ -134,4 +134,59 @@ export function rootAncestorCategory(
     id = node.parentId;
   }
   return last;
+}
+
+/** Jedna položka z `GET .../category/.../active` — vnořený aktivní rozpočet. */
+export function activeBudgetPlanToBudgetPlanResponse(
+  categoryId: string,
+  categoryName: string | undefined,
+  p: CategoryActiveBudgetPlanDto,
+): BudgetPlanResponseDto {
+  return {
+    id: p.id,
+    name: p.name,
+    amount: p.amount,
+    currencyCode: p.currencyCode,
+    periodType: p.periodType as BudgetPlanResponseDto['periodType'],
+    categoryId,
+    categoryName,
+    validFrom: p.validFrom,
+    validTo: p.validTo,
+    active: p.active,
+    alreadySpent: p.alreadySpent,
+    createdDate: p.createdDate,
+    lastModifiedDate: p.lastModifiedDate,
+  };
+}
+
+/** 0–1 plán z `category.activeBudgetPlan` ve tvaru očekávaném UI (řádek + dialog). */
+export function budgetPlansFromCategoryEmbedded(
+  category: CategoryResponseDto | null | undefined,
+): BudgetPlanResponseDto[] {
+  if (!category?.id) return [];
+  const p = category.activeBudgetPlan;
+  if (p == null) return [];
+  return [activeBudgetPlanToBudgetPlanResponse(category.id, category.name, p)];
+}
+
+/** Mapa categoryId → jednorázové plány jen z vnořených dat kategorií (bez samostatného GET budget-plan). */
+export function budgetsByCategoryIdFromFlat(flat: CategoryResponseDto[]): Map<string, BudgetPlanResponseDto[]> {
+  const m = new Map<string, BudgetPlanResponseDto[]>();
+  const seen = new Set<string>();
+
+  const walk = (nodes: CategoryResponseDto[]) => {
+    for (const c of nodes) {
+      if (c.id) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        const list = budgetPlansFromCategoryEmbedded(c);
+        if (list.length > 0) m.set(c.id, list);
+      }
+      const children = asCategoryChildren(c.children);
+      if (children.length > 0) walk(children);
+    }
+  };
+
+  walk(flat);
+  return m;
 }

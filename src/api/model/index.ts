@@ -14,6 +14,8 @@ export * from './budgetPlanResponseDto';
 export * from './budgetPlanResponseDtoPeriodType';
 export * from './bulkCreateCategoryRequestDto';
 export * from './bulkCreateCategoryRequestDtoCategoryKind';
+export * from './categoryActiveBudgetPlanDto';
+export * from './categoryActiveBudgetPlanDtoPeriodType';
 export * from './categoryBreakdownDto';
 export * from './categoryCreateBulk200Item';
 export * from './categoryCreateBulk200ItemCategoryKind';

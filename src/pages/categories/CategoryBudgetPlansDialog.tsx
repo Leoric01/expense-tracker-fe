@@ -175,14 +175,15 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
       enqueueSnackbar('Platnost od — zadej datum jako dd.MM.yyyy', { variant: 'warning' });
       return;
     }
-    let toIso: string | undefined;
-    if (createValidTo.trim()) {
-      const t = parseDdMmYyyyToEndIso(createValidTo);
-      if (!t) {
-        enqueueSnackbar('Platnost do — neplatné datum', { variant: 'warning' });
-        return;
-      }
-      toIso = t;
+    const toRaw = createValidTo.trim();
+    if (!toRaw) {
+      enqueueSnackbar('Platnost do je povinná', { variant: 'warning' });
+      return;
+    }
+    const toIso = parseDdMmYyyyToEndIso(toRaw);
+    if (!toIso) {
+      enqueueSnackbar('Platnost do — neplatné datum', { variant: 'warning' });
+      return;
     }
 
     const payload: CreateBudgetPlanRequestDto = {
@@ -191,8 +192,8 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
       currencyCode: code,
       periodType: createPeriod,
       validFrom: fromIso,
+      validTo: toIso,
       categoryId: category.id,
-      ...(toIso ? { validTo: toIso } : {}),
     };
 
     setSubmitting(true);
@@ -235,14 +236,15 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
       enqueueSnackbar('Platnost od — zadej datum jako dd.MM.yyyy', { variant: 'warning' });
       return;
     }
-    let toIso: string | undefined;
-    if (editValidTo.trim()) {
-      const t = parseDdMmYyyyToEndIso(editValidTo);
-      if (!t) {
-        enqueueSnackbar('Platnost do — neplatné datum', { variant: 'warning' });
-        return;
-      }
-      toIso = t;
+    const toRaw = editValidTo.trim();
+    if (!toRaw) {
+      enqueueSnackbar('Platnost do je povinná', { variant: 'warning' });
+      return;
+    }
+    const toIso = parseDdMmYyyyToEndIso(toRaw);
+    if (!toIso) {
+      enqueueSnackbar('Platnost do — neplatné datum', { variant: 'warning' });
+      return;
     }
 
     const body: UpdateBudgetPlanRequestDto = {
@@ -251,8 +253,8 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
       currencyCode: code,
       periodType: editPeriod,
       validFrom: fromIso,
+      validTo: toIso,
       categoryId: category.id,
-      ...(toIso !== undefined ? { validTo: toIso } : {}),
     };
 
     setSubmitting(true);
@@ -419,10 +421,11 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
                     size="small"
                   />
                   <TextField
-                    label="Platnost do (volitelné)"
+                    label="Platnost do"
                     value={editValidTo}
                     onChange={(e) => setEditValidTo(e.target.value)}
                     placeholder="dd.MM.yyyy"
+                    required
                     fullWidth
                     size="small"
                   />
@@ -497,10 +500,11 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
                     size="small"
                   />
                   <TextField
-                    label="Platnost do (volitelné)"
+                    label="Platnost do"
                     value={createValidTo}
                     onChange={(e) => setCreateValidTo(e.target.value)}
                     placeholder="dd.MM.yyyy"
+                    required
                     fullWidth
                     size="small"
                   />
