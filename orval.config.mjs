@@ -2,7 +2,7 @@
 export default {
   expenseTracker: {
     input: {
-      target: 'http://localhost:8080/v3/api-docs', 
+      target: 'http://localhost:8081/v3/api-docs', 
     },
     output: {
       mode: 'tags-split',

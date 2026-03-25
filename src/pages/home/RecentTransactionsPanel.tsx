@@ -1,11 +1,34 @@
-import type { PagedModelTransactionResponseDto, TransactionResponseDto } from '@api/model';
-import { TransactionResponseDtoTransactionType } from '@api/model';
-import { transactionFindAll } from '@api/transaction-controller/transaction-controller';
+import { categoryFindAllActive } from '@api/category-controller/category-controller';
+import type {
+  PagedModelCategoryResponseDto,
+  PagedModelTransactionResponseDto,
+  PagedModelWalletResponseDto,
+  TransactionFindAllPageableParams,
+  TransactionResponseDto,
+} from '@api/model';
+import {
+  TransactionFindAllPageableStatus,
+  TransactionFindAllPageableTransactionType,
+  TransactionResponseDtoBalanceAdjustmentDirection,
+  TransactionResponseDtoStatus,
+  TransactionResponseDtoTransactionType,
+} from '@api/model';
+import {
+  getTransactionFindAllPageableQueryKey,
+  transactionFindAllPageable,
+} from '@api/transaction-controller/transaction-controller';
+import { walletFindAll } from '@api/wallet-controller/wallet-controller';
+import { useDebouncedValue } from '@hooks/useDebouncedValue';
 import {
   Box,
+  Button,
   Collapse,
+  FormControl,
+  InputLabel,
   Link,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -13,19 +36,28 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
 import { useTheme } from '@mui/material/styles';
-import { formatDateTimeDdMmYyyyHhMm } from '@utils/dateTimeCs';
+import { dateRangeDdMmYyyyToIsoParams, firstDayOfMonth, lastDayOfMonth } from '@utils/dashboardPeriod';
+import {
+  CS_DATE_FORMAT_LABEL,
+  CS_DATE_HELPER_TEXT,
+  formatDateDdMmYyyyFromDate,
+  formatDateTimeDdMmYyyyHhMm,
+  parseCsDateTime,
+} from '@utils/dateTimeCs';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { FC, Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { formatWalletAmount, formatWalletAmountWholeUnits } from './walletDisplay';
-import { useQuery } from '@tanstack/react-query';
-import { FC, Fragment, type ReactNode, useCallback, useEffect, useState } from 'react';
-import { TransactionResponseDtoBalanceAdjustmentDirection } from '@api/model';
-import { TransactionResponseDtoStatus } from '@api/model';
 
-const TX_PAGE_SIZE = 25;
+const DEFAULT_ROWS = 25;
 const TX_SORT = ['transactionDate,desc'] as string[];
+
+const CATEGORY_LIST_PARAMS = { page: 0, size: 500 } as const;
+const WALLET_LIST_PARAMS = { page: 0, size: 200 } as const;
 
 /** Sloupec data; při nouzi tooltip v řádku. */
 const DATE_COL_SX = {
@@ -232,15 +264,56 @@ function TransactionDetailBlock({ row }: { row: TransactionResponseDto }) {
   );
 }
 
+const TX_TYPE_ORDER = [
+  TransactionFindAllPageableTransactionType.EXPENSE,
+  TransactionFindAllPageableTransactionType.INCOME,
+  TransactionFindAllPageableTransactionType.TRANSFER,
+  TransactionFindAllPageableTransactionType.BALANCE_ADJUSTMENT,
+] as const;
+
+const STATUS_ORDER = [
+  TransactionFindAllPageableStatus.COMPLETED,
+  TransactionFindAllPageableStatus.PENDING,
+  TransactionFindAllPageableStatus.CANCELLED,
+] as const;
+
+type TypeFilterValue = '' | TransactionFindAllPageableTransactionType;
+type StatusFilterValue = '' | TransactionFindAllPageableStatus;
+
 export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }) => {
   const theme = useTheme();
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebouncedValue(searchInput, 300);
+  const [categoryId, setCategoryId] = useState('');
+  const [walletId, setWalletId] = useState('');
+  const [transactionType, setTransactionType] = useState<TypeFilterValue>('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('');
+  const [dateFromCs, setDateFromCs] = useState(() => formatDateDdMmYyyyFromDate(firstDayOfMonth()));
+  const [dateToCs, setDateToCs] = useState(() => formatDateDdMmYyyyFromDate(lastDayOfMonth()));
+
+  useEffect(() => {
+    setDateFromCs(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
+    setDateToCs(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
+  }, [trackerId]);
 
   useEffect(() => {
     setPage(0);
     setExpandedIds(new Set());
-  }, [trackerId]);
+  }, [
+    trackerId,
+    debouncedSearch,
+    categoryId,
+    walletId,
+    transactionType,
+    statusFilter,
+    dateFromCs,
+    dateToCs,
+    rowsPerPage,
+  ]);
 
   const toggleRow = useCallback((rowKey: string) => {
     setExpandedIds((prev) => {
@@ -251,22 +324,250 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     });
   }, []);
 
-  const { data } = useQuery({
-    queryKey: ['/api/transaction', trackerId, page, TX_PAGE_SIZE, TX_SORT],
-    queryFn: () => transactionFindAll(trackerId, { page, size: TX_PAGE_SIZE, sort: TX_SORT }),
+  const clearFilters = useCallback(() => {
+    setSearchInput('');
+    setCategoryId('');
+    setWalletId('');
+    setTransactionType('');
+    setStatusFilter('');
+    setDateFromCs(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
+    setDateToCs(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
+  }, []);
+
+  const listParams = useMemo((): TransactionFindAllPageableParams => {
+    const params: TransactionFindAllPageableParams = {
+      page,
+      size: rowsPerPage,
+      sort: TX_SORT,
+    };
+    const q = debouncedSearch.trim();
+    if (q) params.search = q;
+    if (categoryId) params.categoryId = categoryId;
+    if (walletId) params.walletId = walletId;
+    if (transactionType) params.transactionType = transactionType;
+    if (statusFilter) params.status = statusFilter;
+
+    const fromT = dateFromCs.trim();
+    const toT = dateToCs.trim();
+    if (fromT && toT) {
+      const range = dateRangeDdMmYyyyToIsoParams(fromT, toT);
+      if (range) {
+        params.dateFrom = range.from;
+        params.dateTo = range.to;
+      }
+    } else {
+      const fromParsed = fromT ? parseCsDateTime(fromT) : null;
+      const toParsed = toT ? parseCsDateTime(toT) : null;
+      if (fromParsed) {
+        const start = new Date(
+          fromParsed.getFullYear(),
+          fromParsed.getMonth(),
+          fromParsed.getDate(),
+          0,
+          0,
+          0,
+          0,
+        );
+        params.dateFrom = start.toISOString();
+      }
+      if (toParsed) {
+        const end = new Date(
+          toParsed.getFullYear(),
+          toParsed.getMonth(),
+          toParsed.getDate(),
+          23,
+          59,
+          59,
+          999,
+        );
+        params.dateTo = end.toISOString();
+      }
+    }
+
+    return params;
+  }, [
+    page,
+    rowsPerPage,
+    debouncedSearch,
+    categoryId,
+    walletId,
+    transactionType,
+    statusFilter,
+    dateFromCs,
+    dateToCs,
+  ]);
+
+  const filterSelectSx = { minWidth: 140, maxWidth: 220 } as const;
+
+  const { data: categoriesRes } = useQuery({
+    queryKey: ['categoryFindAllActive', trackerId, 'history-panel'] as const,
+    queryFn: async () => {
+      const res = await categoryFindAllActive(trackerId, CATEGORY_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('categories');
+      return res.data as PagedModelCategoryResponseDto;
+    },
     enabled: Boolean(trackerId),
+    staleTime: 60_000,
   });
 
-  const txPaged = data?.data as PagedModelTransactionResponseDto | undefined;
+  const { data: walletsRes } = useQuery({
+    queryKey: ['walletFindAll', trackerId, 'history-panel'] as const,
+    queryFn: async () => {
+      const res = await walletFindAll(trackerId, WALLET_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('wallets');
+      return res.data as PagedModelWalletResponseDto;
+    },
+    enabled: Boolean(trackerId),
+    staleTime: 60_000,
+  });
+
+  const categories = categoriesRes?.content ?? [];
+  const wallets = walletsRes?.content ?? [];
+
+  const {
+    data: txPaged,
+    isPending,
+    isError,
+    isPlaceholderData,
+  } = useQuery({
+    queryKey: getTransactionFindAllPageableQueryKey(trackerId, listParams),
+    queryFn: async ({ signal }) => {
+      const res = await transactionFindAllPageable(trackerId, listParams, { signal });
+      if (res.status < 200 || res.status >= 300) throw new Error('transactions');
+      return res.data as PagedModelTransactionResponseDto;
+    },
+    enabled: Boolean(trackerId),
+    placeholderData: keepPreviousData,
+  });
+
   const recentTx = (txPaged?.content ?? []) as TransactionResponseDto[];
   const totalElements = txPaged?.page?.totalElements ?? 0;
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography variant="h6" gutterBottom>
-        Nedávné transakce
+        Historie transakcí
       </Typography>
-      <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
+
+      <Stack spacing={2} sx={{ mb: 2 }}>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ alignItems: 'flex-start' }}>
+          <TextField
+            size="small"
+            label="Hledat"
+            placeholder="Popis, poznámka…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            sx={{ minWidth: 200, flex: '1 1 200px' }}
+          />
+          <FormControl size="small" sx={filterSelectSx}>
+            <InputLabel id="tx-filter-cat">Kategorie</InputLabel>
+            <Select
+              labelId="tx-filter-cat"
+              label="Kategorie"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+            >
+              <MenuItem value="">
+                <em>Vše</em>
+              </MenuItem>
+              {categories.map((c) => (
+                <MenuItem key={c.id} value={c.id ?? ''}>
+                  {c.name?.trim() || c.id || '—'}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={filterSelectSx}>
+            <InputLabel id="tx-filter-wallet">Peněženka</InputLabel>
+            <Select
+              labelId="tx-filter-wallet"
+              label="Peněženka"
+              value={walletId}
+              onChange={(e) => setWalletId(e.target.value)}
+            >
+              <MenuItem value="">
+                <em>Vše</em>
+              </MenuItem>
+              {wallets.map((w) => (
+                <MenuItem key={w.id} value={w.id ?? ''}>
+                  {w.name?.trim() || w.id || '—'}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={filterSelectSx}>
+            <InputLabel id="tx-filter-type">Typ</InputLabel>
+            <Select
+              labelId="tx-filter-type"
+              label="Typ"
+              value={transactionType}
+              onChange={(e) => setTransactionType(e.target.value as TypeFilterValue)}
+            >
+              <MenuItem value="">
+                <em>Vše</em>
+              </MenuItem>
+              {TX_TYPE_ORDER.map((v) => (
+                <MenuItem key={v} value={v}>
+                  {txTypeLabel(v)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={filterSelectSx}>
+            <InputLabel id="tx-filter-status">Stav</InputLabel>
+            <Select
+              labelId="tx-filter-status"
+              label="Stav"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilterValue)}
+            >
+              <MenuItem value="">
+                <em>Vše</em>
+              </MenuItem>
+              {STATUS_ORDER.map((v) => (
+                <MenuItem key={v} value={v}>
+                  {statusLabel(v)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            size="small"
+            label="Od"
+            value={dateFromCs}
+            onChange={(e) => setDateFromCs(e.target.value)}
+            placeholder={CS_DATE_FORMAT_LABEL}
+            helperText={CS_DATE_HELPER_TEXT}
+            sx={{ width: 152 }}
+          />
+          <TextField
+            size="small"
+            label="Do"
+            value={dateToCs}
+            onChange={(e) => setDateToCs(e.target.value)}
+            placeholder={CS_DATE_FORMAT_LABEL}
+            helperText=" "
+            sx={{ width: 152 }}
+          />
+          <Button size="small" variant="outlined" onClick={clearFilters} sx={{ alignSelf: 'center' }}>
+            Vymazat filtry
+          </Button>
+        </Stack>
+        {isError ? (
+          <Typography variant="body2" color="error">
+            Nepodařilo se načíst transakce.
+          </Typography>
+        ) : null}
+      </Stack>
+
+      <Table
+        size="small"
+        sx={{
+          tableLayout: 'fixed',
+          width: '100%',
+          opacity: isPending || isPlaceholderData ? 0.6 : 1,
+        }}
+      >
         <TableHead>
           <TableRow>
             <TableCell sx={DATE_COL_SX}>Datum</TableCell>
@@ -283,7 +584,9 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           {recentTx.length === 0 ? (
             <TableRow>
               <TableCell colSpan={6}>
-                <Typography color="text.secondary">Zatím žádné záznamy.</Typography>
+                <Typography color="text.secondary">
+                  {isPending ? 'Načítání…' : 'Žádné záznamy pro zvolené filtry.'}
+                </Typography>
               </TableCell>
             </TableRow>
           ) : (
@@ -351,8 +654,13 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           setPage(newPage);
           setExpandedIds(new Set());
         }}
-        rowsPerPage={TX_PAGE_SIZE}
-        rowsPerPageOptions={[]}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={(e) => {
+          setRowsPerPage(Number.parseInt(e.target.value, 10));
+          setPage(0);
+          setExpandedIds(new Set());
+        }}
+        rowsPerPageOptions={[10, 25, 50, 100]}
         labelDisplayedRows={({ from, to, count }) =>
           `${from}–${to} z ${count !== -1 ? count : `více než ${to}`}`
         }

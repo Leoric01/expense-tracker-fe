@@ -829,7 +829,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
       }
       enqueueSnackbar('Transakce byla zaznamenána', { variant: 'success' });
       setQuickTxCategory(null);
-      await queryClient.invalidateQueries({ queryKey: ['/api/transaction', trackerId] });
+      await queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
       await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
       await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
       await invalidateBudgets();

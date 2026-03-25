@@ -23,22 +23,25 @@ import type {
 
 import type {
   CreateTransactionRequestDto,
-  TransactionFindAllParams,
+  TransactionFindAllPageableParams,
   TransactionUploadAttachmentBody,
   UpdateTransactionRequestDto,
 } from '../model';
 
-export type transactionFindAllResponse200 = {
+export type transactionFindAllPageableResponse200 = {
   data: Blob;
   status: 200;
 };
 
-export type transactionFindAllResponseSuccess = transactionFindAllResponse200 & {
+export type transactionFindAllPageableResponseSuccess = transactionFindAllPageableResponse200 & {
   headers: Headers;
 };
-export type transactionFindAllResponse = transactionFindAllResponseSuccess;
+export type transactionFindAllPageableResponse = transactionFindAllPageableResponseSuccess;
 
-export const getTransactionFindAllUrl = (trackerId: string, params?: TransactionFindAllParams) => {
+export const getTransactionFindAllPageableUrl = (
+  trackerId: string,
+  params?: TransactionFindAllPageableParams,
+) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -54,72 +57,78 @@ export const getTransactionFindAllUrl = (trackerId: string, params?: Transaction
     : `/api/transaction/${trackerId}`;
 };
 
-export const transactionFindAll = async (
+export const transactionFindAllPageable = async (
   trackerId: string,
-  params?: TransactionFindAllParams,
+  params?: TransactionFindAllPageableParams,
   options?: RequestInit,
-): Promise<transactionFindAllResponse> => {
-  const res = await fetch(getTransactionFindAllUrl(trackerId, params), {
+): Promise<transactionFindAllPageableResponse> => {
+  const res = await fetch(getTransactionFindAllPageableUrl(trackerId, params), {
     ...options,
     method: 'GET',
   });
 
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
 
-  const data: transactionFindAllResponse['data'] = body ? JSON.parse(body) : {};
-  return { data, status: res.status, headers: res.headers } as transactionFindAllResponse;
+  const data: transactionFindAllPageableResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as transactionFindAllPageableResponse;
 };
 
-export const getTransactionFindAllQueryKey = (
+export const getTransactionFindAllPageableQueryKey = (
   trackerId: string,
-  params?: TransactionFindAllParams,
+  params?: TransactionFindAllPageableParams,
 ) => {
   return [`/api/transaction/${trackerId}`, ...(params ? [params] : [])] as const;
 };
 
-export const getTransactionFindAllQueryOptions = <
-  TData = Awaited<ReturnType<typeof transactionFindAll>>,
+export const getTransactionFindAllPageableQueryOptions = <
+  TData = Awaited<ReturnType<typeof transactionFindAllPageable>>,
   TError = unknown,
 >(
   trackerId: string,
-  params?: TransactionFindAllParams,
+  params?: TransactionFindAllPageableParams,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof transactionFindAll>>, TError, TData>>;
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAllPageable>>, TError, TData>
+    >;
     fetch?: RequestInit;
   },
 ) => {
   const { query: queryOptions, fetch: fetchOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getTransactionFindAllQueryKey(trackerId, params);
+  const queryKey =
+    queryOptions?.queryKey ?? getTransactionFindAllPageableQueryKey(trackerId, params);
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof transactionFindAll>>> = ({ signal }) =>
-    transactionFindAll(trackerId, params, { signal, ...fetchOptions });
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof transactionFindAllPageable>>> = ({
+    signal,
+  }) => transactionFindAllPageable(trackerId, params, { signal, ...fetchOptions });
 
   return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof transactionFindAll>>,
+    Awaited<ReturnType<typeof transactionFindAllPageable>>,
     TError,
     TData
   > & { queryKey: DataTag<QueryKey, TData, TError> };
 };
 
-export type TransactionFindAllQueryResult = NonNullable<
-  Awaited<ReturnType<typeof transactionFindAll>>
+export type TransactionFindAllPageableQueryResult = NonNullable<
+  Awaited<ReturnType<typeof transactionFindAllPageable>>
 >;
-export type TransactionFindAllQueryError = unknown;
+export type TransactionFindAllPageableQueryError = unknown;
 
-export function useTransactionFindAll<
-  TData = Awaited<ReturnType<typeof transactionFindAll>>,
+export function useTransactionFindAllPageable<
+  TData = Awaited<ReturnType<typeof transactionFindAllPageable>>,
   TError = unknown,
 >(
   trackerId: string,
-  params: undefined | TransactionFindAllParams,
+  params: undefined | TransactionFindAllPageableParams,
   options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof transactionFindAll>>, TError, TData>> &
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAllPageable>>, TError, TData>
+    > &
       Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof transactionFindAll>>,
+          Awaited<ReturnType<typeof transactionFindAllPageable>>,
           TError,
-          Awaited<ReturnType<typeof transactionFindAll>>
+          Awaited<ReturnType<typeof transactionFindAllPageable>>
         >,
         'initialData'
       >;
@@ -127,21 +136,21 @@ export function useTransactionFindAll<
   },
   queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useTransactionFindAll<
-  TData = Awaited<ReturnType<typeof transactionFindAll>>,
+export function useTransactionFindAllPageable<
+  TData = Awaited<ReturnType<typeof transactionFindAllPageable>>,
   TError = unknown,
 >(
   trackerId: string,
-  params?: TransactionFindAllParams,
+  params?: TransactionFindAllPageableParams,
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAll>>, TError, TData>
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAllPageable>>, TError, TData>
     > &
       Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof transactionFindAll>>,
+          Awaited<ReturnType<typeof transactionFindAllPageable>>,
           TError,
-          Awaited<ReturnType<typeof transactionFindAll>>
+          Awaited<ReturnType<typeof transactionFindAllPageable>>
         >,
         'initialData'
       >;
@@ -149,32 +158,36 @@ export function useTransactionFindAll<
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useTransactionFindAll<
-  TData = Awaited<ReturnType<typeof transactionFindAll>>,
+export function useTransactionFindAllPageable<
+  TData = Awaited<ReturnType<typeof transactionFindAllPageable>>,
   TError = unknown,
 >(
   trackerId: string,
-  params?: TransactionFindAllParams,
+  params?: TransactionFindAllPageableParams,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof transactionFindAll>>, TError, TData>>;
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAllPageable>>, TError, TData>
+    >;
     fetch?: RequestInit;
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
-export function useTransactionFindAll<
-  TData = Awaited<ReturnType<typeof transactionFindAll>>,
+export function useTransactionFindAllPageable<
+  TData = Awaited<ReturnType<typeof transactionFindAllPageable>>,
   TError = unknown,
 >(
   trackerId: string,
-  params?: TransactionFindAllParams,
+  params?: TransactionFindAllPageableParams,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof transactionFindAll>>, TError, TData>>;
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof transactionFindAllPageable>>, TError, TData>
+    >;
     fetch?: RequestInit;
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getTransactionFindAllQueryOptions(trackerId, params, options);
+  const queryOptions = getTransactionFindAllPageableQueryOptions(trackerId, params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

@@ -194,7 +194,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   });
 
   const invalidateFinance = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ['/api/transaction', trackerId] });
+    await queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
     await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
     await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
   }, [queryClient, trackerId]);
