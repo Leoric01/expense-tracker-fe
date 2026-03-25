@@ -43,8 +43,6 @@ import type { Theme } from '@mui/material/styles';
 import { useTheme } from '@mui/material/styles';
 import { dateRangeDdMmYyyyToIsoParams, firstDayOfMonth, lastDayOfMonth } from '@utils/dashboardPeriod';
 import {
-  CS_DATE_FORMAT_LABEL,
-  CS_DATE_HELPER_TEXT,
   formatDateDdMmYyyyFromDate,
   formatDateTimeDdMmYyyyHhMm,
   parseCsDateTime,
@@ -536,18 +534,14 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
             label="Od"
             value={dateFromCs}
             onChange={(e) => setDateFromCs(e.target.value)}
-            placeholder={CS_DATE_FORMAT_LABEL}
-            helperText={CS_DATE_HELPER_TEXT}
-            sx={{ width: 152 }}
+            sx={{ width: 132 }}
           />
           <TextField
             size="small"
             label="Do"
             value={dateToCs}
             onChange={(e) => setDateToCs(e.target.value)}
-            placeholder={CS_DATE_FORMAT_LABEL}
-            helperText=" "
-            sx={{ width: 152 }}
+            sx={{ width: 132 }}
           />
           <Button size="small" variant="outlined" onClick={clearFilters} sx={{ alignSelf: 'center' }}>
             Vymazat filtry
