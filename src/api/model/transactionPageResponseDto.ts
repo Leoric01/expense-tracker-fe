@@ -5,12 +5,12 @@
  * Swagger dokumentace pro ExpenseTracker backend
  * OpenAPI spec version: 1.0
  */
-import type { PageMetadata } from './pageMetadata';
+import type { PageMetaDto } from './pageMetaDto';
 import type { TransactionResponseDto } from './transactionResponseDto';
 import type { TransactionTotalsDto } from './transactionTotalsDto';
 
-export interface PagedModelTransactionResponseDto {
+export interface TransactionPageResponseDto {
   content?: TransactionResponseDto[];
-  page?: PageMetadata;
+  page?: PageMetaDto;
   totals?: TransactionTotalsDto;
 }

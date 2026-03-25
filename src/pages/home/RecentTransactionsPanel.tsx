@@ -57,6 +57,14 @@ const TX_SORT = ['transactionDate,desc'] as string[];
 const CATEGORY_LIST_PARAMS = { page: 0, size: 500 } as const;
 const WALLET_LIST_PARAMS = { page: 0, size: 200 } as const;
 
+function csZaznamuCount(n: number): string {
+  if (n === 1) return '1 záznam';
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return `${n} záznamy`;
+  return `${n} záznamů`;
+}
+
 /** Sloupec data; při nouzi tooltip v řádku. */
 const DATE_COL_SX = {
   width: 150,
@@ -440,6 +448,21 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
 
   const recentTx = (txPaged?.content ?? []) as TransactionResponseDto[];
   const totalElements = txPaged?.page?.totalElements ?? 0;
+  const totals = txPaged?.totals;
+
+  const totalsCurrency = useMemo(() => {
+    const code = recentTx.find((r) => r.currencyCode?.trim())?.currencyCode;
+    return (code ?? 'CZK').toUpperCase();
+  }, [recentTx]);
+
+  const summaryGridSx = {
+    display: 'grid',
+    gridTemplateColumns: 'auto max-content',
+    columnGap: 2,
+    rowGap: 1,
+    alignItems: 'baseline',
+    justifyContent: 'end',
+  } as const;
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
@@ -553,6 +576,80 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           </Typography>
         ) : null}
       </Stack>
+
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          mb: 1.5,
+          opacity: isPending || isPlaceholderData ? 0.6 : 1,
+        }}
+      >
+        <Paper variant="outlined" sx={{ px: 2, py: 1.5, minWidth: 280, maxWidth: '100%' }}>
+          <Box sx={summaryGridSx}>
+            <Typography variant="body2" color="text.secondary" sx={{ pr: 0.5 }}>
+              Celkové výdaje
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+                color: theme.palette.error.main,
+              }}
+            >
+              {totals?.expenseAmount != null
+                ? formatWalletAmountWholeUnits(totals.expenseAmount, totalsCurrency)
+                : '—'}
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary" sx={{ pr: 0.5 }}>
+              Celkové příjmy
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+                color: theme.palette.success.main,
+              }}
+            >
+              {totals?.incomeAmount != null
+                ? formatWalletAmountWholeUnits(totals.incomeAmount, totalsCurrency)
+                : '—'}
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary" sx={{ pr: 0.5, fontWeight: 600 }}>
+              Výsledná bilance
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+                color:
+                  totals?.netAmount == null
+                    ? theme.palette.text.secondary
+                    : totals.netAmount < 0
+                      ? theme.palette.error.main
+                      : totals.netAmount > 0
+                        ? theme.palette.success.main
+                        : theme.palette.text.primary,
+              }}
+            >
+              {totals?.netAmount != null
+                ? formatWalletAmountWholeUnits(totals.netAmount, totalsCurrency)
+                : '—'}
+            </Typography>
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'right' }}>
+            Součty za celý výsledek filtru ({csZaznamuCount(totalElements)}).
+          </Typography>
+        </Paper>
+      </Box>
 
       <Table
         size="small"
