@@ -57,14 +57,6 @@ const TX_SORT = ['transactionDate,desc'] as string[];
 const CATEGORY_LIST_PARAMS = { page: 0, size: 500 } as const;
 const WALLET_LIST_PARAMS = { page: 0, size: 200 } as const;
 
-function csZaznamuCount(n: number): string {
-  if (n === 1) return '1 záznam';
-  const m10 = n % 10;
-  const m100 = n % 100;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return `${n} záznamy`;
-  return `${n} záznamů`;
-}
-
 /** Sloupec data; při nouzi tooltip v řádku. */
 const DATE_COL_SX = {
   width: 150,
@@ -455,20 +447,118 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     return (code ?? 'CZK').toUpperCase();
   }, [recentTx]);
 
-  const summaryGridSx = {
-    display: 'grid',
-    gridTemplateColumns: 'auto max-content',
-    columnGap: 2,
-    rowGap: 1,
-    alignItems: 'baseline',
-    justifyContent: 'end',
-  } as const;
-
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        Historie transakcí
-      </Typography>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: 'auto auto minmax(0, 1fr)',
+          },
+          alignItems: 'baseline',
+          columnGap: 2,
+          rowGap: 1,
+          width: '100%',
+          mb: 2,
+          opacity: isPending || isPlaceholderData ? 0.6 : 1,
+        }}
+      >
+        <Typography
+          variant="h6"
+          component="h2"
+          sx={{ gridColumn: { xs: '1', sm: '1' }, whiteSpace: 'nowrap', mb: 0 }}
+        >
+          Historie transakcí
+        </Typography>
+
+        <Typography
+          variant="body2"
+          component="span"
+          sx={{ gridColumn: { xs: '1', sm: '2' }, whiteSpace: 'nowrap' }}
+        >
+          <Box component="span" sx={{ color: 'text.secondary' }}>
+            Počet záznamů:
+          </Box>{' '}
+          <Box
+            component="span"
+            sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}
+          >
+            {totalElements.toLocaleString('cs-CZ')}
+          </Box>
+        </Typography>
+
+        <Box
+          sx={{
+            gridColumn: { xs: '1', sm: '3' },
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'baseline',
+            justifyContent: 'flex-end',
+            gap: { xs: 1.5, sm: 2, md: 3 },
+            minWidth: 0,
+          }}
+        >
+          <Typography variant="body2" component="span" sx={{ whiteSpace: 'nowrap' }}>
+            <Box component="span" sx={{ color: 'text.secondary' }}>
+              Celkové výdaje:
+            </Box>{' '}
+            <Box
+              component="span"
+              sx={{
+                fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums',
+                color: theme.palette.error.main,
+              }}
+            >
+              {totals?.expenseAmount != null
+                ? formatWalletAmountWholeUnits(totals.expenseAmount, totalsCurrency)
+                : '—'}
+            </Box>
+          </Typography>
+          <Typography variant="body2" component="span" sx={{ whiteSpace: 'nowrap' }}>
+            <Box component="span" sx={{ color: 'text.secondary' }}>
+              Celkové příjmy:
+            </Box>{' '}
+            <Box
+              component="span"
+              sx={{
+                fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums',
+                color: theme.palette.success.main,
+              }}
+            >
+              {totals?.incomeAmount != null
+                ? formatWalletAmountWholeUnits(totals.incomeAmount, totalsCurrency)
+                : '—'}
+            </Box>
+          </Typography>
+          <Typography variant="body2" component="span" sx={{ whiteSpace: 'nowrap' }}>
+            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+              Výsledná bilance:
+            </Box>{' '}
+            <Box
+              component="span"
+              sx={{
+                fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums',
+                color:
+                  totals?.netAmount == null
+                    ? theme.palette.text.secondary
+                    : totals.netAmount < 0
+                      ? theme.palette.error.main
+                      : totals.netAmount > 0
+                        ? theme.palette.success.main
+                        : theme.palette.text.primary,
+              }}
+            >
+              {totals?.netAmount != null
+                ? formatWalletAmountWholeUnits(totals.netAmount, totalsCurrency)
+                : '—'}
+            </Box>
+          </Typography>
+        </Box>
+      </Box>
 
       <Stack spacing={2} sx={{ mb: 2 }}>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ alignItems: 'flex-start' }}>
@@ -576,80 +666,6 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           </Typography>
         ) : null}
       </Stack>
-
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          mb: 1.5,
-          opacity: isPending || isPlaceholderData ? 0.6 : 1,
-        }}
-      >
-        <Paper variant="outlined" sx={{ px: 2, py: 1.5, minWidth: 280, maxWidth: '100%' }}>
-          <Box sx={summaryGridSx}>
-            <Typography variant="body2" color="text.secondary" sx={{ pr: 0.5 }}>
-              Celkové výdaje
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 600,
-                fontVariantNumeric: 'tabular-nums',
-                whiteSpace: 'nowrap',
-                color: theme.palette.error.main,
-              }}
-            >
-              {totals?.expenseAmount != null
-                ? formatWalletAmountWholeUnits(totals.expenseAmount, totalsCurrency)
-                : '—'}
-            </Typography>
-
-            <Typography variant="body2" color="text.secondary" sx={{ pr: 0.5 }}>
-              Celkové příjmy
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 600,
-                fontVariantNumeric: 'tabular-nums',
-                whiteSpace: 'nowrap',
-                color: theme.palette.success.main,
-              }}
-            >
-              {totals?.incomeAmount != null
-                ? formatWalletAmountWholeUnits(totals.incomeAmount, totalsCurrency)
-                : '—'}
-            </Typography>
-
-            <Typography variant="body2" color="text.secondary" sx={{ pr: 0.5, fontWeight: 600 }}>
-              Výsledná bilance
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 600,
-                fontVariantNumeric: 'tabular-nums',
-                whiteSpace: 'nowrap',
-                color:
-                  totals?.netAmount == null
-                    ? theme.palette.text.secondary
-                    : totals.netAmount < 0
-                      ? theme.palette.error.main
-                      : totals.netAmount > 0
-                        ? theme.palette.success.main
-                        : theme.palette.text.primary,
-              }}
-            >
-              {totals?.netAmount != null
-                ? formatWalletAmountWholeUnits(totals.netAmount, totalsCurrency)
-                : '—'}
-            </Typography>
-          </Box>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'right' }}>
-            Součty za celý výsledek filtru ({csZaznamuCount(totalElements)}).
-          </Typography>
-        </Paper>
-      </Box>
 
       <Table
         size="small"
