@@ -48,7 +48,6 @@ import { useSearchParams } from 'react-router-dom';
 import { RecentTransactionsPanel } from './RecentTransactionsPanel';
 import { BalanceCorrectionDialog, type BalanceCorrectionConfirmPayload } from './BalanceCorrectionDialog';
 import { TransferBetweenWalletsDialog, type TransferConfirmPayload } from './TransferBetweenWalletsDialog';
-import { TransactionFormsPanel } from './TransactionFormsPanel';
 import { formatWalletAmount, WALLET_TYPE_OPTIONS } from './walletDisplay';
 import {
   globalOrderAfterTrackerReorder,
@@ -81,7 +80,15 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const ignoreClickUntilRef = useRef(0);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const mainTab = tabParam === 'categories' ? 1 : tabParam === 'history' ? 2 : 0;
+  // V dashboardu zobrazuješ primárně Kategorie; Historie je jen volitelný režim.
+  // Tím pádem se vyhneme url parametru `?tab=categories`.
+  const mainTab = tabParam === 'history' ? 1 : 0;
+
+  useEffect(() => {
+    if (tabParam === 'categories') {
+      setSearchParams({});
+    }
+  }, [tabParam, setSearchParams]);
 
   const sectionNavBtnSx = (active: boolean) => ({
     borderRadius: 1,
@@ -402,8 +409,9 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     setDropHoverId(null);
     if (target.active === false) return;
     const sourceId = e.dataTransfer.getData(WALLET_DRAG_MIME) || e.dataTransfer.getData('text/plain');
-    if (!sourceId || !target.id || sourceId === target.id) return;
-    startTransition(() => setTransferPair({ sourceId, targetId: target.id }));
+    const targetId = target.id;
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    startTransition(() => setTransferPair({ sourceId, targetId }));
   };
 
   const handleCardClick = (w: WalletResponseDto) => {
@@ -621,37 +629,23 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         component="nav"
         aria-label="Přepnout sekci"
       >
-        <ButtonBase disableRipple onClick={() => setSearchParams({})} sx={sectionNavBtnSx(mainTab === 0)}>
-          Transakce
-        </ButtonBase>
         <ButtonBase
           disableRipple
-          onClick={() => setSearchParams({ tab: 'categories' })}
-          sx={sectionNavBtnSx(mainTab === 1)}
+          onClick={() => setSearchParams({})}
+          sx={sectionNavBtnSx(mainTab === 0)}
         >
           Kategorie
         </ButtonBase>
         <ButtonBase
           disableRipple
           onClick={() => setSearchParams({ tab: 'history' })}
-          sx={sectionNavBtnSx(mainTab === 2)}
+          sx={sectionNavBtnSx(mainTab === 1)}
         >
           Historie
         </ButtonBase>
       </Stack>
 
       {mainTab === 0 && (
-        <TransactionFormsPanel
-          embedded
-          hideTitle
-          trackerId={trackerId}
-          trackerName={trackerName}
-          walletsFromParent={orderedItems}
-          categoriesQueryEnabled={dashboardFetched}
-        />
-      )}
-
-      {mainTab === 1 && (
         <CategoriesForTracker
           embedded
           trackerId={trackerId}
@@ -661,7 +655,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         />
       )}
 
-      {mainTab === 2 && <RecentTransactionsPanel trackerId={trackerId} />}
+      {mainTab === 1 && <RecentTransactionsPanel trackerId={trackerId} />}
 
       <TransferBetweenWalletsDialog
         open={Boolean(transferPair)}

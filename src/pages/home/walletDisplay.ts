@@ -31,3 +31,20 @@ export function formatWalletAmount(amountMinor: number | undefined, currencyCode
     return `${major.toLocaleString('cs-CZ')} ${code}`;
   }
 }
+
+/** Stejné jako `formatWalletAmount`, ale bez desetinných míst (zaokrouhlení dle `Intl`). */
+export function formatWalletAmountWholeUnits(amountMinor: number | undefined, currencyCode?: string): string {
+  const major = minorUnitsToMajor(amountMinor);
+  if (major === undefined) return '—';
+  const code = (currencyCode ?? 'CZK').toUpperCase();
+  try {
+    return new Intl.NumberFormat('cs-CZ', {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(major);
+  } catch {
+    return `${Math.round(major).toLocaleString('cs-CZ')} ${code}`;
+  }
+}

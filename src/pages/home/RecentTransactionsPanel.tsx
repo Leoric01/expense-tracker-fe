@@ -11,19 +11,60 @@ import {
   TableBody,
   TableCell,
   TableHead,
+  TablePagination,
   TableRow,
   Typography,
 } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
 import { useTheme } from '@mui/material/styles';
 import { formatDateTimeDdMmYyyyHhMm } from '@utils/dateTimeCs';
-import { formatWalletAmount } from './walletDisplay';
+import { formatWalletAmount, formatWalletAmountWholeUnits } from './walletDisplay';
 import { useQuery } from '@tanstack/react-query';
-import { FC, Fragment, type ReactNode, useCallback, useState } from 'react';
+import { FC, Fragment, type ReactNode, useCallback, useEffect, useState } from 'react';
 import { TransactionResponseDtoBalanceAdjustmentDirection } from '@api/model';
 import { TransactionResponseDtoStatus } from '@api/model';
 
-const TX_LIST = { page: 0, size: 25, sort: ['transactionDate,desc'] } as const;
+const TX_PAGE_SIZE = 25;
+const TX_SORT = ['transactionDate,desc'] as string[];
+
+/** Sloupec data; při nouzi tooltip v řádku. */
+const DATE_COL_SX = {
+  width: 150,
+  minWidth: 150,
+  maxWidth: 150,
+  boxSizing: 'border-box' as const,
+  whiteSpace: 'nowrap' as const,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  pr: 0.5,
+};
+
+/** Užší sloupec typu; celý text v title. */
+const TYPE_COL_SX = {
+  width: 76,
+  minWidth: 76,
+  maxWidth: 76,
+  boxSizing: 'border-box' as const,
+  whiteSpace: 'nowrap' as const,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  pr: 0.5,
+};
+
+const WALLET_COL_SX = {
+  maxWidth: 214,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap' as const,
+};
+
+/** Širší sloupec popisu (+60px oproti původnímu chování). */
+const DESCRIPTION_COL_SX = {
+  minWidth: 300,
+  width: '36%',
+  maxWidth: '100%',
+  wordBreak: 'break-word' as const,
+};
 
 function txTypeLabel(t?: string): string {
   switch (t) {
@@ -193,7 +234,13 @@ function TransactionDetailBlock({ row }: { row: TransactionResponseDto }) {
 
 export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }) => {
   const theme = useTheme();
+  const [page, setPage] = useState(0);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setPage(0);
+    setExpandedIds(new Set());
+  }, [trackerId]);
 
   const toggleRow = useCallback((rowKey: string) => {
     setExpandedIds((prev) => {
@@ -205,31 +252,31 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
   }, []);
 
   const { data } = useQuery({
-    queryKey: ['/api/transaction', trackerId, TX_LIST],
-    queryFn: () => transactionFindAll(trackerId, TX_LIST),
+    queryKey: ['/api/transaction', trackerId, page, TX_PAGE_SIZE, TX_SORT],
+    queryFn: () => transactionFindAll(trackerId, { page, size: TX_PAGE_SIZE, sort: TX_SORT }),
     enabled: Boolean(trackerId),
   });
 
   const txPaged = data?.data as PagedModelTransactionResponseDto | undefined;
   const recentTx = (txPaged?.content ?? []) as TransactionResponseDto[];
+  const totalElements = txPaged?.page?.totalElements ?? 0;
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography variant="h6" gutterBottom>
         Nedávné transakce
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Posledních {TX_LIST.size} záznamů, řazeno podle data. Kliknutím na řádek zobrazíš detail.
-      </Typography>
-      <Table size="small">
+      <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
         <TableHead>
           <TableRow>
-            <TableCell>Datum</TableCell>
-            <TableCell>Typ</TableCell>
-            <TableCell>Peněženka</TableCell>
+            <TableCell sx={DATE_COL_SX}>Datum</TableCell>
+            <TableCell sx={TYPE_COL_SX}>Typ</TableCell>
+            <TableCell sx={WALLET_COL_SX}>Peněženka</TableCell>
             <TableCell>Kategorie</TableCell>
-            <TableCell>Popis</TableCell>
-            <TableCell align="right">Částka</TableCell>
+            <TableCell sx={DESCRIPTION_COL_SX}>Popis</TableCell>
+            <TableCell align="right" sx={{ width: 108, whiteSpace: 'nowrap' }}>
+              Částka
+            </TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -242,7 +289,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           ) : (
             recentTx.map((row, index) => {
               const walletLabel = walletCellText(row);
-              const rowKey = row.id ?? `idx-${index}`;
+              const rowKey = row.id ?? `p${page}-i${index}`;
               const open = expandedIds.has(rowKey);
 
               return (
@@ -254,24 +301,33 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
                     sx={{ cursor: 'pointer' }}
                     aria-expanded={open}
                   >
-                    <TableCell>{formatDateTimeDdMmYyyyHhMm(row.transactionDate)}</TableCell>
-                    <TableCell>{txTypeLabel(row.transactionType as string | undefined)}</TableCell>
                     <TableCell
-                      sx={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                      title={walletLabel}
+                      sx={DATE_COL_SX}
+                      title={formatDateTimeDdMmYyyyHhMm(row.transactionDate)}
                     >
+                      {formatDateTimeDdMmYyyyHhMm(row.transactionDate)}
+                    </TableCell>
+                    <TableCell
+                      sx={TYPE_COL_SX}
+                      title={txTypeLabel(row.transactionType as string | undefined)}
+                    >
+                      {txTypeLabel(row.transactionType as string | undefined)}
+                    </TableCell>
+                    <TableCell sx={WALLET_COL_SX} title={walletLabel}>
                       {walletLabel}
                     </TableCell>
                     <TableCell>{row.categoryName?.trim() ? row.categoryName : '—'}</TableCell>
-                    <TableCell>{row.description ?? row.note ?? '—'}</TableCell>
+                    <TableCell sx={DESCRIPTION_COL_SX}>{row.description ?? row.note ?? '—'}</TableCell>
                     <TableCell
                       align="right"
                       sx={{
+                        width: 108,
+                        whiteSpace: 'nowrap',
                         fontWeight: 600,
                         color: amountColorForType(row.transactionType as string | undefined, theme),
                       }}
                     >
-                      {formatWalletAmount(row.amount, row.currencyCode)}
+                      {formatWalletAmountWholeUnits(row.amount, row.currencyCode)}
                     </TableCell>
                   </TableRow>
                   <TableRow>
@@ -287,6 +343,20 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           )}
         </TableBody>
       </Table>
+      <TablePagination
+        component="div"
+        count={totalElements}
+        page={page}
+        onPageChange={(_, newPage) => {
+          setPage(newPage);
+          setExpandedIds(new Set());
+        }}
+        rowsPerPage={TX_PAGE_SIZE}
+        rowsPerPageOptions={[]}
+        labelDisplayedRows={({ from, to, count }) =>
+          `${from}–${to} z ${count !== -1 ? count : `více než ${to}`}`
+        }
+      />
     </Paper>
   );
 };
