@@ -22,6 +22,8 @@ export interface TransactionResponseDto {
   targetWalletName?: string;
   categoryId?: string;
   categoryName?: string;
+  rootCategoryId?: string;
+  rootCategoryName?: string;
   amount?: number;
   currencyCode?: string;
   balanceAdjustmentDirection?: TransactionResponseDtoBalanceAdjustmentDirection;
