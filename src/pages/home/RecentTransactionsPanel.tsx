@@ -1,5 +1,6 @@
 import { categoryFindAllActive } from '@api/category-controller/category-controller';
 import type {
+  CategoryResponseDto,
   PagedModelCategoryResponseDto,
   PagedModelTransactionResponseDto,
   PagedModelWalletResponseDto,
@@ -7,7 +8,6 @@ import type {
   TransactionResponseDto,
 } from '@api/model';
 import {
-  TransactionFindAllPageableStatus,
   TransactionFindAllPageableTransactionType,
   TransactionResponseDtoBalanceAdjustmentDirection,
   TransactionResponseDtoStatus,
@@ -49,7 +49,23 @@ import {
 } from '@utils/dateTimeCs';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { FC, Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { asCategoryChildren, toCategoryTree } from '@pages/categories/categoryTreeUtils';
 import { formatWalletAmount, formatWalletAmountWholeUnits } from './walletDisplay';
+
+/** Všechny podkategorie (ne kořeny) v pořadí stromu DFS s hloubkou pro odsazení v menu. */
+function buildSubcategoryMenuRows(tree: CategoryResponseDto[]): { id: string; label: string; depth: number }[] {
+  const rows: { id: string; label: string; depth: number }[] = [];
+  const walk = (node: CategoryResponseDto, depth: number) => {
+    const ch = asCategoryChildren(node.children);
+    for (const c of ch) {
+      if (!c.id) continue;
+      rows.push({ id: c.id, label: c.name?.trim() || c.id, depth });
+      walk(c, depth + 1);
+    }
+  };
+  for (const r of tree) walk(r, 0);
+  return rows;
+}
 
 const DEFAULT_ROWS = 25;
 const TX_SORT = ['transactionDate,desc'] as string[];
@@ -83,6 +99,14 @@ const TYPE_COL_SX = {
 
 const WALLET_COL_SX = {
   maxWidth: 214,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap' as const,
+};
+
+const ROOT_CATEGORY_COL_SX = {
+  maxWidth: 160,
+  minWidth: 96,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap' as const,
@@ -220,6 +244,8 @@ function TransactionDetailBlock({ row }: { row: TransactionResponseDto }) {
             {kv('ID peněženky', dash(row.walletId))}
           </>
         )}
+        {kv('Hlavní kategorie', dash(row.rootCategoryName || row.rootCategoryId))}
+        {kv('ID hlavní kategorie', dash(row.rootCategoryId))}
         {kv('Kategorie', dash(row.categoryName || row.categoryId))}
         {kv('ID kategorie', dash(row.categoryId))}
         {kv('Popis', dash(row.description))}
@@ -269,14 +295,7 @@ const TX_TYPE_ORDER = [
   TransactionFindAllPageableTransactionType.BALANCE_ADJUSTMENT,
 ] as const;
 
-const STATUS_ORDER = [
-  TransactionFindAllPageableStatus.COMPLETED,
-  TransactionFindAllPageableStatus.PENDING,
-  TransactionFindAllPageableStatus.CANCELLED,
-] as const;
-
 type TypeFilterValue = '' | TransactionFindAllPageableTransactionType;
-type StatusFilterValue = '' | TransactionFindAllPageableStatus;
 
 export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }) => {
   const theme = useTheme();
@@ -287,9 +306,9 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 300);
   const [categoryId, setCategoryId] = useState('');
+  const [subCategoryId, setSubCategoryId] = useState('');
   const [walletId, setWalletId] = useState('');
   const [transactionType, setTransactionType] = useState<TypeFilterValue>('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('');
   const [dateFromCs, setDateFromCs] = useState(() => formatDateDdMmYyyyFromDate(firstDayOfMonth()));
   const [dateToCs, setDateToCs] = useState(() => formatDateDdMmYyyyFromDate(lastDayOfMonth()));
 
@@ -305,9 +324,9 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     trackerId,
     debouncedSearch,
     categoryId,
+    subCategoryId,
     walletId,
     transactionType,
-    statusFilter,
     dateFromCs,
     dateToCs,
     rowsPerPage,
@@ -325,9 +344,9 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
   const clearFilters = useCallback(() => {
     setSearchInput('');
     setCategoryId('');
+    setSubCategoryId('');
     setWalletId('');
     setTransactionType('');
-    setStatusFilter('');
     setDateFromCs(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
     setDateToCs(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
   }, []);
@@ -340,10 +359,10 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     };
     const q = debouncedSearch.trim();
     if (q) params.search = q;
-    if (categoryId) params.categoryId = categoryId;
+    if (subCategoryId) params.categoryId = subCategoryId;
+    else if (categoryId) params.categoryId = categoryId;
     if (walletId) params.walletId = walletId;
     if (transactionType) params.transactionType = transactionType;
-    if (statusFilter) params.status = statusFilter;
 
     const fromT = dateFromCs.trim();
     const toT = dateToCs.trim();
@@ -388,9 +407,9 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     rowsPerPage,
     debouncedSearch,
     categoryId,
+    subCategoryId,
     walletId,
     transactionType,
-    statusFilter,
     dateFromCs,
     dateToCs,
   ]);
@@ -421,6 +440,12 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
 
   const categories = categoriesRes?.content ?? [];
   const wallets = walletsRes?.content ?? [];
+
+  const categoryTree = useMemo(() => toCategoryTree(categories), [categories]);
+  const subCategoryMenuRows = useMemo(
+    () => buildSubcategoryMenuRows(categoryTree),
+    [categoryTree],
+  );
 
   const {
     data: txPaged,
@@ -588,6 +613,24 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
               ))}
             </Select>
           </FormControl>
+          <FormControl size="small" sx={{ minWidth: 180, maxWidth: 280 }}>
+            <InputLabel id="tx-filter-subcat">Podkategorie</InputLabel>
+            <Select
+              labelId="tx-filter-subcat"
+              label="Podkategorie"
+              value={subCategoryId}
+              onChange={(e) => setSubCategoryId(e.target.value)}
+            >
+              <MenuItem value="">
+                <em>Vše</em>
+              </MenuItem>
+              {subCategoryMenuRows.map(({ id, label, depth }) => (
+                <MenuItem key={id} value={id} sx={{ pl: 2 + depth * 2 }}>
+                  {label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <FormControl size="small" sx={filterSelectSx}>
             <InputLabel id="tx-filter-wallet">Peněženka</InputLabel>
             <Select
@@ -620,24 +663,6 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
               {TX_TYPE_ORDER.map((v) => (
                 <MenuItem key={v} value={v}>
                   {txTypeLabel(v)}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={filterSelectSx}>
-            <InputLabel id="tx-filter-status">Stav</InputLabel>
-            <Select
-              labelId="tx-filter-status"
-              label="Stav"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilterValue)}
-            >
-              <MenuItem value="">
-                <em>Vše</em>
-              </MenuItem>
-              {STATUS_ORDER.map((v) => (
-                <MenuItem key={v} value={v}>
-                  {statusLabel(v)}
                 </MenuItem>
               ))}
             </Select>
@@ -680,6 +705,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
             <TableCell sx={DATE_COL_SX}>Datum</TableCell>
             <TableCell sx={TYPE_COL_SX}>Typ</TableCell>
             <TableCell sx={WALLET_COL_SX}>Peněženka</TableCell>
+            <TableCell sx={ROOT_CATEGORY_COL_SX}>Hlavní kategorie</TableCell>
             <TableCell>Kategorie</TableCell>
             <TableCell sx={DESCRIPTION_COL_SX}>Popis</TableCell>
             <TableCell align="right" sx={{ width: 108, whiteSpace: 'nowrap' }}>
@@ -690,7 +716,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
         <TableBody>
           {recentTx.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6}>
+              <TableCell colSpan={7}>
                 <Typography color="text.secondary">
                   {isPending ? 'Načítání…' : 'Žádné záznamy pro zvolené filtry.'}
                 </Typography>
@@ -726,6 +752,12 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
                     <TableCell sx={WALLET_COL_SX} title={walletLabel}>
                       {walletLabel}
                     </TableCell>
+                    <TableCell
+                      sx={ROOT_CATEGORY_COL_SX}
+                      title={row.rootCategoryName?.trim() || row.rootCategoryId || undefined}
+                    >
+                      {row.rootCategoryName?.trim() ? row.rootCategoryName : '—'}
+                    </TableCell>
                     <TableCell>{row.categoryName?.trim() ? row.categoryName : '—'}</TableCell>
                     <TableCell sx={DESCRIPTION_COL_SX}>{row.description ?? row.note ?? '—'}</TableCell>
                     <TableCell
@@ -741,7 +773,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={6} sx={{ py: 0, borderBottom: open ? undefined : 'none' }}>
+                    <TableCell colSpan={7} sx={{ py: 0, borderBottom: open ? undefined : 'none' }}>
                       <Collapse in={open} timeout="auto" unmountOnExit>
                         <TransactionDetailBlock row={row} />
                       </Collapse>
