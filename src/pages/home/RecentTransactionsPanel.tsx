@@ -20,15 +20,12 @@ import {
 import { walletFindAll } from '@api/wallet-controller/wallet-controller';
 import { useDebouncedValue } from '@hooks/useDebouncedValue';
 import {
+  Autocomplete,
   Box,
   Button,
   Collapse,
-  FormControl,
-  InputLabel,
   Link,
-  MenuItem,
   Paper,
-  Select,
   Stack,
   Table,
   TableBody,
@@ -65,6 +62,20 @@ function buildSubcategoryMenuRows(tree: CategoryResponseDto[]): { id: string; la
   };
   for (const r of tree) walk(r, 0);
   return rows;
+}
+
+/** Lokální filtrování položek v Autocomplete (název nebo id). */
+function filterOptionsByQuery<T extends { label: string; id?: string }>(
+  options: T[],
+  { inputValue }: { inputValue: string },
+): T[] {
+  const q = inputValue.trim().toLowerCase();
+  if (!q) return options;
+  return options.filter((o) => {
+    if (o.label.toLowerCase().includes(q)) return true;
+    if (o.id && o.id.toLowerCase().includes(q)) return true;
+    return false;
+  });
 }
 
 const DEFAULT_ROWS = 25;
@@ -447,6 +458,32 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     [categoryTree],
   );
 
+  const categorySelectOptions = useMemo(
+    () =>
+      categories
+        .filter((c): c is CategoryResponseDto & { id: string } => Boolean(c.id))
+        .map((c) => ({ id: c.id, label: c.name?.trim() || c.id })),
+    [categories],
+  );
+
+  const walletSelectOptions = useMemo(
+    () =>
+      wallets
+        .filter((w): w is (typeof wallets)[number] & { id: string } => Boolean(w.id))
+        .map((w) => ({ id: w.id!, label: w.name?.trim() || w.id! })),
+    [wallets],
+  );
+
+  const typeSelectOptions = useMemo(
+    () =>
+      TX_TYPE_ORDER.map((v) => ({
+        id: v,
+        value: v,
+        label: txTypeLabel(v),
+      })),
+    [],
+  );
+
   const {
     data: txPaged,
     isPending,
@@ -595,78 +632,63 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
             onChange={(e) => setSearchInput(e.target.value)}
             sx={{ minWidth: 200, flex: '1 1 200px' }}
           />
-          <FormControl size="small" sx={filterSelectSx}>
-            <InputLabel id="tx-filter-cat">Kategorie</InputLabel>
-            <Select
-              labelId="tx-filter-cat"
-              label="Kategorie"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-            >
-              <MenuItem value="">
-                <em>Vše</em>
-              </MenuItem>
-              {categories.map((c) => (
-                <MenuItem key={c.id} value={c.id ?? ''}>
-                  {c.name?.trim() || c.id || '—'}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 180, maxWidth: 280 }}>
-            <InputLabel id="tx-filter-subcat">Podkategorie</InputLabel>
-            <Select
-              labelId="tx-filter-subcat"
-              label="Podkategorie"
-              value={subCategoryId}
-              onChange={(e) => setSubCategoryId(e.target.value)}
-            >
-              <MenuItem value="">
-                <em>Vše</em>
-              </MenuItem>
-              {subCategoryMenuRows.map(({ id, label, depth }) => (
-                <MenuItem key={id} value={id} sx={{ pl: 2 + depth * 2 }}>
-                  {label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={filterSelectSx}>
-            <InputLabel id="tx-filter-wallet">Peněženka</InputLabel>
-            <Select
-              labelId="tx-filter-wallet"
-              label="Peněženka"
-              value={walletId}
-              onChange={(e) => setWalletId(e.target.value)}
-            >
-              <MenuItem value="">
-                <em>Vše</em>
-              </MenuItem>
-              {wallets.map((w) => (
-                <MenuItem key={w.id} value={w.id ?? ''}>
-                  {w.name?.trim() || w.id || '—'}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={filterSelectSx}>
-            <InputLabel id="tx-filter-type">Typ</InputLabel>
-            <Select
-              labelId="tx-filter-type"
-              label="Typ"
-              value={transactionType}
-              onChange={(e) => setTransactionType(e.target.value as TypeFilterValue)}
-            >
-              <MenuItem value="">
-                <em>Vše</em>
-              </MenuItem>
-              {TX_TYPE_ORDER.map((v) => (
-                <MenuItem key={v} value={v}>
-                  {txTypeLabel(v)}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            size="small"
+            options={categorySelectOptions}
+            getOptionLabel={(o) => o.label}
+            value={categorySelectOptions.find((o) => o.id === categoryId) ?? null}
+            onChange={(_, v) => setCategoryId(v?.id ?? '')}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            filterOptions={filterOptionsByQuery}
+            noOptionsText="Žádná shoda"
+            renderInput={(params) => <TextField {...params} label="Kategorie" />}
+            sx={filterSelectSx}
+          />
+          <Autocomplete
+            size="small"
+            options={subCategoryMenuRows}
+            getOptionLabel={(o) => o.label}
+            value={subCategoryMenuRows.find((o) => o.id === subCategoryId) ?? null}
+            onChange={(_, v) => setSubCategoryId(v?.id ?? '')}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            filterOptions={filterOptionsByQuery}
+            noOptionsText="Žádná shoda"
+            renderOption={(props, option) => (
+              <Box component="li" {...props} key={option.id} sx={{ pl: 2 + option.depth * 2 }}>
+                {option.label}
+              </Box>
+            )}
+            renderInput={(params) => <TextField {...params} label="Podkategorie" />}
+            sx={{ minWidth: 180, maxWidth: 280 }}
+          />
+          <Autocomplete
+            size="small"
+            options={walletSelectOptions}
+            getOptionLabel={(o) => o.label}
+            value={walletSelectOptions.find((o) => o.id === walletId) ?? null}
+            onChange={(_, v) => setWalletId(v?.id ?? '')}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            filterOptions={filterOptionsByQuery}
+            noOptionsText="Žádná shoda"
+            renderInput={(params) => <TextField {...params} label="Peněženka" />}
+            sx={filterSelectSx}
+          />
+          <Autocomplete
+            size="small"
+            options={typeSelectOptions}
+            getOptionLabel={(o) => o.label}
+            value={
+              transactionType
+                ? typeSelectOptions.find((o) => o.value === transactionType) ?? null
+                : null
+            }
+            onChange={(_, v) => setTransactionType((v?.value ?? '') as TypeFilterValue)}
+            isOptionEqualToValue={(a, b) => a.value === b.value}
+            filterOptions={filterOptionsByQuery}
+            noOptionsText="Žádná shoda"
+            renderInput={(params) => <TextField {...params} label="Typ" />}
+            sx={filterSelectSx}
+          />
           <TextField
             size="small"
             label="Od"
