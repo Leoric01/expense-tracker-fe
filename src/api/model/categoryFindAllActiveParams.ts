@@ -8,6 +8,8 @@
 
 export type CategoryFindAllActiveParams = {
   search?: string;
+  dateFrom?: string;
+  dateTo?: string;
   /**
    * Zero-based page index (0..N)
    * @minimum 0

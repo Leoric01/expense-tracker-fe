@@ -56,6 +56,11 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_API_URL,
           changeOrigin: true,
         },
+        /** API: `PATCH /admin/users/...` — nesmí být celé `/admin`, jinak SPA routy `/admin` a `/admin/portal` dostanou 404. */
+        '/admin/users': {
+          target: env.VITE_API_URL,
+          changeOrigin: true,
+        },
       },
     },
   };

@@ -181,6 +181,19 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     [globalWalletOrder, items],
   );
 
+  /** Součet `endBalance` z dashboardu podle měny (stejný API response jako karty). */
+  const totalFundsDisplayText = useMemo(() => {
+    const byCurrency = new Map<string, number>();
+    for (const s of summaries) {
+      const code = (s.currencyCode?.trim() || 'CZK').toUpperCase();
+      byCurrency.set(code, (byCurrency.get(code) ?? 0) + (s.endBalance ?? 0));
+    }
+    const parts = [...byCurrency.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([code, minorSum]) => formatWalletAmount(minorSum, code));
+    return parts.length > 0 ? parts.join(', ') : '—';
+  }, [summaries]);
+
   const replaceWidgetOrder = useMutation({
     mutationFn: async (nextGlobal: string[]) => {
       const res = await widgetItemReplace('WALLET', nextGlobal);
@@ -422,9 +435,33 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
 
   return (
     <Box>
-      <PageHeading component="h1" gutterBottom>
-        {trackerName}
-      </PageHeading>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1}
+        alignItems={{ xs: 'flex-start', sm: 'baseline' }}
+        justifyContent="space-between"
+        flexWrap="wrap"
+        sx={{ mb: 1 }}
+      >
+        <PageHeading component="h1" gutterBottom={false}>
+          {trackerName}
+        </PageHeading>
+        <Typography variant="body2" component="p" sx={{ m: 0 }}>
+          <Box component="span" sx={{ color: 'text.secondary', mr: 0.5 }}>
+            Celkové prostředky:
+          </Box>
+          <Box
+            component="span"
+            sx={{
+              fontWeight: 600,
+              fontVariantNumeric: 'tabular-nums',
+              color: 'text.primary',
+            }}
+          >
+            {rangeParamsOk && !rangeOrderInvalid ? totalFundsDisplayText : '—'}
+          </Box>
+        </Typography>
+      </Stack>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 1, mt: 2 }}>
         <PageHeading component="h2">Moje peněženky</PageHeading>
@@ -651,7 +688,25 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           trackerId={trackerId}
           trackerName={trackerName}
           walletsFromParent={orderedItems}
-          categoriesQueryEnabled={dashboardFetched}
+          categoriesQueryEnabled={
+            dashboardFetched && rangeParamsOk && !rangeOrderInvalid
+          }
+          categoryActivePeriodIso={dashboardParams}
+          periodSync={{
+            rangeFrom,
+            rangeTo,
+            onRangeFromChange: (e) => setRangeFrom(e.target.value),
+            onRangeToChange: (e) => setRangeTo(e.target.value),
+            onCurrentMonth: () => {
+              setRangeFrom(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
+              setRangeTo(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
+            },
+            rangeOrderInvalid,
+            showIncompleteDateError:
+              !rangeParamsOk &&
+              !rangeOrderInvalid &&
+              Boolean(rangeFrom.trim() || rangeTo.trim()),
+          }}
         />
       )}
 

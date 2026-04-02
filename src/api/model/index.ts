@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
+export * from './adminPasswordResetDto';
 export * from './authenticationRequestDto';
 export * from './authenticationResponseDto';
 export * from './budgetPlanFindAllActiveParams';

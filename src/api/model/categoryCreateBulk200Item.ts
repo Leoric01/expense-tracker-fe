@@ -19,6 +19,7 @@ export type CategoryCreateBulk200Item = {
   iconUrl?: string;
   iconColor?: string;
   activeBudgetPlan?: CategoryActiveBudgetPlanDto;
+  budgetPlans?: CategoryActiveBudgetPlanDto[];
   children?: unknown[];
   createdDate?: string;
   lastModifiedDate?: string;

@@ -7,9 +7,11 @@ import {
   categoryDeactivate,
   categoryFindAllActive,
   categoryUpdate,
+  getCategoryFindAllActiveQueryKey,
 } from '@api/category-controller/category-controller';
 import type {
   BudgetPlanResponseDto,
+  CategoryFindAllActiveParams,
   CategoryResponseDto,
   CreateTransactionRequestDto,
   PagedModelWalletResponseDto,
@@ -59,7 +61,17 @@ import { PageHeading } from '@components/PageHeading';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import {
+  type ChangeEvent,
+  FC,
+  FormEvent,
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { CategoryBudgetPlansDialog } from './CategoryBudgetPlansDialog';
 import {
   budgetAmountToMonthlyEquivalentMinor,
@@ -88,7 +100,7 @@ import {
 } from '@pages/home/transactionFormUtils';
 import { CreateCategoryRequestDtoCategoryKind, CreateTransactionRequestDtoTransactionType } from '@api/model';
 
-const LIST_PARAMS = { page: 0, size: 200 } as const;
+const LIST_BASE: Pick<CategoryFindAllActiveParams, 'page' | 'size'> = { page: 0, size: 200 };
 const BUDGET_LIST_PARAMS = { page: 0, size: 500 } as const;
 const BULK_MAX_LEVEL = 5;
 
@@ -218,6 +230,17 @@ function parseBulkPreviewText(text: string): { rows: BulkPreviewRow[]; error?: s
   return { rows };
 }
 
+/** Stejné období jako u peněženek — stav v `TrackerHomeWallets`. */
+export type CategoriesPeriodSync = {
+  rangeFrom: string;
+  rangeTo: string;
+  onRangeFromChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  onRangeToChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  onCurrentMonth: () => void;
+  rangeOrderInvalid: boolean;
+  showIncompleteDateError: boolean;
+};
+
 export type CategoriesForTrackerProps = {
   trackerId: string;
   trackerName: string;
@@ -227,6 +250,10 @@ export type CategoriesForTrackerProps = {
   embedded?: boolean;
   /** Když false, dotaz na kategorie neběží (řetězení po peněženkách na Domě). */
   categoriesQueryEnabled?: boolean;
+  /** ISO rozmezí pro `categoryFindAllActive` (rozpočty aktivní v období). */
+  categoryActivePeriodIso?: { from: string; to: string } | null;
+  /** Duplicitní Od/Do jako u „Moje peněženky“, aby šlo měnit období u kategorií bez scrollování. */
+  periodSync?: CategoriesPeriodSync;
 };
 
 export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
@@ -235,15 +262,26 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   walletsFromParent,
   embedded,
   categoriesQueryEnabled = true,
+  categoryActivePeriodIso = null,
+  periodSync,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [budgetCategory, setBudgetCategory] = useState<CategoryResponseDto | null>(null);
   const [showOnlyCategoriesWithMovements, setShowOnlyCategoriesWithMovements] = useState(false);
 
+  const categoryListParams = useMemo((): CategoryFindAllActiveParams => {
+    const base: CategoryFindAllActiveParams = { ...LIST_BASE };
+    if (categoryActivePeriodIso) {
+      base.dateFrom = categoryActivePeriodIso.from;
+      base.dateTo = categoryActivePeriodIso.to;
+    }
+    return base;
+  }, [categoryActivePeriodIso]);
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: [`/api/category/${trackerId}/active`, LIST_PARAMS],
-    queryFn: () => categoryFindAllActive(trackerId, LIST_PARAMS),
+    queryKey: getCategoryFindAllActiveQueryKey(trackerId, categoryListParams),
+    queryFn: () => categoryFindAllActive(trackerId, categoryListParams),
     enabled: Boolean(trackerId) && categoriesQueryEnabled,
   });
 
@@ -523,7 +561,9 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const bulkPreview = useMemo(() => parseBulkPreviewText(bulkText), [bulkText]);
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
+    queryClient.invalidateQueries({
+      queryKey: [`/api/category/${trackerId}/active`],
+    });
 
   const invalidateBudgets = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
@@ -847,6 +887,54 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
           Kategorie
         </PageHeading>
       )}
+
+      {periodSync ? (
+        <>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={2}
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+            useFlexGap
+            sx={{ mb: 2, flexWrap: 'wrap' }}
+          >
+            <TextField
+              label="Od"
+              value={periodSync.rangeFrom}
+              onChange={periodSync.onRangeFromChange}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+            <TextField
+              label="Do"
+              value={periodSync.rangeTo}
+              onChange={periodSync.onRangeToChange}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={periodSync.onCurrentMonth}
+              sx={{
+                alignSelf: { xs: 'stretch', sm: 'auto' },
+                width: { xs: '100%', sm: 'auto' },
+              }}
+            >
+              Aktuální měsíc
+            </Button>
+          </Stack>
+          {periodSync.rangeOrderInvalid ? (
+            <Typography color="error" variant="body2" sx={{ mb: 2 }}>
+              Datum „od“ musí být před nebo stejné jako „do“.
+            </Typography>
+          ) : null}
+          {periodSync.showIncompleteDateError ? (
+            <Typography color="error" variant="body2" sx={{ mb: 2 }}>
+              Zadej obě platná data.
+            </Typography>
+          ) : null}
+        </>
+      ) : null}
 
       {isError && (
         <Typography color="error" sx={{ mb: 2 }}>

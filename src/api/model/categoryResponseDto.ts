@@ -19,6 +19,7 @@ export interface CategoryResponseDto {
   iconUrl?: string;
   iconColor?: string;
   activeBudgetPlan?: CategoryActiveBudgetPlanDto;
+  budgetPlans?: CategoryActiveBudgetPlanDto[];
   children?: unknown[];
   createdDate?: string;
   lastModifiedDate?: string;

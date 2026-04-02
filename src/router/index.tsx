@@ -1,7 +1,10 @@
 import { LayoutWrapper } from '@components/layoutWrapper';
+import { AdminOnlyRoute } from '@auth/AdminOnlyRoute';
 import { AuthRedirect } from '@auth/AuthRedirect';
 import { ProtectedRoute } from '@auth/ProtectedRoute';
 import { Activate } from '@pages/Activate';
+import { AdminLogin } from '@pages/admin/AdminLogin';
+import { AdminPortal } from '@pages/admin/AdminPortal';
 import { Home } from '@pages/Home';
 import { Login } from '@pages/Login';
 import { NotFound } from '@pages/NotFound';
@@ -53,6 +56,20 @@ export const router = createBrowserRouter([
       <AuthRedirect>
         <Activate />
       </AuthRedirect>
+    ),
+  },
+  {
+    path: '/admin',
+    element: <AdminLogin />,
+  },
+  {
+    path: '/admin/portal',
+    element: (
+      <ProtectedRoute redirectTo="/admin">
+        <AdminOnlyRoute>
+          <AdminPortal />
+        </AdminOnlyRoute>
+      </ProtectedRoute>
     ),
   },
   {
