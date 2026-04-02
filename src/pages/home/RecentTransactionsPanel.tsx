@@ -40,6 +40,8 @@ import type { Theme } from '@mui/material/styles';
 import { useTheme } from '@mui/material/styles';
 import { dateRangeDdMmYyyyToIsoParams, firstDayOfMonth, lastDayOfMonth } from '@utils/dashboardPeriod';
 import {
+  calendarDayEndUtcIso,
+  calendarDayStartUtcIso,
   formatDateDdMmYyyyFromDate,
   formatDateTimeDdMmYyyyHhMm,
   parseCsDateTime,
@@ -387,28 +389,10 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
       const fromParsed = fromT ? parseCsDateTime(fromT) : null;
       const toParsed = toT ? parseCsDateTime(toT) : null;
       if (fromParsed) {
-        const start = new Date(
-          fromParsed.getFullYear(),
-          fromParsed.getMonth(),
-          fromParsed.getDate(),
-          0,
-          0,
-          0,
-          0,
-        );
-        params.dateFrom = start.toISOString();
+        params.dateFrom = calendarDayStartUtcIso(fromParsed);
       }
       if (toParsed) {
-        const end = new Date(
-          toParsed.getFullYear(),
-          toParsed.getMonth(),
-          toParsed.getDate(),
-          23,
-          59,
-          59,
-          999,
-        );
-        params.dateTo = end.toISOString();
+        params.dateTo = calendarDayEndUtcIso(toParsed);
       }
     }
 

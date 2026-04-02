@@ -1,4 +1,4 @@
-import { parseCsDateTime } from './dateTimeCs';
+import { calendarDayEndUtcIso, calendarDayStartUtcIso, parseCsDateTime } from './dateTimeCs';
 
 /** `YYYY-MM-DD` v lokálním kalendáři (pro API nebo `<input type="date">`). */
 export function toYyyyMmDd(d: Date): string {
@@ -37,7 +37,9 @@ export function dateRangeLocalToIsoParams(
 
 /**
  * ISO parametry z textových polí `dd.MM.yyyy` (viz `parseCsDateTime`).
- * Neplatný vstup, neúplné datum nebo „od“ &gt; „do“ → `null`.
+ * Kalendářní dny v URL jako **UTC** podle zadaných čísel dne/měsíce/roku (ne lokální půlnoc → `toISOString()`,
+ * která posouvala hranice o den v query stringu).
+ * Neplatný vstup nebo „od“ &gt; „do“ → `null`.
  */
 export function dateRangeDdMmYyyyToIsoParams(
   fromDdMmYyyy: string,
@@ -46,9 +48,12 @@ export function dateRangeDdMmYyyyToIsoParams(
   const dFrom = parseCsDateTime(fromDdMmYyyy.trim());
   const dTo = parseCsDateTime(toDdMmYyyy.trim());
   if (!dFrom || !dTo) return null;
-  const start = new Date(dFrom.getFullYear(), dFrom.getMonth(), dFrom.getDate(), 0, 0, 0, 0);
-  const end = new Date(dTo.getFullYear(), dTo.getMonth(), dTo.getDate(), 23, 59, 59, 999);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-  if (start.getTime() > end.getTime()) return null;
-  return { from: start.toISOString(), to: end.toISOString() };
+  const startUtc = Date.UTC(dFrom.getFullYear(), dFrom.getMonth(), dFrom.getDate());
+  const endUtc = Date.UTC(dTo.getFullYear(), dTo.getMonth(), dTo.getDate());
+  if (Number.isNaN(startUtc) || Number.isNaN(endUtc)) return null;
+  if (startUtc > endUtc) return null;
+  return {
+    from: calendarDayStartUtcIso(dFrom),
+    to: calendarDayEndUtcIso(dTo),
+  };
 }

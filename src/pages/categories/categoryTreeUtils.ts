@@ -159,11 +159,18 @@ export function activeBudgetPlanToBudgetPlanResponse(
   };
 }
 
-/** 0–1 plán z `category.activeBudgetPlan` ve tvaru očekávaném UI (řádek + dialog). */
+/**
+ * Plány vnořené u kategorie — ve tvaru očekávaném UI (řádek + dialog).
+ * Preferuje `budgetPlans` (např. po `GET .../active?dateFrom&dateTo`), jinak jeden `activeBudgetPlan`.
+ */
 export function budgetPlansFromCategoryEmbedded(
   category: CategoryResponseDto | null | undefined,
 ): BudgetPlanResponseDto[] {
   if (!category?.id) return [];
+  const multi = category.budgetPlans;
+  if (multi && multi.length > 0) {
+    return multi.map((p) => activeBudgetPlanToBudgetPlanResponse(category.id!, category.name, p));
+  }
   const p = category.activeBudgetPlan;
   if (p == null) return [];
   return [activeBudgetPlanToBudgetPlanResponse(category.id, category.name, p)];
