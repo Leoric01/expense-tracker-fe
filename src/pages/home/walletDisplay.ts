@@ -1,5 +1,5 @@
 import { CreateAccountRequestDtoAccountType, WalletResponseDtoWalletType } from '@api/model';
-import { minorUnitsToMajor } from '@utils/moneyMinorUnits';
+import { DEFAULT_FIAT_SCALE, minorUnitsToMajorForScale } from '@utils/moneyMinorUnits';
 
 const TYPE_LABELS: Record<string, string> = {
   [WalletResponseDtoWalletType.CASH]: 'Hotovost',
@@ -43,21 +43,34 @@ export const ACCOUNT_TYPE_OPTIONS = ACCOUNT_TYPE_ORDER.map((v) => ({
   label: ACCOUNT_TYPE_LABELS[v],
 }));
 
-/** `amountMinor` = hodnota z API v haléřích/centech. */
-export function formatWalletAmount(amountMinor: number | undefined, currencyCode?: string): string {
-  const major = minorUnitsToMajor(amountMinor);
+/**
+ * `amountMinor` = hodnota z API v nejmenších jednotkách; `minorUnitScale` odpovídá `Asset.scale`
+ * (2 = haléře u fiat, 8 = satoshi u BTC).
+ */
+export function formatWalletAmount(
+  amountMinor: number | undefined,
+  currencyCode?: string,
+  minorUnitScale: number = DEFAULT_FIAT_SCALE,
+): string {
+  const major = minorUnitsToMajorForScale(amountMinor, minorUnitScale);
   if (major === undefined) return '—';
   const code = (currencyCode ?? 'CZK').toUpperCase();
-  try {
-    return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: code }).format(major);
-  } catch {
-    return `${major.toLocaleString('cs-CZ')} ${code}`;
+  if (minorUnitScale === DEFAULT_FIAT_SCALE) {
+    try {
+      return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: code }).format(major);
+    } catch {
+      /* neplatný ISO kód — zobraz jako číslo */
+    }
   }
+  return `${major.toLocaleString('cs-CZ', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Math.min(minorUnitScale, 18),
+  })} ${code}`;
 }
 
 /** Stejné jako `formatWalletAmount`, ale bez desetinných míst (zaokrouhlení dle `Intl`). */
 export function formatWalletAmountWholeUnits(amountMinor: number | undefined, currencyCode?: string): string {
-  const major = minorUnitsToMajor(amountMinor);
+  const major = minorUnitsToMajorForScale(amountMinor, DEFAULT_FIAT_SCALE);
   if (major === undefined) return '—';
   const code = (currencyCode ?? 'CZK').toUpperCase();
   try {

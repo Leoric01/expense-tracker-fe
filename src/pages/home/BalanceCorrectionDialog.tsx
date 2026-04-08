@@ -13,6 +13,7 @@ import {
 import type { WalletResponseDto } from '@api/model';
 import { FormEvent, memo, useEffect, useState } from 'react';
 import { AmountTextFieldCs } from './AmountTextFieldCs';
+import { DEFAULT_FIAT_SCALE } from '@utils/moneyMinorUnits';
 import { formatWalletAmount } from './walletDisplay';
 import { defaultDatetimeLocal, formatAmountDisplayCs, parseAmount, toIsoFromDatetimeLocal } from './transactionFormUtils';
 
@@ -25,6 +26,8 @@ export type BalanceCorrectionConfirmPayload = {
 type Props = {
   open: boolean;
   wallet?: WalletResponseDto | null;
+  /** Odpovídá `Asset.scale` držby (2 = fiat, 8 = BTC). */
+  amountMinorUnitScale?: number;
   submitting: boolean;
   onClose: () => void;
   onConfirm: (payload: BalanceCorrectionConfirmPayload) => void | Promise<void>;
@@ -35,6 +38,7 @@ type Props = {
 export const BalanceCorrectionDialog = memo(function BalanceCorrectionDialog({
   open,
   wallet,
+  amountMinorUnitScale = DEFAULT_FIAT_SCALE,
   submitting,
   onClose,
   onConfirm,
@@ -86,7 +90,9 @@ export const BalanceCorrectionDialog = memo(function BalanceCorrectionDialog({
             </Typography>
             <Typography variant="body2">
               Účetní zůstatek:{' '}
-              <strong>{formatWalletAmount(wallet?.currentBalance, wallet?.currencyCode)}</strong>
+              <strong>
+                {formatWalletAmount(wallet?.currentBalance, wallet?.currencyCode, amountMinorUnitScale)}
+              </strong>
             </Typography>
             <Alert severity="info" variant="outlined">
               Zadej skutečný zůstatek podle reality; rozdíl vůči systému dopočítá server.

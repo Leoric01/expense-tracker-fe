@@ -12,6 +12,7 @@ export interface HoldingSummaryResponseDto {
   accountName?: string;
   institutionName?: string;
   assetCode?: string;
+  assetScale?: number;
   periodFrom?: string;
   periodTo?: string;
   startBalance?: number;

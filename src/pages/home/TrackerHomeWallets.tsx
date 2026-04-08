@@ -75,7 +75,7 @@ import {
   lastDayOfMonth,
 } from '@utils/dashboardPeriod';
 import { formatDateDdMmYyyyFromDate, parseCsDateTime } from '@utils/dateTimeCs';
-import { majorToMinorUnits } from '@utils/moneyMinorUnits';
+import { DEFAULT_FIAT_SCALE, majorToMinorUnitsForScale } from '@utils/moneyMinorUnits';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { DragEvent, FC, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -435,6 +435,17 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     [orderedInstitutions],
   );
 
+  /** Pro převody/korekce podle holdingId — měřítko z dashboardu (`HoldingSummaryResponseDto.assetScale`). */
+  const holdingScaleById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of summaries) {
+      if (s.holdingId && s.assetScale != null && Number.isFinite(s.assetScale)) {
+        m.set(s.holdingId, s.assetScale);
+      }
+    }
+    return m;
+  }, [summaries]);
+
   const orderedHoldingsForCategories = useMemo(
     () => institutionCards.flatMap((c) => c.accounts.flatMap((a) => a.holdings.map((h) => h.wallet))),
     [institutionCards],
@@ -444,14 +455,18 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
 
   /** Součet `endBalance` z dashboardu podle měny (stejný API response jako karty). */
   const totalFundsDisplayText = useMemo(() => {
-    const byCurrency = new Map<string, number>();
+    const byCurrency = new Map<string, { sum: number; scale: number }>();
     for (const s of summaries) {
       const code = (s.assetCode?.trim() || 'CZK').toUpperCase();
-      byCurrency.set(code, (byCurrency.get(code) ?? 0) + (s.endBalance ?? 0));
+      const scale = s.assetScale ?? DEFAULT_FIAT_SCALE;
+      const prev = byCurrency.get(code);
+      const add = s.endBalance ?? 0;
+      if (!prev) byCurrency.set(code, { sum: add, scale });
+      else byCurrency.set(code, { sum: prev.sum + add, scale: prev.scale });
     }
     const parts = [...byCurrency.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([code, minorSum]) => formatWalletAmount(minorSum, code));
+      .map(([code, { sum, scale }]) => formatWalletAmount(sum, code, scale));
     return parts.length > 0 ? parts.join(', ') : '—';
   }, [summaries]);
 
@@ -598,7 +613,10 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     let initialAmount: number | undefined;
     if (bal !== '') {
       const n = parseFloat(bal.replace(',', '.'));
-      if (!Number.isNaN(n)) initialAmount = majorToMinorUnits(n);
+      if (!Number.isNaN(n)) {
+        const scale = selectedAsset?.scale ?? DEFAULT_FIAT_SCALE;
+        initialAmount = majorToMinorUnitsForScale(n, scale);
+      }
     }
 
     setSubmitting(true);
@@ -660,11 +678,13 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       if (!transferPair || !transferCurrenciesOk) return;
       setTransferSubmitting(true);
       try {
+        const transferScale =
+          holdingScaleById.get(transferPair.sourceId) ?? DEFAULT_FIAT_SCALE;
         const res = await transactionCreate(trackerId, {
           transactionType: CreateTransactionRequestDtoTransactionType.TRANSFER,
           sourceHoldingId: transferPair.sourceId,
           targetHoldingId: transferPair.targetId,
-          amount: majorToMinorUnits(payload.amountMajor),
+          amount: majorToMinorUnitsForScale(payload.amountMajor, transferScale),
           transactionDate: payload.transactionDateIso,
           ...(payload.description ? { description: payload.description } : {}),
         });
@@ -681,7 +701,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         setTransferSubmitting(false);
       }
     },
-    [transferPair, transferCurrenciesOk, trackerId, enqueueSnackbar, invalidateFinance],
+    [transferPair, transferCurrenciesOk, trackerId, enqueueSnackbar, invalidateFinance, holdingScaleById],
   );
 
   const handleCorrectionConfirm = useCallback(
@@ -689,10 +709,11 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       if (!correctionWallet?.id) return;
       setCorrSubmitting(true);
       try {
+        const corrScale = holdingScaleById.get(correctionWallet.id) ?? DEFAULT_FIAT_SCALE;
         const res = await transactionCreate(trackerId, {
           transactionType: CreateTransactionRequestDtoTransactionType.BALANCE_ADJUSTMENT,
           holdingId: correctionWallet.id,
-          correctedBalance: majorToMinorUnits(payload.correctedBalanceMajor),
+          correctedBalance: majorToMinorUnitsForScale(payload.correctedBalanceMajor, corrScale),
           transactionDate: payload.transactionDateIso,
           ...(payload.note ? { note: payload.note } : {}),
         });
@@ -709,7 +730,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         setCorrSubmitting(false);
       }
     },
-    [correctionWallet?.id, trackerId, enqueueSnackbar, invalidateFinance],
+    [correctionWallet?.id, trackerId, enqueueSnackbar, invalidateFinance, holdingScaleById],
   );
 
   const clearDragVisual = () => {
@@ -1054,6 +1075,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                           <Stack spacing={1} sx={{ pl: 0.5, borderLeft: 2, borderColor: 'divider' }}>
                             {acc.holdings.map(({ summary: sm, wallet: w }) => {
                               const hid = w.id ?? '';
+                              const rowScale = sm.assetScale ?? DEFAULT_FIAT_SCALE;
                               const canDragTransfer = Boolean(w.id) && w.active !== false;
                               const isRowDragging = draggingId === w.id;
                               const isRowDropHoverTransfer =
@@ -1115,7 +1137,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         Zůstatek
                                       </Typography>
                                       <Typography variant="body1" sx={{ fontWeight: 600, lineHeight: 1.25 }}>
-                                        {formatWalletAmount(w.currentBalance, w.currencyCode)}
+                                        {formatWalletAmount(w.currentBalance, w.currencyCode, rowScale)}
                                       </Typography>
                                     </Stack>
                                     <Stack
@@ -1129,7 +1151,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         display="block"
                                         sx={{ lineHeight: 1.35 }}
                                       >
-                                        Začátek {formatWalletAmount(sm.startBalance, w.currencyCode)}
+                                        Začátek {formatWalletAmount(sm.startBalance, w.currencyCode, rowScale)}
                                       </Typography>
                                       <Typography
                                         variant="caption"
@@ -1137,7 +1159,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         display="block"
                                         sx={{ lineHeight: 1.35 }}
                                       >
-                                        Příjem {formatWalletAmount(sm.totalIncome, w.currencyCode)}
+                                        Příjem {formatWalletAmount(sm.totalIncome, w.currencyCode, rowScale)}
                                       </Typography>
                                       <Typography
                                         variant="caption"
@@ -1145,7 +1167,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         display="block"
                                         sx={{ lineHeight: 1.35 }}
                                       >
-                                        Výdaj {formatWalletAmount(sm.totalExpense, w.currencyCode)}
+                                        Výdaj {formatWalletAmount(sm.totalExpense, w.currencyCode, rowScale)}
                                       </Typography>
                                       <Divider sx={{ alignSelf: 'stretch', width: '100%', my: 0.35 }} />
                                       <Typography
@@ -1154,7 +1176,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         display="block"
                                         sx={{ lineHeight: 1.35 }}
                                       >
-                                        Čistá změna {formatWalletAmount(sm.difference, w.currencyCode)}
+                                        Čistá změna {formatWalletAmount(sm.difference, w.currencyCode, rowScale)}
                                       </Typography>
                                     </Stack>
                                   </Box>
@@ -1239,6 +1261,11 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       <BalanceCorrectionDialog
         open={Boolean(correctionWallet)}
         wallet={correctionWallet}
+        amountMinorUnitScale={
+          correctionWallet?.id
+            ? holdingScaleById.get(correctionWallet.id) ?? DEFAULT_FIAT_SCALE
+            : DEFAULT_FIAT_SCALE
+        }
         submitting={corrSubmitting}
         onClose={() => !corrSubmitting && setCorrectionWallet(null)}
         onConfirm={handleCorrectionConfirm}
