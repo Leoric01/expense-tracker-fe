@@ -10,7 +10,7 @@ import type { CreateRecurringTransactionRequestDtoTransactionType } from './crea
 
 export interface CreateRecurringTransactionRequestDto {
   transactionType: CreateRecurringTransactionRequestDtoTransactionType;
-  walletId: string;
+  holdingId: string;
   categoryId?: string;
   amount: number;
   currencyCode: string;

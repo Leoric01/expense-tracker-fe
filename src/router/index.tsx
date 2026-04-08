@@ -26,6 +26,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Home /> },
       { path: 'trackers', element: <ExpenseTrackers /> },
       { path: 'categories', element: <CategoriesPage /> },
+      { path: 'importy', element: <Navigate to="/?tab=importy" replace /> },
       { path: 'wallets', element: <Navigate to="/" replace /> },
       { path: 'transactions', element: <Navigate to="/" replace /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */

@@ -1,9 +1,10 @@
 import { categoryFindAllActive } from '@api/category-controller/category-controller';
 import type {
   CategoryResponseDto,
+  HoldingResponseDto,
   PagedModelCategoryResponseDto,
+  PagedModelHoldingResponseDto,
   PagedModelTransactionResponseDto,
-  PagedModelWalletResponseDto,
   TransactionFindAllPageableParams,
   TransactionResponseDto,
 } from '@api/model';
@@ -17,7 +18,7 @@ import {
   getTransactionFindAllPageableQueryKey,
   transactionFindAllPageable,
 } from '@api/transaction-controller/transaction-controller';
-import { walletFindAll } from '@api/wallet-controller/wallet-controller';
+import { holdingFindAll } from '@api/holding-controller/holding-controller';
 import { useDebouncedValue } from '@hooks/useDebouncedValue';
 import {
   Autocomplete,
@@ -49,6 +50,7 @@ import {
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { FC, Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { asCategoryChildren, toCategoryTree } from '@pages/categories/categoryTreeUtils';
+import { holdingLabel } from './holdingAdapter';
 import { formatWalletAmount, formatWalletAmountWholeUnits } from './walletDisplay';
 
 /** Všechny podkategorie (ne kořeny) v pořadí stromu DFS s hloubkou pro odsazení v menu. */
@@ -188,19 +190,19 @@ function amountColorForType(t: string | undefined, theme: Theme): string {
   }
 }
 
-function walletCellText(row: TransactionResponseDto): string {
+function holdingCellText(row: TransactionResponseDto): string {
   const t = row.transactionType as string | undefined;
   if (t === TransactionResponseDtoTransactionType.TRANSFER) {
-    const from = row.sourceWalletName?.trim() || row.sourceWalletId || '';
-    const to = row.targetWalletName?.trim() || row.targetWalletId || '';
+    const from = row.sourceHoldingName?.trim() || row.sourceHoldingId || '';
+    const to = row.targetHoldingName?.trim() || row.targetHoldingId || '';
     if (from && to) return `${from} → ${to}`;
     if (from) return from;
     if (to) return to;
     return '—';
   }
-  const name = row.walletName?.trim();
+  const name = row.holdingName?.trim();
   if (name) return name;
-  if (row.walletId) return row.walletId;
+  if (row.holdingId) return row.holdingId;
   return '—';
 }
 
@@ -246,15 +248,15 @@ function TransactionDetailBlock({ row }: { row: TransactionResponseDto }) {
           : null}
         {t === TransactionResponseDtoTransactionType.TRANSFER ? (
           <>
-            {kv('Peněženka zdroj', dash(row.sourceWalletName || row.sourceWalletId))}
-            {kv('ID zdrojové peněženky', dash(row.sourceWalletId))}
-            {kv('Peněženka cíl', dash(row.targetWalletName || row.targetWalletId))}
-            {kv('ID cílové peněženky', dash(row.targetWalletId))}
+            {kv('Pozice zdroj', dash(row.sourceHoldingName || row.sourceHoldingId))}
+            {kv('ID zdrojové pozice', dash(row.sourceHoldingId))}
+            {kv('Pozice cíl', dash(row.targetHoldingName || row.targetHoldingId))}
+            {kv('ID cílové pozice', dash(row.targetHoldingId))}
           </>
         ) : (
           <>
-            {kv('Peněženka', dash(row.walletName || row.walletId))}
-            {kv('ID peněženky', dash(row.walletId))}
+            {kv('Pozice', dash(row.holdingName || row.holdingId))}
+            {kv('ID pozice', dash(row.holdingId))}
           </>
         )}
         {kv('Hlavní kategorie', dash(row.rootCategoryName || row.rootCategoryId))}
@@ -320,7 +322,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
   const debouncedSearch = useDebouncedValue(searchInput, 300);
   const [categoryId, setCategoryId] = useState('');
   const [subCategoryId, setSubCategoryId] = useState('');
-  const [walletId, setWalletId] = useState('');
+  const [holdingId, setHoldingId] = useState('');
   const [transactionType, setTransactionType] = useState<TypeFilterValue>('');
   const [dateFromCs, setDateFromCs] = useState(() => formatDateDdMmYyyyFromDate(firstDayOfMonth()));
   const [dateToCs, setDateToCs] = useState(() => formatDateDdMmYyyyFromDate(lastDayOfMonth()));
@@ -338,7 +340,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     debouncedSearch,
     categoryId,
     subCategoryId,
-    walletId,
+    holdingId,
     transactionType,
     dateFromCs,
     dateToCs,
@@ -358,7 +360,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     setSearchInput('');
     setCategoryId('');
     setSubCategoryId('');
-    setWalletId('');
+    setHoldingId('');
     setTransactionType('');
     setDateFromCs(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
     setDateToCs(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
@@ -374,7 +376,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     if (q) params.search = q;
     if (subCategoryId) params.categoryId = subCategoryId;
     else if (categoryId) params.categoryId = categoryId;
-    if (walletId) params.walletId = walletId;
+    if (holdingId) params.holdingId = holdingId;
     if (transactionType) params.transactionType = transactionType;
 
     const fromT = dateFromCs.trim();
@@ -403,7 +405,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     debouncedSearch,
     categoryId,
     subCategoryId,
-    walletId,
+    holdingId,
     transactionType,
     dateFromCs,
     dateToCs,
@@ -422,19 +424,19 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     staleTime: 60_000,
   });
 
-  const { data: walletsRes } = useQuery({
-    queryKey: ['walletFindAll', trackerId, 'history-panel'] as const,
+  const { data: holdingsRes } = useQuery({
+    queryKey: ['holdingFindAll', trackerId, 'history-panel'] as const,
     queryFn: async () => {
-      const res = await walletFindAll(trackerId, WALLET_LIST_PARAMS);
-      if (res.status < 200 || res.status >= 300) throw new Error('wallets');
-      return res.data as PagedModelWalletResponseDto;
+      const res = await holdingFindAll(trackerId, WALLET_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('holdings');
+      return res.data as PagedModelHoldingResponseDto;
     },
     enabled: Boolean(trackerId),
     staleTime: 60_000,
   });
 
   const categories = categoriesRes?.content ?? [];
-  const wallets = walletsRes?.content ?? [];
+  const holdings = holdingsRes?.content ?? [];
 
   const categoryTree = useMemo(() => toCategoryTree(categories), [categories]);
   const subCategoryMenuRows = useMemo(
@@ -450,12 +452,12 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     [categories],
   );
 
-  const walletSelectOptions = useMemo(
+  const holdingSelectOptions = useMemo(
     () =>
-      wallets
-        .filter((w): w is (typeof wallets)[number] & { id: string } => Boolean(w.id))
-        .map((w) => ({ id: w.id!, label: w.name?.trim() || w.id! })),
-    [wallets],
+      holdings
+        .filter((h): h is HoldingResponseDto & { id: string } => Boolean(h.id))
+        .map((h) => ({ id: h.id!, label: holdingLabel(h) })),
+    [holdings],
   );
 
   const typeSelectOptions = useMemo(
@@ -647,14 +649,14 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           />
           <Autocomplete
             size="small"
-            options={walletSelectOptions}
+            options={holdingSelectOptions}
             getOptionLabel={(o) => o.label}
-            value={walletSelectOptions.find((o) => o.id === walletId) ?? null}
-            onChange={(_, v) => setWalletId(v?.id ?? '')}
+            value={holdingSelectOptions.find((o) => o.id === holdingId) ?? null}
+            onChange={(_, v) => setHoldingId(v?.id ?? '')}
             isOptionEqualToValue={(a, b) => a.id === b.id}
             filterOptions={filterOptionsByQuery}
             noOptionsText="Žádná shoda"
-            renderInput={(params) => <TextField {...params} label="Peněženka" />}
+            renderInput={(params) => <TextField {...params} label="Pozice" />}
             sx={filterSelectSx}
           />
           <Autocomplete
@@ -710,7 +712,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           <TableRow>
             <TableCell sx={DATE_COL_SX}>Datum</TableCell>
             <TableCell sx={TYPE_COL_SX}>Typ</TableCell>
-            <TableCell sx={WALLET_COL_SX}>Peněženka</TableCell>
+            <TableCell sx={WALLET_COL_SX}>Pozice</TableCell>
             <TableCell sx={ROOT_CATEGORY_COL_SX}>Hlavní kategorie</TableCell>
             <TableCell>Kategorie</TableCell>
             <TableCell sx={DESCRIPTION_COL_SX}>Popis</TableCell>
@@ -730,7 +732,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
             </TableRow>
           ) : (
             recentTx.map((row, index) => {
-              const walletLabel = walletCellText(row);
+              const walletLabel = holdingCellText(row);
               const rowKey = row.id ?? `p${page}-i${index}`;
               const open = expandedIds.has(rowKey);
 

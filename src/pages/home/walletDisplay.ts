@@ -1,4 +1,4 @@
-import { CreateWalletRequestDtoWalletType, WalletResponseDtoWalletType } from '@api/model';
+import { CreateAccountRequestDtoAccountType, WalletResponseDtoWalletType } from '@api/model';
 import { minorUnitsToMajor } from '@utils/moneyMinorUnits';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -15,9 +15,32 @@ export function walletTypeLabel(t?: string): string {
   return TYPE_LABELS[t] ?? t;
 }
 
-export const WALLET_TYPE_OPTIONS = Object.values(CreateWalletRequestDtoWalletType).map((v) => ({
+/** České popisky; klíče = backend `AccountType` / `CreateAccountRequestDto.accountType`. */
+const ACCOUNT_TYPE_LABELS: Record<CreateAccountRequestDtoAccountType, string> = {
+  [CreateAccountRequestDtoAccountType.CASH]: 'Hotovost',
+  [CreateAccountRequestDtoAccountType.BANK_ACCOUNT]: 'Bankovní účet',
+  [CreateAccountRequestDtoAccountType.CREDIT_CARD]: 'Kreditní karta',
+  [CreateAccountRequestDtoAccountType.SAVINGS]: 'Spoření',
+  [CreateAccountRequestDtoAccountType.INVESTMENT]: 'Investice',
+  [CreateAccountRequestDtoAccountType.EXCHANGE_SPOT]: 'Spot (burza)',
+  [CreateAccountRequestDtoAccountType.OTHER]: 'Jiné',
+};
+
+/** Pořadí v selectu = pořadí deklarace na backendu (`AccountType`). */
+const ACCOUNT_TYPE_ORDER = [
+  CreateAccountRequestDtoAccountType.CASH,
+  CreateAccountRequestDtoAccountType.BANK_ACCOUNT,
+  CreateAccountRequestDtoAccountType.CREDIT_CARD,
+  CreateAccountRequestDtoAccountType.SAVINGS,
+  CreateAccountRequestDtoAccountType.INVESTMENT,
+  CreateAccountRequestDtoAccountType.EXCHANGE_SPOT,
+  CreateAccountRequestDtoAccountType.OTHER,
+] as const satisfies readonly CreateAccountRequestDtoAccountType[];
+
+/** Typ účtu pro vytvoření držby (holding). */
+export const ACCOUNT_TYPE_OPTIONS = ACCOUNT_TYPE_ORDER.map((v) => ({
   value: v,
-  label: TYPE_LABELS[v] ?? v,
+  label: ACCOUNT_TYPE_LABELS[v],
 }));
 
 /** `amountMinor` = hodnota z API v haléřích/centech. */

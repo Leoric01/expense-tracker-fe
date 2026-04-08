@@ -1,6 +1,9 @@
-import { recurringBudgetFindAllActive } from '@api/recurring-budget-controller/recurring-budget-controller';
+import {
+  recurringBudgetFindAllActive,
+  syncRecurringBudgets,
+} from '@api/recurring-budget-controller/recurring-budget-controller';
 import { transactionCreate } from '@api/transaction-controller/transaction-controller';
-import { walletFindAll } from '@api/wallet-controller/wallet-controller';
+import { holdingFindAll } from '@api/holding-controller/holding-controller';
 import {
   categoryCreateBulk,
   categoryCreate,
@@ -14,21 +17,23 @@ import type {
   CategoryFindAllActiveParams,
   CategoryResponseDto,
   CreateTransactionRequestDto,
-  PagedModelWalletResponseDto,
+  PagedModelHoldingResponseDto,
   WalletResponseDto,
   CreateCategoryBulkRequestDto,
   CreateCategoryRequestDto,
   PagedModelCategoryResponseDto,
   PagedModelRecurringBudgetResponseDto,
   RecurringBudgetResponseDto,
+  SyncRecurringBudgetResponseDto,
   UpdateCategoryRequestDto,
 } from '@api/model';
 import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PostAddIcon from '@mui/icons-material/PostAdd';
+import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -62,11 +67,12 @@ import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import {
-  type ChangeEvent,
   FC,
   FormEvent,
   Fragment,
+  memo,
   type ReactNode,
+  startTransition,
   useCallback,
   useMemo,
   useRef,
@@ -78,6 +84,7 @@ import {
   CATEGORY_BUDGET_LIST_ROW_GRID_INNER,
   CategoryBudgetPlanUsageLine,
 } from './categoryBudgetUsage';
+import { holdingToWalletDto } from '@pages/home/holdingAdapter';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { majorToMinorUnits } from '@utils/moneyMinorUnits';
 import {
@@ -230,40 +237,41 @@ function parseBulkPreviewText(text: string): { rows: BulkPreviewRow[]; error?: s
   return { rows };
 }
 
-/** Stejné období jako u peněženek — stav v `TrackerHomeWallets`. */
-export type CategoriesPeriodSync = {
-  rangeFrom: string;
-  rangeTo: string;
-  onRangeFromChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  onRangeToChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  onCurrentMonth: () => void;
-  rangeOrderInvalid: boolean;
-  showIncompleteDateError: boolean;
-};
-
 export type CategoriesForTrackerProps = {
   trackerId: string;
   trackerName: string;
-  /** Volitelné peněženky z rodiče (např. dashboard na Domě) pro vynechání extra `walletFindAll`. */
+  /** Volitelné pozice z rodiče (např. dashboard na Domě) pro vynechání extra `holdingFindAll`. */
   walletsFromParent?: WalletResponseDto[];
   /** V záložce na Domě — bez vlastního hlavního nadpisu „Kategorie“. */
   embedded?: boolean;
   /** Když false, dotaz na kategorie neběží (řetězení po peněženkách na Domě). */
   categoriesQueryEnabled?: boolean;
-  /** ISO rozmezí pro `categoryFindAllActive` (rozpočty aktivní v období). */
+  /** ISO rozmezí pro `categoryFindAllActive` (rozpočty aktivní v období) — stejné jako u peněženek nahoře. */
   categoryActivePeriodIso?: { from: string; to: string } | null;
-  /** Duplicitní Od/Do jako u „Moje peněženky“, aby šlo měnit období u kategorií bez scrollování. */
-  periodSync?: CategoriesPeriodSync;
 };
 
-export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
+function categoriesForTrackerPropsEqual(
+  a: CategoriesForTrackerProps,
+  b: CategoriesForTrackerProps,
+): boolean {
+  return (
+    a.trackerId === b.trackerId &&
+    a.trackerName === b.trackerName &&
+    a.embedded === b.embedded &&
+    a.categoriesQueryEnabled === b.categoriesQueryEnabled &&
+    a.walletsFromParent === b.walletsFromParent &&
+    (a.categoryActivePeriodIso?.from ?? '') === (b.categoryActivePeriodIso?.from ?? '') &&
+    (a.categoryActivePeriodIso?.to ?? '') === (b.categoryActivePeriodIso?.to ?? '')
+  );
+}
+
+const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   trackerId,
   trackerName,
   walletsFromParent,
   embedded,
   categoriesQueryEnabled = true,
   categoryActivePeriodIso = null,
-  periodSync,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
@@ -297,11 +305,11 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   });
 
   const { data: walletsData } = useQuery({
-    queryKey: ['/api/wallet', trackerId, BUDGET_LIST_PARAMS],
+    queryKey: ['/api/holding', trackerId, BUDGET_LIST_PARAMS],
     queryFn: async () => {
-      const res = await walletFindAll(trackerId, BUDGET_LIST_PARAMS);
-      if (res.status < 200 || res.status >= 300) throw new Error('wallets');
-      return res.data as PagedModelWalletResponseDto;
+      const res = await holdingFindAll(trackerId, BUDGET_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('holdings');
+      return res.data as PagedModelHoldingResponseDto;
     },
     enabled: Boolean(trackerId) && categoriesQueryEnabled && walletsFromParent === undefined,
     staleTime: 30_000,
@@ -313,6 +321,16 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(() => new Set());
 
   const budgetsByCategoryId = useMemo(() => budgetsByCategoryIdFromFlat(flat), [flat]);
+
+  const getBudgetCount = useCallback(
+    (categoryId: string) => budgetsByCategoryId.get(categoryId)?.length ?? 0,
+    [budgetsByCategoryId],
+  );
+  const getOneOffBudgets = useCallback(
+    (categoryId: string) => budgetsByCategoryId.get(categoryId) ?? [],
+    [budgetsByCategoryId],
+  );
+
   const hasMovementInCategory = useCallback(
     (categoryId?: string): boolean => {
       if (!categoryId) return false;
@@ -358,11 +376,13 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
 
   const toggleExpandAllCategories = useCallback(() => {
     if (categoryIdsWithChildren.length === 0) return;
-    if (allCategoriesExpanded) {
-      setExpandedCategoryIds(new Set());
-    } else {
-      setExpandedCategoryIds(new Set(categoryIdsWithChildren));
-    }
+    startTransition(() => {
+      if (allCategoriesExpanded) {
+        setExpandedCategoryIds(new Set());
+      } else {
+        setExpandedCategoryIds(new Set(categoryIdsWithChildren));
+      }
+    });
   }, [categoryIdsWithChildren, allCategoriesExpanded]);
 
   const recurringBudgets = (recurringBudgetData?.content ?? []) as RecurringBudgetResponseDto[];
@@ -559,51 +579,90 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   const [formParentId, setFormParentId] = useState<string>('');
   const createNameInputRef = useRef<HTMLInputElement | null>(null);
   const bulkPreview = useMemo(() => parseBulkPreviewText(bulkText), [bulkText]);
+  const [syncRecurringBudgetsSubmitting, setSyncRecurringBudgetsSubmitting] = useState(false);
 
-  const invalidate = () =>
+  const invalidate = useCallback(() => {
     queryClient.invalidateQueries({
       queryKey: [`/api/category/${trackerId}/active`],
     });
+  }, [queryClient, trackerId]);
 
   const invalidateBudgets = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
     queryClient.invalidateQueries({ queryKey: [`/api/recurring-budget/${trackerId}/active`] });
   }, [queryClient, trackerId]);
 
+  const handleSyncRecurringBudgets = useCallback(async () => {
+    if (!trackerId) return;
+    setSyncRecurringBudgetsSubmitting(true);
+    try {
+      const res = await syncRecurringBudgets(trackerId);
+      if (res.status < 200 || res.status >= 300) {
+        enqueueSnackbar(apiErrorMessage(res.data, 'Synchronizace rozpočtů z šablon se nezdařila'), {
+          variant: 'error',
+        });
+        return;
+      }
+      const body = res.data as unknown as SyncRecurringBudgetResponseDto | undefined;
+      const tpl = body?.templatesProcessed;
+      const created = body?.budgetPlansCreated;
+      const parts: string[] = [];
+      if (tpl != null) parts.push(`šablon: ${tpl}`);
+      if (created != null) parts.push(`plánů: ${created}`);
+      enqueueSnackbar(
+        parts.length > 0
+          ? `Rozpočty z šablon synchronizovány (${parts.join(', ')})`
+          : 'Rozpočty z šablon synchronizovány',
+        { variant: 'success' },
+      );
+      await invalidateBudgets();
+    } catch {
+      enqueueSnackbar('Synchronizace rozpočtů z šablon se nezdařila', { variant: 'error' });
+    } finally {
+      setSyncRecurringBudgetsSubmitting(false);
+    }
+  }, [trackerId, enqueueSnackbar, invalidateBudgets]);
+
   const activeWallets = useMemo(() => {
-    const wallets =
-      walletsFromParent ??
-      (((walletsData?.content ?? []) as WalletResponseDto[]) ?? []);
-    return wallets.filter((w) => w.active !== false && w.id);
+    if (walletsFromParent) {
+      return walletsFromParent.filter((w) => w.active !== false && w.id);
+    }
+    const holdings = walletsData?.content ?? [];
+    return holdings
+      .map((h) => holdingToWalletDto(h))
+      .filter((w) => w.active !== false && w.id);
   }, [walletsFromParent, walletsData]);
 
-  const openCreateRoot = () => {
+  const openCreateRoot = useCallback(() => {
     setCreateMode({ type: 'root' });
     setFormName('');
     setFormKind(CreateCategoryRequestDtoCategoryKind.EXPENSE);
     setFormParentId('');
     setCreateOpen(true);
-  };
+  }, []);
 
-  const openBulkCreate = () => {
+  const openBulkCreate = useCallback(() => {
     setBulkKind(CreateCategoryRequestDtoCategoryKind.EXPENSE);
     setBulkText('');
     setBulkOpen(true);
-  };
+  }, []);
 
-  const openCreateChild = (parentId: string) => {
-    const root = rootAncestorCategory(tree, flat, parentId);
-    const parentKind =
-      (root?.categoryKind as CreateCategoryRequestDtoCategoryKind | undefined) ??
-      CreateCategoryRequestDtoCategoryKind.EXPENSE;
-    setCreateMode({ type: 'child', parentId });
-    setFormName('');
-    setFormKind(parentKind);
-    setFormParentId(parentId);
-    setCreateOpen(true);
-  };
+  const openCreateChild = useCallback(
+    (parentId: string) => {
+      const root = rootAncestorCategory(tree, flat, parentId);
+      const parentKind =
+        (root?.categoryKind as CreateCategoryRequestDtoCategoryKind | undefined) ??
+        CreateCategoryRequestDtoCategoryKind.EXPENSE;
+      setCreateMode({ type: 'child', parentId });
+      setFormName('');
+      setFormKind(parentKind);
+      setFormParentId(parentId);
+      setCreateOpen(true);
+    },
+    [tree, flat],
+  );
 
-  const openEdit = (category: CategoryResponseDto) => {
+  const openEdit = useCallback((category: CategoryResponseDto) => {
     setEditState({ category });
     setFormName(category.name ?? '');
     setFormKind(
@@ -612,7 +671,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     );
     setFormParentId(category.parentId ?? '');
     setCreateOpen(false);
-  };
+  }, []);
 
   const parentOptionsForEdit = useMemo(() => {
     if (!editState?.category?.id) return [] as { id: string; label: string }[];
@@ -734,30 +793,33 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     }
   };
 
-  const handleSwapSiblingOrder = async (
-    categoryId: string,
-    siblingId: string,
-    categorySortOrder: number,
-    siblingSortOrder: number,
-  ) => {
-    setSubmitting(true);
-    try {
-      const [resA, resB] = await Promise.all([
-        categoryUpdate(trackerId, categoryId, { sortOrder: siblingSortOrder }),
-        categoryUpdate(trackerId, siblingId, { sortOrder: categorySortOrder }),
-      ]);
+  const handleSwapSiblingOrder = useCallback(
+    async (
+      categoryId: string,
+      siblingId: string,
+      categorySortOrder: number,
+      siblingSortOrder: number,
+    ) => {
+      setSubmitting(true);
+      try {
+        const [resA, resB] = await Promise.all([
+          categoryUpdate(trackerId, categoryId, { sortOrder: siblingSortOrder }),
+          categoryUpdate(trackerId, siblingId, { sortOrder: categorySortOrder }),
+        ]);
 
-      if (resA.status < 200 || resA.status >= 300 || resB.status < 200 || resB.status >= 300) {
+        if (resA.status < 200 || resA.status >= 300 || resB.status < 200 || resB.status >= 300) {
+          enqueueSnackbar('Změna pořadí se nepodařila', { variant: 'error' });
+          return;
+        }
+        await invalidate();
+      } catch {
         enqueueSnackbar('Změna pořadí se nepodařila', { variant: 'error' });
-        return;
+      } finally {
+        setSubmitting(false);
       }
-      await invalidate();
-    } catch {
-      enqueueSnackbar('Změna pořadí se nepodařila', { variant: 'error' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    },
+    [trackerId, enqueueSnackbar, invalidate],
+  );
 
   const handleUpdate = async (e: FormEvent) => {
     e.preventDefault();
@@ -814,19 +876,24 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
     }
   };
 
-  const handleQuickTxOpen = (category: CategoryResponseDto) => {
+  const handleQuickTxOpen = useCallback((category: CategoryResponseDto) => {
     setQuickTxCategory(category);
     setQuickTxWalletId('');
     setQuickTxAmountCanon('');
     setQuickTxWhen(defaultDatetimeLocal());
     setQuickTxDescription('');
-  };
+  }, []);
+
+  const requestCategoryDelete = useCallback((id: string) => {
+    setDeleteCascade(false);
+    setDeleteId(id);
+  }, []);
 
   const handleQuickTxSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!quickTxCategory?.id) return;
     if (!quickTxWalletId) {
-      enqueueSnackbar('Vyber peněženku', { variant: 'warning' });
+      enqueueSnackbar('Vyber pozici (účet + měnu)', { variant: 'warning' });
       return;
     }
     const amount = parseAmount(quickTxAmountCanon);
@@ -850,7 +917,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
 
     const payload: CreateTransactionRequestDto = {
       categoryId: quickTxCategory.id,
-      walletId: quickTxWalletId,
+      holdingId: quickTxWalletId,
       amount: majorToMinorUnits(amount),
       transactionDate: txDateIso,
       transactionType:
@@ -870,8 +937,8 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
       enqueueSnackbar('Transakce byla zaznamenána', { variant: 'success' });
       setQuickTxCategory(null);
       await queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
-      await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
+      await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
+      await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
       await invalidateBudgets();
     } catch {
       enqueueSnackbar('Transakci se nepodařilo uložit', { variant: 'error' });
@@ -887,54 +954,6 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
           Kategorie
         </PageHeading>
       )}
-
-      {periodSync ? (
-        <>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={2}
-            alignItems={{ xs: 'stretch', sm: 'center' }}
-            useFlexGap
-            sx={{ mb: 2, flexWrap: 'wrap' }}
-          >
-            <TextField
-              label="Od"
-              value={periodSync.rangeFrom}
-              onChange={periodSync.onRangeFromChange}
-              InputLabelProps={{ shrink: true }}
-              size="small"
-            />
-            <TextField
-              label="Do"
-              value={periodSync.rangeTo}
-              onChange={periodSync.onRangeToChange}
-              InputLabelProps={{ shrink: true }}
-              size="small"
-            />
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={periodSync.onCurrentMonth}
-              sx={{
-                alignSelf: { xs: 'stretch', sm: 'auto' },
-                width: { xs: '100%', sm: 'auto' },
-              }}
-            >
-              Aktuální měsíc
-            </Button>
-          </Stack>
-          {periodSync.rangeOrderInvalid ? (
-            <Typography color="error" variant="body2" sx={{ mb: 2 }}>
-              Datum „od“ musí být před nebo stejné jako „do“.
-            </Typography>
-          ) : null}
-          {periodSync.showIncompleteDateError ? (
-            <Typography color="error" variant="body2" sx={{ mb: 2 }}>
-              Zadej obě platná data.
-            </Typography>
-          ) : null}
-        </>
-      ) : null}
 
       {isError && (
         <Typography color="error" sx={{ mb: 2 }}>
@@ -1140,7 +1159,7 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                 </Stack>
               ) : null}
             </Box>
-            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <Button
                 variant="text"
                 startIcon={showOnlyCategoriesWithMovements ? <VisibilityOffIcon /> : <VisibilityIcon />}
@@ -1148,6 +1167,18 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
               >
                 {showOnlyCategoriesWithMovements ? 'Zobrazit vše' : 'Zobrazit jen pohyby'}
               </Button>
+              <Tooltip title="Z aktivních opakujících se šablon vytvoří nebo doplní konkrétní rozpočty (budget plány) pro aktuální období.">
+                <span>
+                  <Button
+                    variant="outlined"
+                    startIcon={<SyncOutlinedIcon />}
+                    onClick={handleSyncRecurringBudgets}
+                    disabled={!trackerId || syncRecurringBudgetsSubmitting}
+                  >
+                    Rozpočty ze šablon
+                  </Button>
+                </span>
+              </Tooltip>
               <Button variant="outlined" onClick={openBulkCreate}>
                 Hromadně přidat
               </Button>
@@ -1171,17 +1202,12 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                     rowSubmitting={submitting}
                     onAddChild={openCreateChild}
                     onEdit={openEdit}
-                    onDelete={(id) => {
-                      setDeleteCascade(false);
-                      setDeleteId(id);
-                    }}
+                    onDelete={requestCategoryDelete}
                     onManageBudgets={setBudgetCategory}
                     onQuickAddTransaction={handleQuickTxOpen}
                     onSwapSiblingOrder={handleSwapSiblingOrder}
-                    getBudgetCount={(categoryId) => {
-                      return budgetsByCategoryId.get(categoryId)?.length ?? 0;
-                    }}
-                    getOneOffBudgets={(categoryId) => budgetsByCategoryId.get(categoryId) ?? []}
+                    getBudgetCount={getBudgetCount}
+                    getOneOffBudgets={getOneOffBudgets}
                     expandedCategoryIds={expandedCategoryIds}
                     onToggleCategoryExpand={toggleCategoryExpand}
                   />
@@ -1281,10 +1307,10 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
                 Kategorie: <strong>{quickTxCategory?.name ?? '—'}</strong>
               </Typography>
               <FormControl fullWidth required size="small">
-                <InputLabel id="quick-tx-wallet">Peněženka</InputLabel>
+                <InputLabel id="quick-tx-wallet">Pozice</InputLabel>
                 <Select
                   labelId="quick-tx-wallet"
-                  label="Peněženka"
+                  label="Pozice"
                   value={quickTxWalletId}
                   onChange={(e) => setQuickTxWalletId(e.target.value as string)}
                 >
@@ -1542,6 +1568,8 @@ export const CategoriesForTracker: FC<CategoriesForTrackerProps> = ({
   );
 };
 
+export const CategoriesForTracker = memo(CategoriesForTrackerInner, categoriesForTrackerPropsEqual);
+
 type RowProps = {
   node: CategoryResponseDto;
   depth: number;
@@ -1565,7 +1593,7 @@ type RowProps = {
   onToggleCategoryExpand: (categoryId: string) => void;
 };
 
-const CategoryTreeRows: FC<RowProps> = ({
+const CategoryTreeRows = memo(function CategoryTreeRows({
   node,
   depth,
   siblingIndex,
@@ -1581,7 +1609,7 @@ const CategoryTreeRows: FC<RowProps> = ({
   getOneOffBudgets,
   expandedCategoryIds,
   onToggleCategoryExpand,
-}) => {
+}: RowProps) {
   const id = node.id;
   const children = asCategoryChildren(node.children);
   const hasChildren = children.length > 0;
@@ -1855,4 +1883,6 @@ const CategoryTreeRows: FC<RowProps> = ({
       )}
     </Box>
   );
-};
+});
+
+CategoryTreeRows.displayName = 'CategoryTreeRows';

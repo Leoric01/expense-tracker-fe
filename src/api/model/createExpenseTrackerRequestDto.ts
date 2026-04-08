@@ -10,6 +10,5 @@ export interface CreateExpenseTrackerRequestDto {
   /** @minLength 1 */
   name: string;
   description?: string;
-  /** @minLength 1 */
-  defaultCurrencyCode: string;
+  preferredDisplayAssetId?: string;
 }

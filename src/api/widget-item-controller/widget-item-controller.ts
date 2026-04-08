@@ -31,12 +31,12 @@ export type widgetItemFindAllResponseSuccess = widgetItemFindAllResponse200 & {
 };
 export type widgetItemFindAllResponse = widgetItemFindAllResponseSuccess;
 
-export const getWidgetItemFindAllUrl = (widgetType: 'WALLET' | 'EXPENSE_TRACKER') => {
+export const getWidgetItemFindAllUrl = (widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER') => {
   return `/api/widget-items/${widgetType}`;
 };
 
 export const widgetItemFindAll = async (
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   options?: RequestInit,
 ): Promise<widgetItemFindAllResponse> => {
   const res = await fetch(getWidgetItemFindAllUrl(widgetType), {
@@ -50,7 +50,7 @@ export const widgetItemFindAll = async (
   return { data, status: res.status, headers: res.headers } as widgetItemFindAllResponse;
 };
 
-export const getWidgetItemFindAllQueryKey = (widgetType: 'WALLET' | 'EXPENSE_TRACKER') => {
+export const getWidgetItemFindAllQueryKey = (widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER') => {
   return [`/api/widget-items/${widgetType}`] as const;
 };
 
@@ -58,7 +58,7 @@ export const getWidgetItemFindAllQueryOptions = <
   TData = Awaited<ReturnType<typeof widgetItemFindAll>>,
   TError = unknown,
 >(
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof widgetItemFindAll>>, TError, TData>>;
     fetch?: RequestInit;
@@ -87,7 +87,7 @@ export function useWidgetItemFindAll<
   TData = Awaited<ReturnType<typeof widgetItemFindAll>>,
   TError = unknown,
 >(
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   options: {
     query: Partial<UseQueryOptions<Awaited<ReturnType<typeof widgetItemFindAll>>, TError, TData>> &
       Pick<
@@ -106,7 +106,7 @@ export function useWidgetItemFindAll<
   TData = Awaited<ReturnType<typeof widgetItemFindAll>>,
   TError = unknown,
 >(
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof widgetItemFindAll>>, TError, TData>> &
       Pick<
@@ -125,7 +125,7 @@ export function useWidgetItemFindAll<
   TData = Awaited<ReturnType<typeof widgetItemFindAll>>,
   TError = unknown,
 >(
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof widgetItemFindAll>>, TError, TData>>;
     fetch?: RequestInit;
@@ -137,7 +137,7 @@ export function useWidgetItemFindAll<
   TData = Awaited<ReturnType<typeof widgetItemFindAll>>,
   TError = unknown,
 >(
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof widgetItemFindAll>>, TError, TData>>;
     fetch?: RequestInit;
@@ -163,12 +163,12 @@ export type widgetItemReplaceResponseSuccess = widgetItemReplaceResponse200 & {
 };
 export type widgetItemReplaceResponse = widgetItemReplaceResponseSuccess;
 
-export const getWidgetItemReplaceUrl = (widgetType: 'WALLET' | 'EXPENSE_TRACKER') => {
+export const getWidgetItemReplaceUrl = (widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER') => {
   return `/api/widget-items/${widgetType}`;
 };
 
 export const widgetItemReplace = async (
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   widgetItemReplaceBody: string[],
   options?: RequestInit,
 ): Promise<widgetItemReplaceResponse> => {
@@ -192,14 +192,14 @@ export const getWidgetItemReplaceMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof widgetItemReplace>>,
     TError,
-    { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; data: string[] },
+    { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; data: string[] },
     TContext
   >;
   fetch?: RequestInit;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof widgetItemReplace>>,
   TError,
-  { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; data: string[] },
+  { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; data: string[] },
   TContext
 > => {
   const mutationKey = ['widgetItemReplace'];
@@ -211,7 +211,7 @@ export const getWidgetItemReplaceMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof widgetItemReplace>>,
-    { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; data: string[] }
+    { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; data: string[] }
   > = (props) => {
     const { widgetType, data } = props ?? {};
 
@@ -232,7 +232,7 @@ export const useWidgetItemReplace = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof widgetItemReplace>>,
       TError,
-      { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; data: string[] },
+      { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; data: string[] },
       TContext
     >;
     fetch?: RequestInit;
@@ -241,7 +241,7 @@ export const useWidgetItemReplace = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof widgetItemReplace>>,
   TError,
-  { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; data: string[] },
+  { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; data: string[] },
   TContext
 > => {
   return useMutation(getWidgetItemReplaceMutationOptions(options), queryClient);
@@ -256,12 +256,15 @@ export type widgetItemAddResponseSuccess = widgetItemAddResponse200 & {
 };
 export type widgetItemAddResponse = widgetItemAddResponseSuccess;
 
-export const getWidgetItemAddUrl = (widgetType: 'WALLET' | 'EXPENSE_TRACKER', entityId: string) => {
+export const getWidgetItemAddUrl = (
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
+  entityId: string,
+) => {
   return `/api/widget-items/${widgetType}/${entityId}`;
 };
 
 export const widgetItemAdd = async (
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   entityId: string,
   options?: RequestInit,
 ): Promise<widgetItemAddResponse> => {
@@ -280,14 +283,14 @@ export const getWidgetItemAddMutationOptions = <TError = unknown, TContext = unk
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof widgetItemAdd>>,
     TError,
-    { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string },
+    { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string },
     TContext
   >;
   fetch?: RequestInit;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof widgetItemAdd>>,
   TError,
-  { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string },
+  { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string },
   TContext
 > => {
   const mutationKey = ['widgetItemAdd'];
@@ -299,7 +302,7 @@ export const getWidgetItemAddMutationOptions = <TError = unknown, TContext = unk
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof widgetItemAdd>>,
-    { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string }
+    { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string }
   > = (props) => {
     const { widgetType, entityId } = props ?? {};
 
@@ -318,7 +321,7 @@ export const useWidgetItemAdd = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof widgetItemAdd>>,
       TError,
-      { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string },
+      { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string },
       TContext
     >;
     fetch?: RequestInit;
@@ -327,7 +330,7 @@ export const useWidgetItemAdd = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof widgetItemAdd>>,
   TError,
-  { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string },
+  { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string },
   TContext
 > => {
   return useMutation(getWidgetItemAddMutationOptions(options), queryClient);
@@ -343,14 +346,14 @@ export type widgetItemRemoveResponseSuccess = widgetItemRemoveResponse200 & {
 export type widgetItemRemoveResponse = widgetItemRemoveResponseSuccess;
 
 export const getWidgetItemRemoveUrl = (
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   entityId: string,
 ) => {
   return `/api/widget-items/${widgetType}/${entityId}`;
 };
 
 export const widgetItemRemove = async (
-  widgetType: 'WALLET' | 'EXPENSE_TRACKER',
+  widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER',
   entityId: string,
   options?: RequestInit,
 ): Promise<widgetItemRemoveResponse> => {
@@ -369,14 +372,14 @@ export const getWidgetItemRemoveMutationOptions = <TError = unknown, TContext = 
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof widgetItemRemove>>,
     TError,
-    { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string },
+    { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string },
     TContext
   >;
   fetch?: RequestInit;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof widgetItemRemove>>,
   TError,
-  { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string },
+  { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string },
   TContext
 > => {
   const mutationKey = ['widgetItemRemove'];
@@ -388,7 +391,7 @@ export const getWidgetItemRemoveMutationOptions = <TError = unknown, TContext = 
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof widgetItemRemove>>,
-    { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string }
+    { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string }
   > = (props) => {
     const { widgetType, entityId } = props ?? {};
 
@@ -409,7 +412,7 @@ export const useWidgetItemRemove = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof widgetItemRemove>>,
       TError,
-      { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string },
+      { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string },
       TContext
     >;
     fetch?: RequestInit;
@@ -418,7 +421,7 @@ export const useWidgetItemRemove = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof widgetItemRemove>>,
   TError,
-  { widgetType: 'WALLET' | 'EXPENSE_TRACKER'; entityId: string },
+  { widgetType: 'INSTITUTION' | 'EXPENSE_TRACKER'; entityId: string },
   TContext
 > => {
   return useMutation(getWidgetItemRemoveMutationOptions(options), queryClient);

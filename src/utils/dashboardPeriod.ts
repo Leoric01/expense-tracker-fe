@@ -16,6 +16,22 @@ export function lastDayOfMonth(ref: Date = new Date()): Date {
   return new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
 }
 
+/**
+ * První a poslední den kalendářního měsíce posunutého o `deltaMonths` od měsíce obsaženého v `anchor`.
+ * Příklad: duben 2026 + (-1) → 1.–31. 3. 2026.
+ */
+export function calendarMonthRangeByMonthDelta(
+  anchor: Date,
+  deltaMonths: number,
+): { from: Date; to: Date } {
+  const y = anchor.getFullYear();
+  const m = anchor.getMonth() + deltaMonths;
+  return {
+    from: new Date(y, m, 1),
+    to: new Date(y, m + 1, 0),
+  };
+}
+
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 /**

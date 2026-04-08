@@ -287,6 +287,96 @@ export const useRecurringBudgetCreate = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getRecurringBudgetCreateMutationOptions(options), queryClient);
 };
+export type syncRecurringBudgetsResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type syncRecurringBudgetsResponseSuccess = syncRecurringBudgetsResponse200 & {
+  headers: Headers;
+};
+export type syncRecurringBudgetsResponse = syncRecurringBudgetsResponseSuccess;
+
+export const getSyncRecurringBudgetsUrl = (trackerId: string) => {
+  return `/api/recurring-budget/${trackerId}/sync`;
+};
+
+export const syncRecurringBudgets = async (
+  trackerId: string,
+  options?: RequestInit,
+): Promise<syncRecurringBudgetsResponse> => {
+  const res = await fetch(getSyncRecurringBudgetsUrl(trackerId), {
+    ...options,
+    method: 'POST',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: syncRecurringBudgetsResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as syncRecurringBudgetsResponse;
+};
+
+export const getSyncRecurringBudgetsMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof syncRecurringBudgets>>,
+    TError,
+    { trackerId: string },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof syncRecurringBudgets>>,
+  TError,
+  { trackerId: string },
+  TContext
+> => {
+  const mutationKey = ['syncRecurringBudgets'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof syncRecurringBudgets>>,
+    { trackerId: string }
+  > = (props) => {
+    const { trackerId } = props ?? {};
+
+    return syncRecurringBudgets(trackerId, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SyncRecurringBudgetsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof syncRecurringBudgets>>
+>;
+
+export type SyncRecurringBudgetsMutationError = unknown;
+
+export const useSyncRecurringBudgets = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof syncRecurringBudgets>>,
+      TError,
+      { trackerId: string },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof syncRecurringBudgets>>,
+  TError,
+  { trackerId: string },
+  TContext
+> => {
+  return useMutation(getSyncRecurringBudgetsMutationOptions(options), queryClient);
+};
 export type recurringBudgetFindByIdResponse200 = {
   data: Blob;
   status: 200;

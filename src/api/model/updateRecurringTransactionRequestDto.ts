@@ -8,7 +8,7 @@
 import type { UpdateRecurringTransactionRequestDtoPeriodType } from './updateRecurringTransactionRequestDtoPeriodType';
 
 export interface UpdateRecurringTransactionRequestDto {
-  walletId?: string;
+  holdingId?: string;
   categoryId?: string;
   amount?: number;
   currencyCode?: string;

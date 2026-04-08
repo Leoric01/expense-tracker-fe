@@ -11,7 +11,8 @@ export interface ExpenseTrackerResponseDto {
   id?: string;
   name?: string;
   description?: string;
-  defaultCurrencyCode?: string;
+  preferredDisplayAssetId?: string;
+  preferredDisplayAssetCode?: string;
   active?: boolean;
   ownerFullName?: string;
   members?: ExpenseTrackerMemberDto[];

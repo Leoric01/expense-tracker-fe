@@ -9,5 +9,5 @@
 export interface UpdateExpenseTrackerRequestDto {
   name?: string;
   description?: string;
-  defaultCurrencyCode?: string;
+  preferredDisplayAssetId?: string;
 }

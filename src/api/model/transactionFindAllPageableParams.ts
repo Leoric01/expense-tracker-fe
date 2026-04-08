@@ -11,7 +11,7 @@ import type { TransactionFindAllPageableTransactionType } from './transactionFin
 export type TransactionFindAllPageableParams = {
   search?: string;
   categoryId?: string;
-  walletId?: string;
+  holdingId?: string;
   transactionType?: TransactionFindAllPageableTransactionType;
   status?: TransactionFindAllPageableStatus;
   dateFrom?: string;

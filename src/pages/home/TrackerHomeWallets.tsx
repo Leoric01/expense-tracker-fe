@@ -1,32 +1,66 @@
 import { transactionCreate } from '@api/transaction-controller/transaction-controller';
 import { widgetItemAdd, widgetItemReplace } from '@api/widget-item-controller/widget-item-controller';
 import {
-  getWalletDashboardQueryKey,
-  walletCreate,
-  walletDashboard,
-} from '@api/wallet-controller/wallet-controller';
-import type { CreateWalletRequestDto, WalletDashboardResponseDto, WalletResponseDto, WalletSummaryResponseDto } from '@api/model';
-import { CreateTransactionRequestDtoTransactionType } from '@api/model';
-import { CreateWalletRequestDtoWalletType } from '@api/model';
-import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+  accountCreate,
+  accountFindAll,
+  getAccountFindAllQueryKey,
+} from '@api/account-controller/account-controller';
 import {
+  assetCreate,
+  assetFindAll,
+  getAssetFindAllQueryKey,
+} from '@api/asset-controller/asset-controller';
+import { holdingCreate } from '@api/holding-controller/holding-controller';
+import {
+  getInstitutionDashboardQueryKey,
+  getInstitutionFindAllQueryKey,
+  institutionDashboard,
+  institutionFindAll,
+} from '@api/institution-controller/institution-controller';
+import type {
+  AccountResponseDto,
+  AssetResponseDto,
+  HoldingResponseDto,
+  InstitutionDashboardResponseDto,
+  HoldingSummaryResponseDto,
+  InstitutionResponseDto,
+  InstitutionSummaryResponseDto,
+  PagedModelAccountResponseDto,
+  PagedModelAssetResponseDto,
+  PagedModelInstitutionResponseDto,
+  WalletResponseDto,
+} from '@api/model';
+import {
+  CreateAccountRequestDtoAccountType,
+  CreateAssetRequestDtoAssetType,
+  CreateAssetRequestDtoMarketDataSource,
+  CreateTransactionRequestDtoTransactionType,
+} from '@api/model';
+import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
+import {
+  Autocomplete,
   Box,
   Button,
+  ButtonBase,
   Card,
-  Chip,
   CardContent,
+  Chip,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
   Select,
   Stack,
-  ButtonBase,
   TextField,
   Tooltip,
   Typography,
@@ -35,6 +69,7 @@ import { PageHeading } from '@components/PageHeading';
 import { CategoriesForTracker } from '@pages/categories/CategoriesForTracker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import {
+  calendarMonthRangeByMonthDelta,
   dateRangeDdMmYyyyToIsoParams,
   firstDayOfMonth,
   lastDayOfMonth,
@@ -45,15 +80,18 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useSnackbar } from 'notistack';
 import { DragEvent, FC, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { BudgetPlanImportPanel } from './BudgetPlanImportPanel';
 import { RecentTransactionsPanel } from './RecentTransactionsPanel';
 import { BalanceCorrectionDialog, type BalanceCorrectionConfirmPayload } from './BalanceCorrectionDialog';
 import { TransferBetweenWalletsDialog, type TransferConfirmPayload } from './TransferBetweenWalletsDialog';
-import { formatWalletAmount, WALLET_TYPE_OPTIONS } from './walletDisplay';
+import { assetSelectLabel, inferAssetMeta } from './holdingAdapter';
+import { InstitutionAccountsManageDialog } from './InstitutionAccountsManageDialog';
+import { ACCOUNT_TYPE_OPTIONS, formatWalletAmount } from './walletDisplay';
 import {
-  globalOrderAfterTrackerReorder,
+  globalOrderAfterInstitutionTrackerReorder,
+  institutionSummariesInWidgetOrder,
   orderedWalletIdsFromWidgetPayload,
   reorderIdsInList,
-  walletsForTrackerInWidgetOrder,
 } from './walletOrderUtils';
 
 type Props = {
@@ -61,17 +99,149 @@ type Props = {
   trackerName: string;
 };
 
+type HoldingSummaryRow = HoldingSummaryResponseDto & {
+  institutionId?: string;
+  accountId?: string;
+};
+
+type InstitutionCardModel = {
+  institutionId: string;
+  institutionName: string;
+  accounts: {
+    accountId?: string;
+    accountName: string;
+    holdings: { summary: HoldingSummaryRow; wallet: WalletResponseDto }[];
+  }[];
+};
+
 const WALLET_DRAG_MIME = 'application/x-wallet-id';
 const WALLET_REORDER_MIME = 'application/x-wallet-reorder';
 
-function dashboardSummaryToWallet(s: WalletSummaryResponseDto): WalletResponseDto {
+const ASSET_LIST_PARAMS = { page: 0, size: 500 } as const;
+const TRACKER_LIST_PARAMS = { page: 0, size: 500 } as const;
+
+const ASSET_TYPE_LABELS: Record<CreateAssetRequestDtoAssetType, string> = {
+  [CreateAssetRequestDtoAssetType.FIAT]: 'Fiat',
+  [CreateAssetRequestDtoAssetType.CRYPTO]: 'Krypto',
+  [CreateAssetRequestDtoAssetType.OTHER]: 'Jiné',
+};
+
+const MARKET_SOURCE_LABELS: Record<CreateAssetRequestDtoMarketDataSource, string> = {
+  [CreateAssetRequestDtoMarketDataSource.NONE]: 'Žádný',
+  [CreateAssetRequestDtoMarketDataSource.FRANKFURTER]: 'Frankfurter (FX)',
+  [CreateAssetRequestDtoMarketDataSource.COINGECKO]: 'CoinGecko',
+  [CreateAssetRequestDtoMarketDataSource.MANUAL]: 'Ruční',
+};
+
+function filterAssetOptions(
+  options: AssetResponseDto[],
+  { inputValue }: { inputValue: string },
+): AssetResponseDto[] {
+  const q = inputValue.trim().toLowerCase();
+  if (!q) return options;
+  return options.filter((a) => {
+    const code = a.code?.toLowerCase() ?? '';
+    const name = a.name?.toLowerCase() ?? '';
+    return code.includes(q) || name.includes(q) || (a.id?.toLowerCase().includes(q) ?? false);
+  });
+}
+
+function filterInstitutionOptions(
+  options: InstitutionResponseDto[],
+  { inputValue }: { inputValue: string },
+): InstitutionResponseDto[] {
+  const q = inputValue.trim().toLowerCase();
+  if (!q) return options;
+  return options.filter(
+    (i) =>
+      (i.name?.toLowerCase().includes(q) ?? false) || (i.id?.toLowerCase().includes(q) ?? false),
+  );
+}
+
+function filterAccountOptions(
+  options: AccountResponseDto[],
+  { inputValue }: { inputValue: string },
+): AccountResponseDto[] {
+  const q = inputValue.trim().toLowerCase();
+  if (!q) return options;
+  return options.filter((a) => {
+    const name = a.name?.toLowerCase() ?? '';
+    return name.includes(q) || (a.id?.toLowerCase().includes(q) ?? false);
+  });
+}
+
+function accountAutocompleteLabel(a: AccountResponseDto): string {
+  const nm = a.name?.trim() || a.id || '—';
+  const typeOpt = ACCOUNT_TYPE_OPTIONS.find((o) => o.value === a.accountType);
+  const t = typeOpt?.label ?? a.accountType;
+  return t ? `${nm} (${t})` : nm;
+}
+
+function holdingSummaryToWallet(s: HoldingSummaryResponseDto): WalletResponseDto {
+  const code = (s.assetCode?.trim() || 'CZK').toUpperCase();
+  const parts = [s.institutionName?.trim(), s.accountName?.trim(), code].filter(Boolean);
   return {
-    id: s.walletId,
-    name: s.walletName,
-    currencyCode: s.currencyCode,
+    id: s.holdingId,
+    name: parts.length > 0 ? parts.join(' · ') : code,
+    currencyCode: code,
     currentBalance: s.endBalance,
     active: true,
   };
+}
+
+/** Plochý seznam holdingů ve stejném pořadí jako již seřazené instituce v dashboardu. */
+function flattenOrderedInstitutionHoldings(
+  institutions: InstitutionSummaryResponseDto[],
+): HoldingSummaryRow[] {
+  const out: HoldingSummaryRow[] = [];
+  for (const inst of institutions) {
+    const instId = inst.institutionId;
+    const instName = inst.institutionName;
+    for (const acc of inst.accounts ?? []) {
+      const accId = acc.accountId;
+      const accName = acc.accountName;
+      for (const h of acc.holdings ?? []) {
+        out.push({
+          ...h,
+          institutionId: instId,
+          institutionName: h.institutionName ?? instName,
+          accountId: accId,
+          accountName: h.accountName ?? accName,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function buildInstitutionCards(orderedInstitutions: InstitutionSummaryResponseDto[]): InstitutionCardModel[] {
+  return orderedInstitutions
+    .map((inst) => {
+      const institutionId = inst.institutionId?.trim();
+      if (!institutionId) return null;
+      const institutionName = inst.institutionName?.trim() || '—';
+      const accounts = (inst.accounts ?? [])
+        .map((acc) => {
+          const accountName = acc.accountName?.trim() || '—';
+          const holdings = (acc.holdings ?? [])
+            .map((h) => {
+              const summary: HoldingSummaryRow = {
+                ...h,
+                institutionId,
+                institutionName: h.institutionName ?? inst.institutionName,
+                accountId: acc.accountId,
+                accountName: h.accountName ?? acc.accountName,
+              };
+              const wallet = holdingSummaryToWallet(summary);
+              return wallet.id ? { summary, wallet } : null;
+            })
+            .filter((x): x is { summary: HoldingSummaryRow; wallet: WalletResponseDto } => Boolean(x));
+          return holdings.length ? { accountId: acc.accountId, accountName, holdings } : null;
+        })
+        .filter((x): x is InstitutionCardModel['accounts'][number] => Boolean(x));
+      return accounts.length ? { institutionId, institutionName, accounts } : null;
+    })
+    .filter((x): x is InstitutionCardModel => Boolean(x));
 }
 
 export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
@@ -80,9 +250,9 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const ignoreClickUntilRef = useRef(0);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  // V dashboardu zobrazuješ primárně Kategorie; Historie je jen volitelný režim.
-  // Tím pádem se vyhneme url parametru `?tab=categories`.
-  const mainTab = tabParam === 'history' ? 1 : 0;
+  // V dashboardu zobrazuješ primárně Kategorie; Historie / Importy jsou volitelné záložky.
+  // `?tab=categories` zbytečně neukládáme — viz useEffect níže.
+  const mainTab = tabParam === 'history' ? 1 : tabParam === 'importy' ? 2 : 0;
 
   useEffect(() => {
     if (tabParam === 'categories') {
@@ -104,13 +274,27 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   });
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [manageStructureOpen, setManageStructureOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [name, setName] = useState('');
-  const [walletType, setWalletType] = useState<CreateWalletRequestDtoWalletType>(
-    CreateWalletRequestDtoWalletType.CASH,
+  const [selectedInstitution, setSelectedInstitution] = useState<InstitutionResponseDto | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<AccountResponseDto | null>(null);
+  const [quickAccountOpen, setQuickAccountOpen] = useState(false);
+  const [quickAccName, setQuickAccName] = useState('');
+  const [quickAccType, setQuickAccType] = useState<CreateAccountRequestDtoAccountType>(
+    CreateAccountRequestDtoAccountType.CASH,
   );
-  const [currencyCode, setCurrencyCode] = useState('CZK');
+  const [quickAccSubmitting, setQuickAccSubmitting] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<AssetResponseDto | null>(null);
   const [initialBalance, setInitialBalance] = useState('');
+
+  const [assetDialogOpen, setAssetDialogOpen] = useState(false);
+  const [assetSubmitting, setAssetSubmitting] = useState(false);
+  const [newAssetCode, setNewAssetCode] = useState('');
+  const [newAssetName, setNewAssetName] = useState('');
+  const [newAssetType, setNewAssetType] = useState(CreateAssetRequestDtoAssetType.FIAT);
+  const [newAssetScale, setNewAssetScale] = useState('2');
+  const [newMarketSource, setNewMarketSource] = useState(CreateAssetRequestDtoMarketDataSource.NONE);
+  const [newMarketKey, setNewMarketKey] = useState('');
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropHoverId, setDropHoverId] = useState<string | null>(null);
@@ -137,6 +321,18 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     bothDatesParsed && parsedFrom!.getTime() > parsedTo!.getTime();
   const rangeParamsOk = Boolean(dashboardParams);
 
+  const shiftMonthBy = useCallback(
+    (deltaMonths: -1 | 1) => {
+      const parsed = parseCsDateTime(rangeFrom.trim());
+      const anchor =
+        parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date();
+      const { from, to } = calendarMonthRangeByMonthDelta(anchor, deltaMonths);
+      setRangeFrom(formatDateDdMmYyyyFromDate(from));
+      setRangeTo(formatDateDdMmYyyyFromDate(to));
+    },
+    [rangeFrom],
+  );
+
   const {
     data: dashboardRes,
     isLoading,
@@ -144,48 +340,113 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     isFetched: dashboardFetched,
   } = useQuery({
     queryKey: dashboardParams
-      ? getWalletDashboardQueryKey(trackerId, dashboardParams)
-      : ['wallet-dashboard', trackerId, 'invalid-range', rangeFrom, rangeTo],
+      ? getInstitutionDashboardQueryKey(trackerId, dashboardParams)
+      : ['institution-dashboard', trackerId, 'invalid-range', rangeFrom, rangeTo],
     queryFn: async () => {
       if (!dashboardParams) throw new Error('dashboard');
-      const res = await walletDashboard(trackerId, dashboardParams);
+      const res = await institutionDashboard(trackerId, dashboardParams);
       if (res.status < 200 || res.status >= 300) {
         throw new Error('dashboard');
       }
-      return res.data as WalletDashboardResponseDto;
+      return res.data as InstitutionDashboardResponseDto;
     },
     enabled: Boolean(trackerId) && rangeParamsOk,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
 
-  const dashboard = dashboardRes;
-  const summaries = dashboard?.wallets ?? [];
-  const items = useMemo(() => summaries.map(dashboardSummaryToWallet), [summaries]);
+  const { data: assetsPaged } = useQuery({
+    queryKey: getAssetFindAllQueryKey(ASSET_LIST_PARAMS),
+    queryFn: async () => {
+      const res = await assetFindAll(ASSET_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('assets');
+      return res.data as PagedModelAssetResponseDto;
+    },
+    enabled: createOpen || assetDialogOpen,
+    staleTime: 60_000,
+  });
 
-  const summaryById = useMemo(() => {
-    const m = new Map<string, WalletSummaryResponseDto>();
-    for (const s of summaries) {
-      if (s.walletId) m.set(s.walletId, s);
-    }
-    return m;
-  }, [summaries]);
+  const assetOptions = useMemo(() => {
+    const rows = assetsPaged?.content ?? [];
+    return [...rows]
+      .filter((a) => a.active !== false && a.id)
+      .sort((a, b) => (a.code ?? '').localeCompare(b.code ?? '', undefined, { sensitivity: 'base' }));
+  }, [assetsPaged]);
+
+  const structureQueriesEnabled = Boolean(trackerId) && (createOpen || manageStructureOpen);
+
+  const { data: institutionsPaged } = useQuery({
+    queryKey: getInstitutionFindAllQueryKey(trackerId, TRACKER_LIST_PARAMS),
+    queryFn: async () => {
+      const res = await institutionFindAll(trackerId, TRACKER_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('institutions');
+      return res.data as PagedModelInstitutionResponseDto;
+    },
+    enabled: structureQueriesEnabled,
+    staleTime: 30_000,
+  });
+
+  const { data: accountsPagedTracker } = useQuery({
+    queryKey: getAccountFindAllQueryKey(trackerId, TRACKER_LIST_PARAMS),
+    queryFn: async () => {
+      const res = await accountFindAll(trackerId, TRACKER_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('accounts');
+      return res.data as PagedModelAccountResponseDto;
+    },
+    enabled: structureQueriesEnabled,
+    staleTime: 30_000,
+  });
+
+  const institutionOptions = useMemo(() => {
+    const rows = institutionsPaged?.content ?? [];
+    return [...rows]
+      .filter((i) => i.active !== false && i.id)
+      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'cs', { sensitivity: 'base' }));
+  }, [institutionsPaged]);
+
+  const accountsForSelectedInstitution = useMemo(() => {
+    const iid = selectedInstitution?.id;
+    if (!iid) return [];
+    const rows = accountsPagedTracker?.content ?? [];
+    return [...rows]
+      .filter((a) => a.institutionId === iid && a.active !== false && a.id)
+      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'cs', { sensitivity: 'base' }));
+  }, [accountsPagedTracker, selectedInstitution?.id]);
+
+  const dashboard = dashboardRes;
 
   const globalWalletOrder = useMemo(
     () => orderedWalletIdsFromWidgetPayload(dashboard?.widgetOrder),
     [dashboard?.widgetOrder],
   );
 
-  const orderedItems = useMemo(
-    () => walletsForTrackerInWidgetOrder(globalWalletOrder, items),
-    [globalWalletOrder, items],
+  const orderedInstitutions = useMemo(
+    () => institutionSummariesInWidgetOrder(globalWalletOrder, dashboard?.institutions ?? []),
+    [globalWalletOrder, dashboard?.institutions],
   );
+
+  const institutionCards = useMemo(
+    () => buildInstitutionCards(orderedInstitutions),
+    [orderedInstitutions],
+  );
+
+  const summaries = useMemo(
+    () => flattenOrderedInstitutionHoldings(orderedInstitutions),
+    [orderedInstitutions],
+  );
+
+  const orderedHoldingsForCategories = useMemo(
+    () => institutionCards.flatMap((c) => c.accounts.flatMap((a) => a.holdings.map((h) => h.wallet))),
+    [institutionCards],
+  );
+
+  const hasAnyHoldings = summaries.length > 0;
 
   /** Součet `endBalance` z dashboardu podle měny (stejný API response jako karty). */
   const totalFundsDisplayText = useMemo(() => {
     const byCurrency = new Map<string, number>();
     for (const s of summaries) {
-      const code = (s.currencyCode?.trim() || 'CZK').toUpperCase();
+      const code = (s.assetCode?.trim() || 'CZK').toUpperCase();
       byCurrency.set(code, (byCurrency.get(code) ?? 0) + (s.endBalance ?? 0));
     }
     const parts = [...byCurrency.entries()]
@@ -196,85 +457,196 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
 
   const replaceWidgetOrder = useMutation({
     mutationFn: async (nextGlobal: string[]) => {
-      const res = await widgetItemReplace('WALLET', nextGlobal);
+      const res = await widgetItemReplace('INSTITUTION', nextGlobal);
       if (res.status < 200 || res.status >= 300) {
         throw new Error('Nepodařilo se uložit pořadí');
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
     },
   });
 
   const invalidateFinance = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
-    await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
-    await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
+    await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
+    await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
   }, [queryClient, trackerId]);
 
   const resetForm = () => {
-    setName('');
-    setWalletType(CreateWalletRequestDtoWalletType.CASH);
-    setCurrencyCode('CZK');
+    setSelectedInstitution(null);
+    setSelectedAccount(null);
+    setQuickAccountOpen(false);
+    setQuickAccName('');
+    setQuickAccType(CreateAccountRequestDtoAccountType.CASH);
+    setSelectedAsset(null);
     setInitialBalance('');
   };
 
-  const handleCreate = async (e: FormEvent) => {
+  const resetNewAssetForm = () => {
+    setNewAssetCode('');
+    setNewAssetName('');
+    setNewAssetType(CreateAssetRequestDtoAssetType.FIAT);
+    setNewAssetScale('2');
+    setNewMarketSource(CreateAssetRequestDtoMarketDataSource.NONE);
+    setNewMarketKey('');
+  };
+
+  const handleNewAssetSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const trimmedName = name.trim();
-    const code = currencyCode.trim().toUpperCase();
-    if (!trimmedName || !code) {
-      enqueueSnackbar('Vyplň název a měnu', { variant: 'warning' });
+    const code = newAssetCode.trim().toUpperCase();
+    const nm = newAssetName.trim() || code;
+    if (!code || !nm) {
+      enqueueSnackbar('Vyplň kód a název aktiva', { variant: 'warning' });
+      return;
+    }
+    const scale = Number.parseInt(newAssetScale, 10);
+    if (!Number.isFinite(scale) || scale < 0) {
+      enqueueSnackbar('Zadej platné scale (např. 2 u fiat, 8 u krypta)', { variant: 'warning' });
       return;
     }
 
-    const payload: CreateWalletRequestDto = {
-      name: trimmedName,
-      walletType,
-      currencyCode: code,
-    };
-    const bal = initialBalance.trim();
-    if (bal !== '') {
-      const n = parseFloat(bal.replace(',', '.'));
-      if (!Number.isNaN(n)) payload.initialBalance = majorToMinorUnits(n);
-    }
-
-    setSubmitting(true);
+    setAssetSubmitting(true);
     try {
-      const res = await walletCreate(trackerId, payload);
+      const res = await assetCreate({
+        code,
+        name: nm,
+        assetType: newAssetType,
+        scale,
+        marketDataSource: newMarketSource,
+        ...(newMarketKey.trim() ? { marketDataKey: newMarketKey.trim() } : {}),
+      });
       if (res.status < 200 || res.status >= 300) {
         const err = res.data as { message?: string; businessErrorDescription?: string } | undefined;
         enqueueSnackbar(
-          err?.message ?? err?.businessErrorDescription ?? 'Peněženku se nepodařilo vytvořit',
+          err?.message ?? err?.businessErrorDescription ?? 'Aktivum se nepodařilo vytvořit',
           { variant: 'error' },
         );
         return;
       }
-      enqueueSnackbar('Peněženka byla vytvořena', { variant: 'success' });
+      const created = res.data as unknown as AssetResponseDto | undefined;
+      if (!created?.id) {
+        enqueueSnackbar('Aktivum se nepodařilo vytvořit', { variant: 'error' });
+        return;
+      }
+      setSelectedAsset(created);
+      setAssetDialogOpen(false);
+      resetNewAssetForm();
+      await queryClient.invalidateQueries({ queryKey: getAssetFindAllQueryKey(ASSET_LIST_PARAMS) });
+      enqueueSnackbar('Aktivum bylo vytvořeno a je vybrané v poli výše.', { variant: 'success' });
+    } catch {
+      enqueueSnackbar('Aktivum se nepodařilo vytvořit', { variant: 'error' });
+    } finally {
+      setAssetSubmitting(false);
+    }
+  };
+
+  const handleQuickAccountCreate = async () => {
+    const iid = selectedInstitution?.id;
+    if (!iid) {
+      enqueueSnackbar('Nejprve vyber instituci', { variant: 'warning' });
+      return;
+    }
+    const nm = quickAccName.trim();
+    if (!nm) {
+      enqueueSnackbar('Zadej název účtu', { variant: 'warning' });
+      return;
+    }
+    setQuickAccSubmitting(true);
+    try {
+      const res = await accountCreate(trackerId, {
+        institutionId: iid,
+        name: nm,
+        accountType: quickAccType,
+      });
+      if (res.status < 200 || res.status >= 300) {
+        enqueueSnackbar(apiErrorMessage(res.data, 'Účet se nepodařilo vytvořit'), { variant: 'error' });
+        return;
+      }
+      const acc = res.data as unknown as AccountResponseDto | undefined;
+      if (!acc?.id) {
+        enqueueSnackbar('Účet se nepodařilo vytvořit', { variant: 'error' });
+        return;
+      }
+      setSelectedAccount(acc);
+      setQuickAccountOpen(false);
+      setQuickAccName('');
+      setQuickAccType(CreateAccountRequestDtoAccountType.CASH);
+      await queryClient.invalidateQueries({ queryKey: [`/api/account/${trackerId}`] });
+      enqueueSnackbar('Účet byl vytvořen a je vybraný', { variant: 'success' });
+    } catch {
+      enqueueSnackbar('Účet se nepodařilo vytvořit', { variant: 'error' });
+    } finally {
+      setQuickAccSubmitting(false);
+    }
+  };
+
+  const handleCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedInstitution?.id) {
+      enqueueSnackbar('Vyber instituci', { variant: 'warning' });
+      return;
+    }
+    const accountId = selectedAccount?.id;
+    const assetId = selectedAsset?.id;
+    if (!accountId || !assetId) {
+      enqueueSnackbar('Vyber účet a aktivum', { variant: 'warning' });
+      return;
+    }
+
+    const bal = initialBalance.trim();
+    let initialAmount: number | undefined;
+    if (bal !== '') {
+      const n = parseFloat(bal.replace(',', '.'));
+      if (!Number.isNaN(n)) initialAmount = majorToMinorUnits(n);
+    }
+
+    setSubmitting(true);
+    try {
+      const holdRes = await holdingCreate(trackerId, {
+        accountId,
+        assetId,
+        ...(initialAmount != null ? { initialAmount } : {}),
+      });
+      if (holdRes.status < 200 || holdRes.status >= 300) {
+        const err = holdRes.data as { message?: string; businessErrorDescription?: string } | undefined;
+        enqueueSnackbar(
+          err?.message ?? err?.businessErrorDescription ?? 'Pozici (holding) se nepodařilo vytvořit',
+          { variant: 'error' },
+        );
+        return;
+      }
+
+      enqueueSnackbar('Pozice byla vytvořena', { variant: 'success' });
+      const created = holdRes.data as unknown as HoldingResponseDto | undefined;
+      const instIdForWidget = created?.institutionId?.trim() ?? selectedInstitution?.id?.trim();
       setCreateOpen(false);
       resetForm();
-      const created = res.data as unknown as WalletResponseDto | undefined;
-      if (created?.id) {
+      if (instIdForWidget) {
         try {
-          const addRes = await widgetItemAdd('WALLET', created.id);
+          const addRes = await widgetItemAdd('INSTITUTION', instIdForWidget);
           if (addRes.status >= 200 && addRes.status < 300) {
-            await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
+            await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
           }
         } catch {
           /* widget seznam je volitelný */
         }
       }
-      await queryClient.invalidateQueries({ queryKey: [`/api/wallet/${trackerId}/dashboard`] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/wallet', trackerId] });
+      await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+      await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
     } catch {
-      enqueueSnackbar('Peněženku se nepodařilo vytvořit', { variant: 'error' });
+      enqueueSnackbar('Pozici se nepodařilo vytvořit', { variant: 'error' });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const sourceWallet = transferPair ? orderedItems.find((x) => x.id === transferPair.sourceId) : undefined;
-  const targetWallet = transferPair ? orderedItems.find((x) => x.id === transferPair.targetId) : undefined;
+  const sourceWallet = transferPair
+    ? orderedHoldingsForCategories.find((x) => x.id === transferPair.sourceId)
+    : undefined;
+  const targetWallet = transferPair
+    ? orderedHoldingsForCategories.find((x) => x.id === transferPair.targetId)
+    : undefined;
   const transferCurrenciesOk = (() => {
     if (!sourceWallet || !targetWallet) return false;
     const a = sourceWallet.currencyCode?.trim().toUpperCase() ?? '';
@@ -290,8 +662,8 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       try {
         const res = await transactionCreate(trackerId, {
           transactionType: CreateTransactionRequestDtoTransactionType.TRANSFER,
-          sourceWalletId: transferPair.sourceId,
-          targetWalletId: transferPair.targetId,
+          sourceHoldingId: transferPair.sourceId,
+          targetHoldingId: transferPair.targetId,
           amount: majorToMinorUnits(payload.amountMajor),
           transactionDate: payload.transactionDateIso,
           ...(payload.description ? { description: payload.description } : {}),
@@ -319,7 +691,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       try {
         const res = await transactionCreate(trackerId, {
           transactionType: CreateTransactionRequestDtoTransactionType.BALANCE_ADJUSTMENT,
-          walletId: correctionWallet.id,
+          holdingId: correctionWallet.id,
           correctedBalance: majorToMinorUnits(payload.correctedBalanceMajor),
           transactionDate: payload.transactionDateIso,
           ...(payload.note ? { note: payload.note } : {}),
@@ -347,13 +719,32 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     setReorderDropHoverId(null);
   };
 
-  const handleReorderDragStart = (e: DragEvent, walletId: string) => {
+  const applyInstitutionReorderFromDrop = useCallback(
+    (reorderSource: string, targetInstitutionId: string) => {
+      clearDragVisual();
+      if (replaceWidgetOrder.isPending) return;
+      const currentInstitutionOrder = institutionCards.map((c) => c.institutionId);
+      const trackerInstitutionIds = new Set(currentInstitutionOrder);
+      const newInstOrder = reorderIdsInList(currentInstitutionOrder, reorderSource, targetInstitutionId);
+      const nextGlobal = globalOrderAfterInstitutionTrackerReorder(
+        globalWalletOrder,
+        trackerInstitutionIds,
+        newInstOrder,
+      );
+      replaceWidgetOrder.mutate(nextGlobal, {
+        onError: () => enqueueSnackbar('Pořadí se nepodařilo uložit', { variant: 'error' }),
+      });
+    },
+    [enqueueSnackbar, globalWalletOrder, institutionCards, replaceWidgetOrder],
+  );
+
+  const handleReorderDragStart = (e: DragEvent, institutionId: string) => {
     e.stopPropagation();
-    e.dataTransfer.setData(WALLET_REORDER_MIME, walletId);
+    e.dataTransfer.setData(WALLET_REORDER_MIME, institutionId);
     e.dataTransfer.effectAllowed = 'move';
     setDraggingId(null);
     setDropHoverId(null);
-    setReorderDraggingId(walletId);
+    setReorderDraggingId(institutionId);
   };
 
   const handleDragStart = (e: DragEvent, walletId: string) => {
@@ -369,12 +760,31 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     clearDragVisual();
   };
 
-  const handleDragOver = (e: DragEvent, walletId: string, canReceiveTransfer: boolean) => {
+  const handleDragOverInstitutionCard = (e: DragEvent, institutionId: string) => {
     const types = Array.from(e.dataTransfer.types);
     if (types.includes(WALLET_REORDER_MIME)) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      if (walletId !== reorderDraggingId) setReorderDropHoverId(walletId);
+      if (institutionId !== reorderDraggingId) setReorderDropHoverId(institutionId);
+      setDropHoverId(null);
+      return;
+    }
+    if (types.includes(WALLET_DRAG_MIME) || types.includes('text/plain')) {
+      setReorderDropHoverId(null);
+    }
+  };
+
+  const handleDragOverHoldingRow = (
+    e: DragEvent,
+    parentInstitutionId: string,
+    holdingId: string,
+    canReceiveTransfer: boolean,
+  ) => {
+    const types = Array.from(e.dataTransfer.types);
+    if (types.includes(WALLET_REORDER_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (parentInstitutionId !== reorderDraggingId) setReorderDropHoverId(parentInstitutionId);
       setDropHoverId(null);
       return;
     }
@@ -384,7 +794,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     ) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      if (walletId !== draggingId) setDropHoverId(walletId);
+      if (holdingId !== draggingId) setDropHoverId(holdingId);
       setReorderDropHoverId(null);
     }
   };
@@ -396,24 +806,28 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     setReorderDropHoverId(null);
   };
 
-  const handleDrop = (e: DragEvent, target: WalletResponseDto) => {
+  const handleInstitutionCardDrop = (e: DragEvent, targetInstitutionId: string) => {
     e.preventDefault();
     e.stopPropagation();
     ignoreClickUntilRef.current = Date.now() + 500;
     const reorderSource = e.dataTransfer.getData(WALLET_REORDER_MIME);
-    if (reorderSource && target.id) {
-      clearDragVisual();
-      if (replaceWidgetOrder.isPending) return;
-      const trackerIds = new Set(
-        orderedItems.map((w) => w.id).filter(Boolean) as string[],
-      );
-      const currentTrackerOrder = orderedItems.map((w) => w.id!).filter(Boolean);
-      const newLocalOrder = reorderIdsInList(currentTrackerOrder, reorderSource, target.id);
-      const nextGlobal = globalOrderAfterTrackerReorder(globalWalletOrder, trackerIds, newLocalOrder);
-      replaceWidgetOrder.mutate(nextGlobal, {
-        onError: () =>
-          enqueueSnackbar('Pořadí se nepodařilo uložit', { variant: 'error' }),
-      });
+    if (reorderSource && targetInstitutionId) {
+      applyInstitutionReorderFromDrop(reorderSource, targetInstitutionId);
+      return;
+    }
+    setReorderDraggingId(null);
+    setReorderDropHoverId(null);
+    setDraggingId(null);
+    setDropHoverId(null);
+  };
+
+  const handleHoldingRowDrop = (e: DragEvent, parentInstitutionId: string, target: WalletResponseDto) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ignoreClickUntilRef.current = Date.now() + 500;
+    const reorderSource = e.dataTransfer.getData(WALLET_REORDER_MIME);
+    if (reorderSource && parentInstitutionId) {
+      applyInstitutionReorderFromDrop(reorderSource, parentInstitutionId);
       return;
     }
     setReorderDraggingId(null);
@@ -427,7 +841,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     startTransition(() => setTransferPair({ sourceId, targetId }));
   };
 
-  const handleCardClick = (w: WalletResponseDto) => {
+  const handleHoldingRowClick = (w: WalletResponseDto) => {
     if (Date.now() < ignoreClickUntilRef.current) return;
     if (!w.id) return;
     setCorrectionWallet(w);
@@ -464,17 +878,28 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       </Stack>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 1, mt: 2 }}>
-        <PageHeading component="h2">Moje peněženky</PageHeading>
-        <Button
-          variant="contained"
-          startIcon={<AddOutlinedIcon />}
-          onClick={() => {
-            resetForm();
-            setCreateOpen(true);
-          }}
-        >
-          Přidat peněženku
-        </Button>
+        <PageHeading component="h2">Moje pozice</PageHeading>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { xs: 'stretch', sm: 'center' }, width: { xs: '100%', sm: 'auto' } }}>
+          <Button
+            variant="outlined"
+            startIcon={<AccountBalanceOutlinedIcon />}
+            onClick={() => setManageStructureOpen(true)}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+          >
+            Instituce a účty
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddOutlinedIcon />}
+            onClick={() => {
+              resetForm();
+              setCreateOpen(true);
+            }}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+          >
+            Přidat pozici
+          </Button>
+        </Stack>
       </Stack>
 
       <Stack
@@ -484,6 +909,16 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         useFlexGap
         sx={{ mb: 2, flexWrap: 'wrap' }}
       >
+        <Tooltip title="Předchozí měsíc">
+          <IconButton
+            size="small"
+            onClick={() => shiftMonthBy(-1)}
+            aria-label="Předchozí měsíc"
+            sx={{ alignSelf: 'center' }}
+          >
+            <ChevronLeftIcon />
+          </IconButton>
+        </Tooltip>
         <TextField
           label="Od"
           value={rangeFrom}
@@ -498,6 +933,16 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           InputLabelProps={{ shrink: true }}
           size="small"
         />
+        <Tooltip title="Další měsíc">
+          <IconButton
+            size="small"
+            onClick={() => shiftMonthBy(1)}
+            aria-label="Další měsíc"
+            sx={{ alignSelf: 'center' }}
+          >
+            <ChevronRightIcon />
+          </IconButton>
+        </Tooltip>
         <Button
           variant="outlined"
           size="small"
@@ -522,15 +967,15 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       )}
       {isError && (
         <Typography color="error" sx={{ mb: 2 }}>
-          Nepodařilo se načíst peněženky.
+          Nepodařilo se načíst pozice.
         </Typography>
       )}
 
       {isLoading && rangeParamsOk ? (
-        <Typography color="text.secondary">Načítám peněženky…</Typography>
-      ) : items.length === 0 ? (
+        <Typography color="text.secondary">Načítám pozice…</Typography>
+      ) : !hasAnyHoldings ? (
         rangeParamsOk ? (
-          <Typography color="text.secondary">Zatím žádná peněženka — přidej první.</Typography>
+          <Typography color="text.secondary">Zatím žádná pozice — přidej první.</Typography>
         ) : null
       ) : (
         <Box
@@ -540,46 +985,39 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
             gap: 2,
           }}
         >
-          {orderedItems.map((w) => {
-            const wid = w.id ?? '';
-            const sm = wid ? summaryById.get(wid) : undefined;
-            const canDragTransfer = Boolean(w.id) && w.active !== false;
-            const canReorderGrip = Boolean(w.id) && !replaceWidgetOrder.isPending;
-            const isDragging = reorderDraggingId === w.id || draggingId === w.id;
-            const isDropHover =
-              (reorderDropHoverId === wid &&
-                Boolean(reorderDraggingId) &&
-                reorderDraggingId !== wid) ||
-              (dropHoverId === wid && Boolean(draggingId) && draggingId !== wid);
+          {institutionCards.map((card) => {
+            const iid = card.institutionId;
+            const canReorderGrip = !replaceWidgetOrder.isPending;
+            const isInstDragReorder = reorderDraggingId === iid;
+            const isInstDropHoverReorder =
+              reorderDropHoverId === iid && Boolean(reorderDraggingId) && reorderDraggingId !== iid;
 
             return (
               <Card
-                key={w.id ?? w.name}
-                onDragOver={wid ? (e) => handleDragOver(e, wid, w.active !== false) : undefined}
-                onDragLeave={wid ? handleDragLeave : undefined}
-                onDrop={wid ? (e) => handleDrop(e, w) : undefined}
-                onClick={(ev) => {
-                  if ((ev.target as HTMLElement).closest('[data-wallet-reorder-grip]')) return;
-                  handleCardClick(w);
-                }}
+                key={iid}
                 variant="outlined"
                 sx={{
                   height: '100%',
-                  cursor: 'pointer',
-                  opacity: isDragging ? 0.55 : 1,
+                  opacity: isInstDragReorder ? 0.55 : 1,
                   transition: 'opacity 0.15s, box-shadow 0.15s',
-                  outline: isDropHover ? (t) => `2px solid ${t.palette.primary.main}` : 'none',
+                  outline: isInstDropHoverReorder ? (t) => `2px solid ${t.palette.primary.main}` : 'none',
                   outlineOffset: 2,
                 }}
               >
-                <Stack direction="row" alignItems="stretch">
-                  <Tooltip title="Změnit pořadí (uloží se na server)">
+                <Stack
+                  direction="row"
+                  alignItems="stretch"
+                  onDragOver={(e) => handleDragOverInstitutionCard(e, iid)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleInstitutionCardDrop(e, iid)}
+                >
+                  <Tooltip title="Změnit pořadí instituce (uloží se na server)">
                     <Box
                       data-wallet-reorder-grip
                       component="span"
                       onClick={(e) => e.stopPropagation()}
                       draggable={canReorderGrip}
-                      onDragStart={w.id ? (e) => handleReorderDragStart(e, w.id!) : undefined}
+                      onDragStart={(e) => handleReorderDragStart(e, iid)}
                       onDragEnd={handleDragEnd}
                       sx={{
                         cursor: canReorderGrip ? 'grab' : 'default',
@@ -590,16 +1028,13 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                         pr: 0.5,
                         flexShrink: 0,
                       }}
-                      aria-label="Změnit pořadí peněženky"
+                      aria-label="Změnit pořadí instituce"
                     >
                       <DragIndicatorIcon fontSize="small" color="action" />
                     </Box>
                   </Tooltip>
                   <CardContent
                     component="div"
-                    draggable={canDragTransfer}
-                    onDragStart={canDragTransfer ? (e) => handleDragStart(e, w.id!) : undefined}
-                    onDragEnd={handleDragEnd}
                     sx={{
                       flex: 1,
                       minWidth: 0,
@@ -607,50 +1042,129 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                       '&:last-child': { pb: '16px !important' },
                     }}
                   >
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        gap: 1.5,
-                      }}
-                    >
-                      <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
-                        <Stack direction="row" alignItems="flex-start" spacing={1}>
-                          <Typography variant="h6" component="h3" sx={{ lineHeight: 1.3 }}>
-                            {w.name ?? '—'}
+                    <Typography variant="h6" component="h3" sx={{ lineHeight: 1.3, mb: 1.5 }}>
+                      {card.institutionName}
+                    </Typography>
+                    <Stack spacing={2}>
+                      {card.accounts.map((acc, accIdx) => (
+                        <Stack key={acc.accountId ?? `${iid}-acc-${accIdx}`} spacing={1}>
+                          <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
+                            Účet: {acc.accountName}
                           </Typography>
-                          {w.active === false && <Chip size="small" label="Neaktivní" variant="outlined" />}
+                          <Stack spacing={1} sx={{ pl: 0.5, borderLeft: 2, borderColor: 'divider' }}>
+                            {acc.holdings.map(({ summary: sm, wallet: w }) => {
+                              const hid = w.id ?? '';
+                              const canDragTransfer = Boolean(w.id) && w.active !== false;
+                              const isRowDragging = draggingId === w.id;
+                              const isRowDropHoverTransfer =
+                                dropHoverId === hid && Boolean(draggingId) && draggingId !== hid;
+
+                              return (
+                                <Box
+                                  key={hid}
+                                  onDragOver={(e) =>
+                                    handleDragOverHoldingRow(e, iid, hid, w.active !== false)
+                                  }
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={(e) => handleHoldingRowDrop(e, iid, w)}
+                                  onClick={(ev) => {
+                                    if ((ev.target as HTMLElement).closest('[data-wallet-reorder-grip]')) return;
+                                    handleHoldingRowClick(w);
+                                  }}
+                                  draggable={canDragTransfer}
+                                  onDragStart={
+                                    canDragTransfer ? (e) => handleDragStart(e, w.id!) : undefined
+                                  }
+                                  onDragEnd={handleDragEnd}
+                                  sx={{
+                                    cursor: 'pointer',
+                                    pl: 1,
+                                    pr: 0.5,
+                                    py: 0.75,
+                                    borderRadius: 1,
+                                    opacity: isRowDragging ? 0.55 : 1,
+                                    outline: isRowDropHoverTransfer
+                                      ? (t) => `2px solid ${t.palette.primary.main}`
+                                      : 'none',
+                                    outlineOffset: 0,
+                                    '&:hover': { bgcolor: 'action.hover' },
+                                  }}
+                                >
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'flex-start',
+                                      gap: 1.5,
+                                    }}
+                                  >
+                                    <Stack spacing={0.35} sx={{ minWidth: 0, flex: 1 }}>
+                                      <Stack direction="row" alignItems="center" spacing={0.75} flexWrap="wrap">
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+                                          {w.currencyCode ?? '—'}
+                                        </Typography>
+                                        {w.active === false && (
+                                          <Chip size="small" label="Neaktivní" variant="outlined" />
+                                        )}
+                                      </Stack>
+                                      <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                        sx={{ lineHeight: 1.35 }}
+                                      >
+                                        Zůstatek
+                                      </Typography>
+                                      <Typography variant="body1" sx={{ fontWeight: 600, lineHeight: 1.25 }}>
+                                        {formatWalletAmount(w.currentBalance, w.currencyCode)}
+                                      </Typography>
+                                    </Stack>
+                                    <Stack
+                                      alignItems="flex-end"
+                                      spacing={0.25}
+                                      sx={{ flexShrink: 0, textAlign: 'right', minWidth: 'min-content' }}
+                                    >
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        display="block"
+                                        sx={{ lineHeight: 1.35 }}
+                                      >
+                                        Začátek {formatWalletAmount(sm.startBalance, w.currencyCode)}
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        display="block"
+                                        sx={{ lineHeight: 1.35 }}
+                                      >
+                                        Příjem {formatWalletAmount(sm.totalIncome, w.currencyCode)}
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        display="block"
+                                        sx={{ lineHeight: 1.35 }}
+                                      >
+                                        Výdaj {formatWalletAmount(sm.totalExpense, w.currencyCode)}
+                                      </Typography>
+                                      <Divider sx={{ alignSelf: 'stretch', width: '100%', my: 0.35 }} />
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        display="block"
+                                        sx={{ lineHeight: 1.35 }}
+                                      >
+                                        Čistá změna {formatWalletAmount(sm.difference, w.currencyCode)}
+                                      </Typography>
+                                    </Stack>
+                                  </Box>
+                                </Box>
+                              );
+                            })}
+                          </Stack>
                         </Stack>
-                        <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
-                          Zůstatek
-                        </Typography>
-                        <Typography variant="h6" component="p" sx={{ fontWeight: 600, lineHeight: 1.25 }}>
-                          {formatWalletAmount(w.currentBalance, w.currencyCode)}
-                        </Typography>
-                      </Stack>
-                      {sm && (
-                        <Stack
-                          alignItems="flex-end"
-                          spacing={0.25}
-                          sx={{ flexShrink: 0, textAlign: 'right', minWidth: 'min-content' }}
-                        >
-                          <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
-                            Zůstatek na začátku {formatWalletAmount(sm.startBalance, w.currencyCode)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
-                            Příjem {formatWalletAmount(sm.totalIncome, w.currencyCode)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
-                            Výdaj {formatWalletAmount(sm.totalExpense, w.currencyCode)}
-                          </Typography>
-                          <Divider sx={{ alignSelf: 'stretch', width: '100%', my: 0.5 }} />
-                          <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.35 }}>
-                            Čistá změna {formatWalletAmount(sm.difference, w.currencyCode)}
-                          </Typography>
-                        </Stack>
-                      )}
-                    </Box>
+                      ))}
+                    </Stack>
                   </CardContent>
                 </Stack>
               </Card>
@@ -680,6 +1194,13 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         >
           Historie
         </ButtonBase>
+        <ButtonBase
+          disableRipple
+          onClick={() => setSearchParams({ tab: 'importy' })}
+          sx={sectionNavBtnSx(mainTab === 2)}
+        >
+          Importy
+        </ButtonBase>
       </Stack>
 
       {mainTab === 0 && (
@@ -687,30 +1208,17 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           embedded
           trackerId={trackerId}
           trackerName={trackerName}
-          walletsFromParent={orderedItems}
+          walletsFromParent={orderedHoldingsForCategories}
           categoriesQueryEnabled={
             dashboardFetched && rangeParamsOk && !rangeOrderInvalid
           }
           categoryActivePeriodIso={dashboardParams}
-          periodSync={{
-            rangeFrom,
-            rangeTo,
-            onRangeFromChange: (e) => setRangeFrom(e.target.value),
-            onRangeToChange: (e) => setRangeTo(e.target.value),
-            onCurrentMonth: () => {
-              setRangeFrom(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
-              setRangeTo(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
-            },
-            rangeOrderInvalid,
-            showIncompleteDateError:
-              !rangeParamsOk &&
-              !rangeOrderInvalid &&
-              Boolean(rangeFrom.trim() || rangeTo.trim()),
-          }}
         />
       )}
 
       {mainTab === 1 && <RecentTransactionsPanel trackerId={trackerId} />}
+
+      {mainTab === 2 && <BudgetPlanImportPanel trackerId={trackerId} />}
 
       <TransferBetweenWalletsDialog
         open={Boolean(transferPair)}
@@ -745,41 +1253,149 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       />
 
       <Dialog open={createOpen} onClose={() => !submitting && setCreateOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Nová peněženka</DialogTitle>
-        <Box component="form" onSubmit={handleCreate}>
+        <DialogTitle>Nová pozice</DialogTitle>
+        <Box component="form" onSubmit={handleCreate} noValidate>
           <DialogContent>
             <Stack spacing={2}>
-              <TextField
-                label="Název"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                fullWidth
-                autoFocus
+              <Button
+                type="button"
+                variant="text"
+                size="small"
+                onClick={() => {
+                  setManageStructureOpen(true);
+                }}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                Spravovat instituce a účty…
+              </Button>
+              <Autocomplete
+                options={institutionOptions}
+                getOptionLabel={(o) => o.name?.trim() || o.id || '—'}
+                value={selectedInstitution}
+                onChange={(_, v) => {
+                  setSelectedInstitution(v);
+                  setSelectedAccount(null);
+                  setQuickAccountOpen(false);
+                }}
+                isOptionEqualToValue={(a, b) => Boolean(a.id && b.id && a.id === b.id)}
+                filterOptions={filterInstitutionOptions}
+                noOptionsText="Žádná instituce — přidej ji v „Instituce a účty“"
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Instituce"
+                    helperText="Instituce sdružuje více účtů (např. jedna banka, více produktů)"
+                  />
+                )}
               />
-              <FormControl fullWidth required>
-                <InputLabel id="wallet-type-label">Typ</InputLabel>
-                <Select
-                  labelId="wallet-type-label"
-                  label="Typ"
-                  value={walletType}
-                  onChange={(e) => setWalletType(e.target.value as CreateWalletRequestDtoWalletType)}
+              <Autocomplete
+                options={accountsForSelectedInstitution}
+                getOptionLabel={(o) => accountAutocompleteLabel(o)}
+                value={selectedAccount}
+                onChange={(_, v) => setSelectedAccount(v)}
+                disabled={!selectedInstitution}
+                isOptionEqualToValue={(a, b) => Boolean(a.id && b.id && a.id === b.id)}
+                filterOptions={filterAccountOptions}
+                noOptionsText={
+                  selectedInstitution ? 'U této instituce zatím nic není — přidej účet níže' : 'Nejprve vyber instituci'
+                }
+                renderInput={(params) => (
+                  <TextField {...params} label="Účet" helperText="Účet u vybrané instituce" />
+                )}
+              />
+              <Button
+                type="button"
+                size="small"
+                variant="outlined"
+                disabled={!selectedInstitution || submitting}
+                onClick={() => setQuickAccountOpen((v) => !v)}
+              >
+                {quickAccountOpen ? 'Skrýt' : 'Nový účet u této instituci…'}
+              </Button>
+              <Collapse in={quickAccountOpen && Boolean(selectedInstitution)} unmountOnExit>
+                <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                  <Stack spacing={1.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Účet se uloží pod institucí „{selectedInstitution?.name ?? '—'}“.
+                    </Typography>
+                    <TextField
+                      label="Název účtu"
+                      value={quickAccName}
+                      onChange={(e) => setQuickAccName(e.target.value)}
+                      size="small"
+                      fullWidth
+                    />
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="quick-acc-type">Typ účtu</InputLabel>
+                      <Select
+                        labelId="quick-acc-type"
+                        label="Typ účtu"
+                        value={quickAccType}
+                        onChange={(e) => setQuickAccType(e.target.value as CreateAccountRequestDtoAccountType)}
+                      >
+                        {ACCOUNT_TYPE_OPTIONS.map((o) => (
+                          <MenuItem key={o.value} value={o.value}>
+                            {o.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        type="button"
+                        variant="contained"
+                        size="small"
+                        disabled={quickAccSubmitting}
+                        onClick={() => void handleQuickAccountCreate()}
+                      >
+                        Vytvořit účet
+                      </Button>
+                      <Button
+                        type="button"
+                        size="small"
+                        onClick={() => {
+                          setQuickAccountOpen(false);
+                          setQuickAccName('');
+                        }}
+                        disabled={quickAccSubmitting}
+                      >
+                        Zrušit
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </Box>
+              </Collapse>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'flex-start' }}>
+                <Autocomplete
+                  sx={{ flex: 1, minWidth: 0 }}
+                  options={assetOptions}
+                  getOptionLabel={(o) => assetSelectLabel(o)}
+                  value={selectedAsset}
+                  onChange={(_, v) => setSelectedAsset(v)}
+                  isOptionEqualToValue={(a, b) => Boolean(a.id && b.id && a.id === b.id)}
+                  filterOptions={filterAssetOptions}
+                  noOptionsText={createOpen && !assetDialogOpen ? 'Žádná shoda — založ aktivum' : 'Žádná shoda'}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Aktivum"
+                      helperText="Globální seznam z /api/asset (měna, krypto, …)"
+                    />
+                  )}
+                />
+                <Button
+                  type="button"
+                  variant="outlined"
+                  onClick={() => {
+                    resetNewAssetForm();
+                    setAssetDialogOpen(true);
+                  }}
+                  disabled={submitting}
+                  sx={{ flexShrink: 0, alignSelf: { xs: 'stretch', sm: 'center' } }}
                 >
-                  {WALLET_TYPE_OPTIONS.map((o) => (
-                    <MenuItem key={o.value} value={o.value}>
-                      {o.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                label="Měna (ISO)"
-                value={currencyCode}
-                onChange={(e) => setCurrencyCode(e.target.value)}
-                required
-                fullWidth
-                inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
-              />
+                  Nové aktivum…
+                </Button>
+              </Stack>
               <TextField
                 label="Počáteční zůstatek (volitelné)"
                 value={initialBalance}
@@ -796,6 +1412,111 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
             </Button>
             <Button type="submit" variant="contained" disabled={submitting}>
               Vytvořit
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      <InstitutionAccountsManageDialog
+        trackerId={trackerId}
+        open={manageStructureOpen}
+        onClose={() => setManageStructureOpen(false)}
+      />
+
+      <Dialog
+        open={assetDialogOpen}
+        onClose={() => !assetSubmitting && setAssetDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Nové aktivum</DialogTitle>
+        <Box component="form" onSubmit={handleNewAssetSubmit}>
+          <DialogContent>
+            <Stack spacing={2}>
+              <TextField
+                label="Kód"
+                value={newAssetCode}
+                onChange={(e) => setNewAssetCode(e.target.value)}
+                onBlur={() => {
+                  const c = newAssetCode.trim().toUpperCase();
+                  if (!c) return;
+                  const m = inferAssetMeta(c);
+                  setNewAssetType(m.assetType);
+                  setNewAssetScale(String(m.scale));
+                }}
+                required
+                fullWidth
+                autoFocus
+                inputProps={{ maxLength: 32, style: { textTransform: 'uppercase' } }}
+                helperText="Po opuštění pole: návrh typu a scale (CZK→fiat/2, BTC→crypto/8)"
+              />
+              <TextField
+                label="Název"
+                value={newAssetName}
+                onChange={(e) => setNewAssetName(e.target.value)}
+                fullWidth
+                helperText="Volitelné — výchozí je shodný s kódem"
+              />
+              <FormControl fullWidth required>
+                <InputLabel id="new-asset-type-label">Typ aktiva</InputLabel>
+                <Select
+                  labelId="new-asset-type-label"
+                  label="Typ aktiva"
+                  value={newAssetType}
+                  onChange={(e) => setNewAssetType(e.target.value as CreateAssetRequestDtoAssetType)}
+                >
+                  {(Object.values(CreateAssetRequestDtoAssetType) as CreateAssetRequestDtoAssetType[]).map(
+                    (v) => (
+                      <MenuItem key={v} value={v}>
+                        {ASSET_TYPE_LABELS[v]}
+                      </MenuItem>
+                    ),
+                  )}
+                </Select>
+              </FormControl>
+              <TextField
+                label="Scale (des. místa)"
+                value={newAssetScale}
+                onChange={(e) => setNewAssetScale(e.target.value)}
+                required
+                fullWidth
+                inputMode="numeric"
+              />
+              <FormControl fullWidth required>
+                <InputLabel id="new-market-label">Zdroj tržních dat</InputLabel>
+                <Select
+                  labelId="new-market-label"
+                  label="Zdroj tržních dat"
+                  value={newMarketSource}
+                  onChange={(e) =>
+                    setNewMarketSource(e.target.value as CreateAssetRequestDtoMarketDataSource)
+                  }
+                >
+                  {(
+                    Object.values(
+                      CreateAssetRequestDtoMarketDataSource,
+                    ) as CreateAssetRequestDtoMarketDataSource[]
+                  ).map((v) => (
+                    <MenuItem key={v} value={v}>
+                      {MARKET_SOURCE_LABELS[v]}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                label="Klíč u zdroje (volitelné)"
+                value={newMarketKey}
+                onChange={(e) => setNewMarketKey(e.target.value)}
+                fullWidth
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button type="button" onClick={() => setAssetDialogOpen(false)} disabled={assetSubmitting}>
+              Zrušit
+            </Button>
+            <Button type="submit" variant="contained" disabled={assetSubmitting}>
+              Vytvořit aktivum
             </Button>
           </DialogActions>
         </Box>

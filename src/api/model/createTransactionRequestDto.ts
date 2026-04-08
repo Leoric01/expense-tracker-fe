@@ -9,12 +9,15 @@ import type { CreateTransactionRequestDtoTransactionType } from './createTransac
 
 export interface CreateTransactionRequestDto {
   transactionType: CreateTransactionRequestDtoTransactionType;
-  walletId?: string;
-  sourceWalletId?: string;
-  targetWalletId?: string;
+  holdingId?: string;
+  sourceHoldingId?: string;
+  targetHoldingId?: string;
   categoryId?: string;
   amount?: number;
   correctedBalance?: number;
+  currencyCode?: string;
+  exchangeRate?: number;
+  feeAmount?: number;
   transactionDate: string;
   description?: string;
   note?: string;

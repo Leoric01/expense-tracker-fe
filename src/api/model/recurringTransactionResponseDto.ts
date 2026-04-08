@@ -11,8 +11,8 @@ import type { RecurringTransactionResponseDtoTransactionType } from './recurring
 export interface RecurringTransactionResponseDto {
   id?: string;
   transactionType?: RecurringTransactionResponseDtoTransactionType;
-  walletId?: string;
-  walletName?: string;
+  holdingId?: string;
+  holdingName?: string;
   categoryId?: string;
   categoryName?: string;
   amount?: number;
