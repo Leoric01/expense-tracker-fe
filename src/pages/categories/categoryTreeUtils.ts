@@ -161,13 +161,13 @@ export function activeBudgetPlanToBudgetPlanResponse(
 
 /**
  * Plány vnořené u kategorie — ve tvaru očekávaném UI (řádek + dialog).
- * Preferuje `budgetPlans` (např. po `GET .../active?dateFrom&dateTo`), jinak jeden `activeBudgetPlan`.
+ * Preferuje `budgetPlansForSelectedPeriod` (např. po `GET .../active?dateFrom&dateTo`), jinak jeden `activeBudgetPlan`.
  */
 export function budgetPlansFromCategoryEmbedded(
   category: CategoryResponseDto | null | undefined,
 ): BudgetPlanResponseDto[] {
   if (!category?.id) return [];
-  const multi = category.budgetPlans;
+  const multi = category.budgetPlansForSelectedPeriod;
   if (multi && multi.length > 0) {
     return multi.map((p) => activeBudgetPlanToBudgetPlanResponse(category.id!, category.name, p));
   }
