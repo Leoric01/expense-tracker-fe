@@ -10,9 +10,11 @@ import { Login } from '@pages/Login';
 import { NotFound } from '@pages/NotFound';
 import { CategoriesPage } from '@pages/categories/CategoriesPage';
 import { ExpenseTrackers } from '@pages/ExpenseTrackers';
-import { NutritionDashboardPlaceholderPage } from '@pages/nutrition/NutritionDashboardPlaceholderPage';
+import { NutritionDailyCheckinPlaceholderPage } from '@pages/nutrition/NutritionDailyCheckinPlaceholderPage';
+import { NutritionDashboardPage } from '@pages/nutrition/NutritionDashboardPage';
 import { NutritionGoalPlanPage } from '@pages/nutrition/NutritionGoalPlanPage';
 import { NutritionSetupPage } from '@pages/nutrition/NutritionSetupPage';
+import { NutritionWeeklyCheckinPlaceholderPage } from '@pages/nutrition/NutritionWeeklyCheckinPlaceholderPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
@@ -31,8 +33,10 @@ export const router = createBrowserRouter([
       { path: 'categories', element: <CategoriesPage /> },
       { path: 'nutrition/setup', element: <NutritionSetupPage /> },
       { path: 'nutrition/goal-plan', element: <NutritionGoalPlanPage /> },
-      { path: 'nutrition/dashboard', element: <NutritionDashboardPlaceholderPage /> },
-      { path: 'nutrition', element: <Navigate to="/nutrition/setup" replace /> },
+      { path: 'nutrition/dashboard', element: <NutritionDashboardPage /> },
+      { path: 'nutrition/daily-checkin', element: <NutritionDailyCheckinPlaceholderPage /> },
+      { path: 'nutrition/weekly-checkin', element: <NutritionWeeklyCheckinPlaceholderPage /> },
+      { path: 'nutrition', element: <Navigate to="/nutrition/dashboard" replace /> },
       { path: 'importy', element: <Navigate to="/?tab=importy" replace /> },
       { path: 'wallets', element: <Navigate to="/" replace /> },
       { path: 'transactions', element: <Navigate to="/" replace /> },

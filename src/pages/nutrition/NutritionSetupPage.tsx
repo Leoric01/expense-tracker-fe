@@ -38,9 +38,14 @@ const ACTIVITY_OPTIONS: { value: number; label: string }[] = [
   { value: 1.9, label: 'Extra aktivní (2× denně, fyzická práce)' },
 ];
 
+/** Nejblížší předvolba; vstup musí být číslo (BigDecimal z API je už number v JSON). */
 function nearestActivityMultiplier(value: number): number {
-  return ACTIVITY_OPTIONS.reduce((best, o) =>
-    Math.abs(o.value - value) < Math.abs(best - value) ? o.value : best,
+  if (!Number.isFinite(value)) {
+    return ACTIVITY_OPTIONS[2]!.value;
+  }
+  return ACTIVITY_OPTIONS.reduce<number>(
+    (best, o) => (Math.abs(o.value - value) < Math.abs(best - value) ? o.value : best),
+    ACTIVITY_OPTIONS[0]!.value,
   );
 }
 
@@ -64,13 +69,13 @@ function profileToForm(profile: NutritionProfileResponseDto | null): FormState {
   if (!profile) {
     return { ...defaultForm };
   }
-  const mult = profile.activityMultiplier ?? 1.5;
+  const mult = Number(profile.activityMultiplier ?? 1.5);
   return {
     preferredUnitSystem:
       profile.preferredUnitSystem ?? UpsertNutritionProfileRequestDtoPreferredUnitSystem.METRIC,
     biologicalSex: profile.biologicalSex ?? UpsertNutritionProfileRequestDtoBiologicalSex.MALE,
     heightCm: profile.heightCm != null ? String(profile.heightCm) : '180',
-    activityMultiplier: nearestActivityMultiplier(mult),
+    activityMultiplier: nearestActivityMultiplier(Number.isFinite(mult) ? mult : 1.5),
     bodyFatAutoCalculationEnabled: profile.bodyFatAutoCalculationEnabled ?? true,
   };
 }

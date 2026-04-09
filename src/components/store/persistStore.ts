@@ -9,6 +9,9 @@ export type SelectedExpenseTrackerRef = {
 interface UserPersistentState {
   selectedExpenseTracker: SelectedExpenseTrackerRef | null;
   setSelectedExpenseTracker: (tracker: SelectedExpenseTrackerRef | null) => void;
+  /** trackerId → active goal plan ID (sync z nutrition dashboard API; sekce 5, 7) */
+  nutritionActiveGoalPlanByTracker: Record<string, string>;
+  setNutritionActiveGoalPlan: (trackerId: string, goalPlanId: string | null) => void;
   clearUserData: () => void;
 }
 
@@ -21,7 +24,19 @@ export const createUserPersistStore = (userId: string) => {
       (set) => ({
         selectedExpenseTracker: null,
         setSelectedExpenseTracker: (tracker) => set({ selectedExpenseTracker: tracker }),
-        clearUserData: () => set({ selectedExpenseTracker: null }),
+        nutritionActiveGoalPlanByTracker: {},
+        setNutritionActiveGoalPlan: (trackerId, goalPlanId) =>
+          set((state) => {
+            const next = { ...state.nutritionActiveGoalPlanByTracker };
+            if (goalPlanId === null || goalPlanId === '') {
+              delete next[trackerId];
+            } else {
+              next[trackerId] = goalPlanId;
+            }
+            return { nutritionActiveGoalPlanByTracker: next };
+          }),
+        clearUserData: () =>
+          set({ selectedExpenseTracker: null, nutritionActiveGoalPlanByTracker: {} }),
       }),
       {
         name: `user-${userId}-storage`,

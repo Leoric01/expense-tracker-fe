@@ -94,6 +94,16 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
         {isNutritionSection ? (
           <>
             <NavLink
+              to="/nutrition/dashboard"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+            >
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Dashboard" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink
               to="/nutrition/setup"
               style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
             >
@@ -114,12 +124,22 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
               )}
             </NavLink>
             <NavLink
-              to="/nutrition/dashboard"
+              to="/nutrition/daily-checkin"
               style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
             >
               {({ isActive }) => (
                 <ListItemButton selected={isActive} onClick={onMobileClose}>
-                  <ListItemText primary="Dashboard" />
+                  <ListItemText primary="Denní check-in" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink
+              to="/nutrition/weekly-checkin"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+            >
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Weekly check-in" />
                 </ListItemButton>
               )}
             </NavLink>
@@ -142,7 +162,7 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
             </NavLink>
             <Divider sx={{ my: 1 }} />
             <NavLink
-              to="/nutrition/setup"
+              to="/nutrition/dashboard"
               style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
             >
               {({ isActive }) => (
