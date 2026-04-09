@@ -16,6 +16,7 @@ import { NutritionGoalPlanCreatePage } from '@pages/nutrition/NutritionGoalPlanC
 import { NutritionGoalPlanPage } from '@pages/nutrition/NutritionGoalPlanPage';
 import { NutritionGoalPlanSummaryPage } from '@pages/nutrition/NutritionGoalPlanSummaryPage';
 import { NutritionSetupPage } from '@pages/nutrition/NutritionSetupPage';
+import { NutritionTargetHistoryPage } from '@pages/nutrition/NutritionTargetHistoryPage';
 import { NutritionWeeklyCheckinPage } from '@pages/nutrition/NutritionWeeklyCheckinPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
       { path: 'nutrition/dashboard', element: <NutritionDashboardPage /> },
       { path: 'nutrition/daily-checkin', element: <NutritionDailyCheckinPage /> },
       { path: 'nutrition/weekly-checkin', element: <NutritionWeeklyCheckinPage /> },
+      { path: 'nutrition/target-history', element: <NutritionTargetHistoryPage /> },
       { path: 'nutrition', element: <Navigate to="/nutrition/dashboard" replace /> },
       { path: 'importy', element: <Navigate to="/?tab=importy" replace /> },
       { path: 'wallets', element: <Navigate to="/" replace /> },

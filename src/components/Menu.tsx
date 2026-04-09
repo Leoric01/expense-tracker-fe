@@ -104,32 +104,12 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
               )}
             </NavLink>
             <NavLink
-              to="/nutrition/setup"
-              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-            >
-              {({ isActive }) => (
-                <ListItemButton selected={isActive} onClick={onMobileClose}>
-                  <ListItemText primary="Nastavení profilu" />
-                </ListItemButton>
-              )}
-            </NavLink>
-            <NavLink
-              to="/nutrition/goal-plan"
-              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-            >
-              {({ isActive }) => (
-                <ListItemButton selected={isActive} onClick={onMobileClose}>
-                  <ListItemText primary="Cílový plán" />
-                </ListItemButton>
-              )}
-            </NavLink>
-            <NavLink
               to="/nutrition/daily-checkin"
               style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
             >
               {({ isActive }) => (
                 <ListItemButton selected={isActive} onClick={onMobileClose}>
-                  <ListItemText primary="Denní check-in" />
+                  <ListItemText primary="Daily check-in" />
                 </ListItemButton>
               )}
             </NavLink>
@@ -140,6 +120,47 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
               {({ isActive }) => (
                 <ListItemButton selected={isActive} onClick={onMobileClose}>
                   <ListItemText primary="Weekly check-in" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink
+              to="/nutrition/goal-plan"
+              end
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+            >
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Plány" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink
+              to="/nutrition/goal-plan/new"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+            >
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose} sx={{ pl: 3 }}>
+                  <ListItemText primary="Nový plán" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink
+              to="/nutrition/target-history"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+            >
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Targets" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink
+              to="/nutrition/setup"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+            >
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Profil" />
                 </ListItemButton>
               )}
             </NavLink>
