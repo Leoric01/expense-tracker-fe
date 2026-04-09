@@ -10,7 +10,8 @@ import { Login } from '@pages/Login';
 import { NotFound } from '@pages/NotFound';
 import { CategoriesPage } from '@pages/categories/CategoriesPage';
 import { ExpenseTrackers } from '@pages/ExpenseTrackers';
-import { NutritionGoalPlanPlaceholderPage } from '@pages/nutrition/NutritionGoalPlanPlaceholderPage';
+import { NutritionDashboardPlaceholderPage } from '@pages/nutrition/NutritionDashboardPlaceholderPage';
+import { NutritionGoalPlanPage } from '@pages/nutrition/NutritionGoalPlanPage';
 import { NutritionSetupPage } from '@pages/nutrition/NutritionSetupPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
@@ -29,7 +30,8 @@ export const router = createBrowserRouter([
       { path: 'trackers', element: <ExpenseTrackers /> },
       { path: 'categories', element: <CategoriesPage /> },
       { path: 'nutrition/setup', element: <NutritionSetupPage /> },
-      { path: 'nutrition/goal-plan', element: <NutritionGoalPlanPlaceholderPage /> },
+      { path: 'nutrition/goal-plan', element: <NutritionGoalPlanPage /> },
+      { path: 'nutrition/dashboard', element: <NutritionDashboardPlaceholderPage /> },
       { path: 'nutrition', element: <Navigate to="/nutrition/setup" replace /> },
       { path: 'importy', element: <Navigate to="/?tab=importy" replace /> },
       { path: 'wallets', element: <Navigate to="/" replace /> },
