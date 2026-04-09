@@ -130,7 +130,7 @@ export const NutritionSetupPage: FC = () => {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['nutritionProfile', trackerId] });
       enqueueSnackbar('Profil byl uložen', { variant: 'success' });
-      navigate('/nutrition/goal-plan');
+      navigate('/nutrition/goal-plan/new');
     },
     onError: (err: unknown) => {
       if (err instanceof Error && err.message === 'INVALID_HEIGHT') {
