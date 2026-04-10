@@ -4,11 +4,15 @@ import {
   expenseTrackerFindAllMine,
   expenseTrackerUpdate,
 } from '@api/expense-tracker-controller/expense-tracker-controller';
+import { assetFindAll, getAssetFindAllQueryKey } from '@api/asset-controller/asset-controller';
+import { AssetResponseDtoMarketDataSource } from '@api/model';
 import { expenseTrackerAccessRequestInvite } from '@api/expense-tracker-access-request-controller/expense-tracker-access-request-controller';
 import type {
+  AssetResponseDto,
   CreateExpenseTrackerRequestDto,
   ExpenseTrackerResponseDto,
   PagedModelExpenseTrackerMineResponseDto,
+  PagedModelAssetResponseDto,
   UpdateExpenseTrackerRequestDto,
 } from '@api/model';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
@@ -19,12 +23,17 @@ import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import {
   Box,
   Button,
+  Divider,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   IconButton,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -39,6 +48,7 @@ import {
 } from '@mui/material';
 import { useDebouncedValue } from '@hooks/useDebouncedValue';
 import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
+import { DISPLAY_CURRENCY_POPULAR_CODES } from '@utils/displayCurrencyPopularCodes';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
@@ -85,7 +95,7 @@ export const MineTrackersTab: FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
-  const [editCurrency, setEditCurrency] = useState('');
+  const [editPreferredDisplayAssetId, setEditPreferredDisplayAssetId] = useState('');
   const [deactivateId, setDeactivateId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteTrackerId, setInviteTrackerId] = useState<string | null>(null);
@@ -94,7 +104,42 @@ export const MineTrackersTab: FC = () => {
 
   const [createName, setCreateName] = useState('');
   const [createDescription, setCreateDescription] = useState('');
-  const [createCurrency, setCreateCurrency] = useState('CZK');
+  const [createPreferredDisplayAssetId, setCreatePreferredDisplayAssetId] = useState('');
+
+  const { data: assetsRes } = useQuery({
+    queryKey: getAssetFindAllQueryKey({ page: 0, size: 500 }),
+    queryFn: async () => {
+      const res = await assetFindAll({ page: 0, size: 500 });
+      if (res.status < 200 || res.status >= 300) throw new Error('assets');
+      return res.data as PagedModelAssetResponseDto;
+    },
+    staleTime: 60_000,
+  });
+
+  const displayAssetOptions = useMemo(() => {
+    const rows = assetsRes?.content ?? [];
+    return rows
+      .filter(
+        (a) =>
+          a.active !== false &&
+          a.id &&
+          a.marketDataSource !== AssetResponseDtoMarketDataSource.NONE &&
+          a.marketDataSource !== AssetResponseDtoMarketDataSource.MANUAL,
+      )
+      .sort((a, b) => (a.code ?? '').localeCompare(b.code ?? '', undefined, { sensitivity: 'base' }));
+  }, [assetsRes]);
+
+  const popularDisplayAssetOptions = useMemo(() => {
+    const byCode = new Map(displayAssetOptions.map((a) => [(a.code ?? '').toUpperCase(), a]));
+    return DISPLAY_CURRENCY_POPULAR_CODES.map((code) => byCode.get(code)).filter((a): a is AssetResponseDto =>
+      Boolean(a?.id),
+    );
+  }, [displayAssetOptions]);
+
+  const otherDisplayAssetOptions = useMemo(() => {
+    const popularIds = new Set(popularDisplayAssetOptions.map((a) => a.id));
+    return displayAssetOptions.filter((a) => !popularIds.has(a.id));
+  }, [displayAssetOptions, popularDisplayAssetOptions]);
 
   const handleSortClick = (col: MineSortColumn) => {
     const next = cycleSort(col, sortColumn, sortDir, firstDirMine);
@@ -112,12 +157,17 @@ export const MineTrackersTab: FC = () => {
     setSelectedExpenseTracker({ id: row.id, name: row.name ?? '—' });
   };
 
-  const openEdit = (row: { id?: string; name?: string; description?: string; defaultCurrencyCode?: string }) => {
+  const openEdit = (row: {
+    id?: string;
+    name?: string;
+    description?: string;
+    preferredDisplayAssetId?: string;
+  }) => {
     if (!row.id) return;
     setEditId(row.id);
     setEditName(row.name ?? '');
     setEditDescription(row.description ?? '');
-    setEditCurrency(row.defaultCurrencyCode ?? 'CZK');
+    setEditPreferredDisplayAssetId(row.preferredDisplayAssetId ?? '');
     setEditOpen(true);
   };
 
@@ -126,10 +176,10 @@ export const MineTrackersTab: FC = () => {
     const payload: CreateExpenseTrackerRequestDto = {
       name: createName.trim(),
       description: createDescription.trim() || undefined,
-      defaultCurrencyCode: createCurrency.trim().toUpperCase(),
+      preferredDisplayAssetId: createPreferredDisplayAssetId || (null as unknown as string),
     };
-    if (!payload.name || !payload.defaultCurrencyCode) {
-      enqueueSnackbar('Vyplň název a měnu', { variant: 'warning' });
+    if (!payload.name) {
+      enqueueSnackbar('Vyplň název trackeru', { variant: 'warning' });
       return;
     }
     setSubmitting(true);
@@ -163,7 +213,7 @@ export const MineTrackersTab: FC = () => {
     const body: UpdateExpenseTrackerRequestDto = {
       name: editName.trim() || undefined,
       description: editDescription.trim() || undefined,
-      defaultCurrencyCode: editCurrency.trim().toUpperCase() || undefined,
+      preferredDisplayAssetId: editPreferredDisplayAssetId || (null as unknown as string),
     };
     setSubmitting(true);
     try {
@@ -252,7 +302,7 @@ export const MineTrackersTab: FC = () => {
         <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={() => {
           setCreateName('');
           setCreateDescription('');
-          setCreateCurrency('CZK');
+          setCreatePreferredDisplayAssetId('');
           setCreateOpen(true);
         }}
         >
@@ -279,13 +329,13 @@ export const MineTrackersTab: FC = () => {
                   Název
                 </TableSortLabel>
               </TableCell>
-              <TableCell sortDirection={sortColumn === 'defaultCurrencyCode' ? sortDir : false}>
+              <TableCell sortDirection={sortColumn === 'preferredDisplayAssetCode' ? sortDir : false}>
                 <TableSortLabel
-                  active={sortColumn === 'defaultCurrencyCode'}
-                  direction={sortColumn === 'defaultCurrencyCode' ? sortDir : 'asc'}
-                  onClick={() => handleSortClick('defaultCurrencyCode')}
+                  active={sortColumn === 'preferredDisplayAssetCode'}
+                  direction={sortColumn === 'preferredDisplayAssetCode' ? sortDir : 'asc'}
+                  onClick={() => handleSortClick('preferredDisplayAssetCode')}
                 >
-                  Měna
+                  Display měna
                 </TableSortLabel>
               </TableCell>
               <TableCell>Role</TableCell>
@@ -326,7 +376,7 @@ export const MineTrackersTab: FC = () => {
                     sx={{ cursor: row.id ? 'pointer' : 'default' }}
                   >
                     <TableCell>{row.name ?? '—'}</TableCell>
-                    <TableCell>{row.defaultCurrencyCode ?? '—'}</TableCell>
+                    <TableCell>{row.preferredDisplayAssetCode ?? '—'}</TableCell>
                     <TableCell>{row.role ?? '—'}</TableCell>
                     <TableCell>{formatDateDdMmYyyy(row.createdDate)}</TableCell>
                     <TableCell align="right" onClick={(e) => e.stopPropagation()}>
@@ -413,14 +463,28 @@ export const MineTrackersTab: FC = () => {
                 multiline
                 minRows={2}
               />
-              <TextField
-                label="Výchozí měna (ISO)"
-                value={createCurrency}
-                onChange={(e) => setCreateCurrency(e.target.value)}
-                required
-                fullWidth
-                inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
-              />
+              <FormControl fullWidth>
+                <InputLabel id="create-display-asset-label">Preferovaná měna pro zobrazení</InputLabel>
+                <Select
+                  labelId="create-display-asset-label"
+                  label="Preferovaná měna pro zobrazení"
+                  value={createPreferredDisplayAssetId}
+                  onChange={(e) => setCreatePreferredDisplayAssetId(e.target.value)}
+                >
+                  <MenuItem value="">Bez konverze</MenuItem>
+                  {popularDisplayAssetOptions.map((asset: AssetResponseDto) => (
+                    <MenuItem key={asset.id} value={asset.id}>
+                      {asset.code} - {asset.name}
+                    </MenuItem>
+                  ))}
+                  {otherDisplayAssetOptions.length > 0 && <Divider />}
+                  {otherDisplayAssetOptions.map((asset: AssetResponseDto) => (
+                    <MenuItem key={asset.id} value={asset.id}>
+                      {asset.code} - {asset.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Stack>
           </DialogContent>
           <DialogActions>
@@ -448,13 +512,28 @@ export const MineTrackersTab: FC = () => {
                 multiline
                 minRows={2}
               />
-              <TextField
-                label="Měna"
-                value={editCurrency}
-                onChange={(e) => setEditCurrency(e.target.value)}
-                fullWidth
-                inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
-              />
+              <FormControl fullWidth>
+                <InputLabel id="edit-display-asset-label">Preferovaná měna pro zobrazení</InputLabel>
+                <Select
+                  labelId="edit-display-asset-label"
+                  label="Preferovaná měna pro zobrazení"
+                  value={editPreferredDisplayAssetId}
+                  onChange={(e) => setEditPreferredDisplayAssetId(e.target.value)}
+                >
+                  <MenuItem value="">Bez konverze</MenuItem>
+                  {popularDisplayAssetOptions.map((asset: AssetResponseDto) => (
+                    <MenuItem key={asset.id} value={asset.id}>
+                      {asset.code} - {asset.name}
+                    </MenuItem>
+                  ))}
+                  {otherDisplayAssetOptions.length > 0 && <Divider />}
+                  {otherDisplayAssetOptions.map((asset: AssetResponseDto) => (
+                    <MenuItem key={asset.id} value={asset.id}>
+                      {asset.code} - {asset.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Stack>
           </DialogContent>
           <DialogActions>

@@ -11,6 +11,9 @@ import type { WidgetItemResponseDto } from './widgetItemResponseDto';
 export interface InstitutionDashboardResponseDto {
   periodFrom?: string;
   periodTo?: string;
+  displayAssetCode?: string;
+  displayAssetScale?: number;
   widgetOrder?: WidgetItemResponseDto[];
   institutions?: InstitutionSummaryResponseDto[];
+  grandTotalConverted?: number;
 }

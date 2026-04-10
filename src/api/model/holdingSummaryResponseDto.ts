@@ -24,4 +24,7 @@ export interface HoldingSummaryResponseDto {
   difference?: number;
   incomeByCategory?: CategoryBreakdownDto[];
   expenseByCategory?: CategoryBreakdownDto[];
+  convertedStartBalance?: number;
+  convertedEndBalance?: number;
+  exchangeRate?: number;
 }

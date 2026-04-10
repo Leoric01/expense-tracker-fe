@@ -1,4 +1,5 @@
 import { CreateAccountRequestDtoAccountType, WalletResponseDtoWalletType } from '@api/model';
+import { formatAmount } from '@utils/formatAmount';
 import { DEFAULT_FIAT_SCALE, minorUnitsToMajorForScale } from '@utils/moneyMinorUnits';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -52,20 +53,9 @@ export function formatWalletAmount(
   currencyCode?: string,
   minorUnitScale: number = DEFAULT_FIAT_SCALE,
 ): string {
-  const major = minorUnitsToMajorForScale(amountMinor, minorUnitScale);
-  if (major === undefined) return '—';
+  if (amountMinor == null || !Number.isFinite(amountMinor)) return '—';
   const code = (currencyCode ?? 'CZK').toUpperCase();
-  if (minorUnitScale === DEFAULT_FIAT_SCALE) {
-    try {
-      return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: code }).format(major);
-    } catch {
-      /* neplatný ISO kód — zobraz jako číslo */
-    }
-  }
-  return `${major.toLocaleString('cs-CZ', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: Math.min(minorUnitScale, 18),
-  })} ${code}`;
+  return formatAmount(amountMinor, minorUnitScale, code);
 }
 
 /** Stejné jako `formatWalletAmount`, ale bez desetinných míst (zaokrouhlení dle `Intl`). */

@@ -24,7 +24,7 @@ export function cycleSort<A extends string>(
   return { active: null, dir: fd };
 }
 
-export type MineSortColumn = 'name' | 'createdDate' | 'defaultCurrencyCode';
+export type MineSortColumn = 'name' | 'createdDate' | 'preferredDisplayAssetCode';
 
 /** První klik: datum → nejnovější nahoře; ostatní sloupce → vzestupně. */
 export function firstDirMine(col: MineSortColumn): SortDir {

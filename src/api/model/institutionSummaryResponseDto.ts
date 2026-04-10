@@ -16,4 +16,5 @@ export interface InstitutionSummaryResponseDto {
   iconColor?: string;
   accounts?: AccountSummaryResponseDto[];
   totalBalance?: number;
+  convertedTotalBalance?: number;
 }

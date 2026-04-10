@@ -16,4 +16,5 @@ export interface AccountSummaryResponseDto {
   iconColor?: string;
   holdings?: HoldingSummaryResponseDto[];
   totalBalance?: number;
+  convertedTotalBalance?: number;
 }
