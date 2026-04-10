@@ -228,11 +228,7 @@ export const HabitWeekOverviewPage: FC = () => {
     setDialogNote(completion?.note ?? '');
     setDialogSatisfactionScore(normalizeHabitScore(completion?.satisfactionScore));
     setDialogExecutionScore(normalizeHabitScore(completion?.executionScore));
-    setDialogActualPrice(
-      completion?.actualPrice != null && completion.actualPrice !== 0
-        ? String(completion.actualPrice)
-        : '',
-    );
+    setDialogActualPrice(completion?.actualPrice != null ? String(completion.actualPrice) : '');
     setCellDialog({ habitId, habitName, date, completion });
   };
 

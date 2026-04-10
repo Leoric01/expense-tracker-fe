@@ -235,9 +235,7 @@ export const HabitAgendaPage: FC = () => {
     setDialogNote(completion.note ?? '');
     setDialogSatisfactionScore(normalizeHabitScore(completion.satisfactionScore));
     setDialogExecutionScore(normalizeHabitScore(completion.executionScore));
-    setDialogActualPrice(
-      completion.actualPrice != null && completion.actualPrice !== 0 ? String(completion.actualPrice) : '',
-    );
+    setDialogActualPrice(completion.actualPrice != null ? String(completion.actualPrice) : '');
     setCompletionCtx({ habitId, habitName, existingCompletion: completion });
   };
 
@@ -469,9 +467,9 @@ const AgendaHabitCard: FC<AgendaHabitCardProps> = ({
               <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
                 <HabitScoreRatingInline label="Spokojenost (návyk)" score={item.satisfactionScore} />
                 <HabitScoreRatingInline label="Užitečnost" score={item.utilityScore} />
-                {item.estimatedPrice != null && item.estimatedPrice > 0 ? (
+                {item.estimatedPrice != null ? (
                   <Typography variant="caption" color="text.secondary">
-                    Odhad ceny: {item.estimatedPrice} Kč
+                    Odhad (Kč): {item.estimatedPrice}
                   </Typography>
                 ) : null}
               </Stack>
@@ -522,7 +520,7 @@ const AgendaHabitCard: FC<AgendaHabitCardProps> = ({
                   </Stack>
                   {(normalizeHabitScore(c.satisfactionScore) > 0 ||
                     normalizeHabitScore(c.executionScore) > 0 ||
-                    (c.actualPrice != null && c.actualPrice > 0)) && (
+                    c.actualPrice != null) && (
                     <Stack
                       spacing={0.25}
                       alignItems={{ xs: 'flex-start', sm: 'flex-end' }}
@@ -530,9 +528,9 @@ const AgendaHabitCard: FC<AgendaHabitCardProps> = ({
                     >
                       <HabitScoreRatingInline label="Spokojenost" score={c.satisfactionScore} />
                       <HabitScoreRatingInline label="Provedení" score={c.executionScore} />
-                      {c.actualPrice != null && c.actualPrice > 0 ? (
+                      {c.actualPrice != null ? (
                         <Typography variant="caption" color="text.secondary">
-                          Cena: {c.actualPrice} Kč
+                          Cena (Kč): {c.actualPrice}
                         </Typography>
                       ) : null}
                     </Stack>

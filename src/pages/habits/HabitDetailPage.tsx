@@ -223,10 +223,8 @@ export const HabitDetailPage: FC = () => {
           <HabitScoreRatingRow label="Spokojenost s návykem" value={habit.satisfactionScore ?? 0} />
           <HabitScoreRatingRow label="Užitečnost návyku" value={habit.utilityScore ?? 0} />
           <DetailRow
-            label="Odhadovaná cena"
-            value={
-              habit.estimatedPrice != null && habit.estimatedPrice > 0 ? `${habit.estimatedPrice} Kč` : '—'
-            }
+            label="Odhadovaná cena (Kč)"
+            value={habit.estimatedPrice != null ? String(habit.estimatedPrice) : '—'}
           />
           {(habit.createdDate || habit.lastModifiedDate) && (
             <Typography variant="caption" color="text.secondary">

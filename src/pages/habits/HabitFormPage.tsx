@@ -133,7 +133,7 @@ export const HabitFormPage: FC = () => {
     setScheduleKeys(slotsToKeySet(h.scheduleSlots));
     setSatisfactionScore(normalizeHabitScore(h.satisfactionScore));
     setUtilityScore(normalizeHabitScore(h.utilityScore));
-    setEstimatedPrice(h.estimatedPrice != null && h.estimatedPrice !== 0 ? String(h.estimatedPrice) : '');
+    setEstimatedPrice(h.estimatedPrice != null ? String(h.estimatedPrice) : '');
   }, [isEdit, detailQuery.data]);
 
   const createMutation = useMutation({

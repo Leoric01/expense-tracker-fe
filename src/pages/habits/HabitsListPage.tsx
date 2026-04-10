@@ -10,6 +10,7 @@ import {
   Button,
   Chip,
   Paper,
+  Rating,
   Stack,
   Table,
   TableBody,
@@ -26,9 +27,22 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { normalizeHabitScore } from './HabitScoreRating';
 import { HABIT_TYPE_LABELS } from './habitUiConstants';
 
 type ActiveFilter = 'all' | 'active' | 'inactive';
+
+function TableCellScoreStars({ score }: { score?: number }) {
+  const s = normalizeHabitScore(score);
+  if (s === 0) {
+    return (
+      <Typography variant="body2" color="text.secondary" component="span">
+        —
+      </Typography>
+    );
+  }
+  return <Rating value={s / 2} precision={0.5} readOnly size="small" />;
+}
 
 export const HabitsListPage: FC = () => {
   const navigate = useNavigate();
@@ -163,6 +177,13 @@ export const HabitsListPage: FC = () => {
                   <TableCell>Název</TableCell>
                   <TableCell>Typ</TableCell>
                   <TableCell align="right">Min</TableCell>
+                  <TableCell align="center" sx={{ minWidth: 108 }}>
+                    Spokojenost
+                  </TableCell>
+                  <TableCell align="center" sx={{ minWidth: 108 }}>
+                    Užitečnost
+                  </TableCell>
+                  <TableCell align="right">Odhad (Kč)</TableCell>
                   <TableCell>Stav</TableCell>
                   <TableCell>Platnost</TableCell>
                   <TableCell align="right">Sloty</TableCell>
@@ -171,7 +192,7 @@ export const HabitsListPage: FC = () => {
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6}>
+                    <TableCell colSpan={9}>
                       <Typography color="text.secondary" variant="body2">
                         Žádné návyky — vytvoř první tlačítkem výše.
                       </Typography>
@@ -208,6 +229,15 @@ export const HabitsListPage: FC = () => {
                         </TableCell>
                         <TableCell>{typeLabel}</TableCell>
                         <TableCell align="right">{row.expectedMinutes ?? '—'}</TableCell>
+                        <TableCell align="center" sx={{ py: 0.5 }}>
+                          <TableCellScoreStars score={row.satisfactionScore} />
+                        </TableCell>
+                        <TableCell align="center" sx={{ py: 0.5 }}>
+                          <TableCellScoreStars score={row.utilityScore} />
+                        </TableCell>
+                        <TableCell align="right">
+                          {row.estimatedPrice != null ? row.estimatedPrice : '—'}
+                        </TableCell>
                         <TableCell>
                           {row.active ? (
                             <Chip label="Aktivní" color="success" size="small" variant="outlined" />
