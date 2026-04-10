@@ -46,7 +46,7 @@ export const AdminLogin: FC = () => {
         <Typography variant="body1" sx={{ mb: 2 }}>
           Pro vstup do administrace se musíš přihlásit účtem s rolí administrátora.
         </Typography>
-        <Button component={RouterLink} to="/" variant="contained">
+        <Button component={RouterLink} to="/moduly" variant="contained">
           Zpět na přehled
         </Button>
       </AuthPageLayout>
@@ -140,7 +140,7 @@ export const AdminLogin: FC = () => {
       </Box>
 
       <Typography variant="body2" sx={{ mt: 3, textAlign: 'center' }}>
-        <RouterLink to="/" style={{ fontWeight: 600 }}>
+        <RouterLink to="/moduly" style={{ fontWeight: 600 }}>
           Zpět do aplikace
         </RouterLink>
       </Typography>

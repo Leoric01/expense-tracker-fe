@@ -135,7 +135,7 @@ export const AdminPortal: FC = () => {
       </Paper>
 
       <Typography variant="body2" sx={{ mt: 3 }}>
-        <RouterLink to="/">Zpět do aplikace</RouterLink>
+        <RouterLink to="/moduly">Zpět do aplikace</RouterLink>
       </Typography>
     </Box>
   );

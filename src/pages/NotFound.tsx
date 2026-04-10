@@ -10,6 +10,6 @@ export const NotFound: FC = () => (
     <Typography color="text.secondary" sx={{ mb: 2 }}>
       Stránka neexistuje.
     </Typography>
-    <Link to="/">Zpět domů</Link>
+    <Link to="/moduly">Zpět na moduly</Link>
   </Box>
 );

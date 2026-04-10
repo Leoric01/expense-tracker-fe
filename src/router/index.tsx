@@ -7,6 +7,7 @@ import { AdminLogin } from '@pages/admin/AdminLogin';
 import { AdminPortal } from '@pages/admin/AdminPortal';
 import { Home } from '@pages/Home';
 import { Login } from '@pages/Login';
+import { ModuleHubPage } from '@pages/ModuleHubPage';
 import { NotFound } from '@pages/NotFound';
 import { CategoriesPage } from '@pages/categories/CategoriesPage';
 import { ExpenseTrackers } from '@pages/ExpenseTrackers';
@@ -18,6 +19,12 @@ import { NutritionGoalPlanSummaryPage } from '@pages/nutrition/NutritionGoalPlan
 import { NutritionSetupPage } from '@pages/nutrition/NutritionSetupPage';
 import { NutritionTargetHistoryPage } from '@pages/nutrition/NutritionTargetHistoryPage';
 import { NutritionWeeklyCheckinPage } from '@pages/nutrition/NutritionWeeklyCheckinPage';
+import { HabitAgendaPage } from '@pages/habits/HabitAgendaPage';
+import { HabitDetailPage } from '@pages/habits/HabitDetailPage';
+import { HabitFormPage } from '@pages/habits/HabitFormPage';
+import { HabitsListPage } from '@pages/habits/HabitsListPage';
+import { HabitsModuleLayout } from '@pages/habits/HabitsModuleLayout';
+import { HabitWeekOverviewPage } from '@pages/habits/HabitWeekOverviewPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
@@ -31,7 +38,9 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <Home /> },
+      { index: true, element: <Navigate to="/moduly" replace /> },
+      { path: 'moduly', element: <ModuleHubPage /> },
+      { path: 'domu', element: <Home /> },
       { path: 'trackers', element: <ExpenseTrackers /> },
       { path: 'categories', element: <CategoriesPage /> },
       { path: 'nutrition/setup', element: <NutritionSetupPage /> },
@@ -43,9 +52,22 @@ export const router = createBrowserRouter([
       { path: 'nutrition/weekly-checkin', element: <NutritionWeeklyCheckinPage /> },
       { path: 'nutrition/target-history', element: <NutritionTargetHistoryPage /> },
       { path: 'nutrition', element: <Navigate to="/nutrition/dashboard" replace /> },
-      { path: 'importy', element: <Navigate to="/?tab=importy" replace /> },
-      { path: 'wallets', element: <Navigate to="/" replace /> },
-      { path: 'transactions', element: <Navigate to="/" replace /> },
+      {
+        path: 'habits',
+        element: <HabitsModuleLayout />,
+        children: [
+          { index: true, element: <Navigate to="agenda" replace /> },
+          { path: 'agenda', element: <HabitAgendaPage /> },
+          { path: 'week', element: <HabitWeekOverviewPage /> },
+          { path: 'list', element: <HabitsListPage /> },
+          { path: 'new', element: <HabitFormPage /> },
+          { path: ':habitId/edit', element: <HabitFormPage /> },
+          { path: ':habitId', element: <HabitDetailPage /> },
+        ],
+      },
+      { path: 'importy', element: <Navigate to="/domu?tab=importy" replace /> },
+      { path: 'wallets', element: <Navigate to="/domu" replace /> },
+      { path: 'transactions', element: <Navigate to="/domu" replace /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */
       { path: 'settings', element: <Profile /> },
       { path: 'profile', element: <Navigate to="/settings" replace /> },

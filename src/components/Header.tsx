@@ -68,7 +68,7 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
         <Typography
           variant="h6"
           component={RouterLink}
-          to="/"
+          to="/moduly"
           sx={{
             flexGrow: 1,
             color: 'inherit',

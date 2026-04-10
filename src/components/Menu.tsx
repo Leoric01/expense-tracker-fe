@@ -2,7 +2,6 @@ import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
 import {
   Box,
   Button,
-  Divider,
   Drawer,
   List,
   ListItemButton,
@@ -15,6 +14,12 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 
 const drawerWidth = 260;
 
+const FINANCE_PATHS = ['/domu', '/trackers', '/categories', '/settings'] as const;
+
+function isFinancePath(pathname: string): boolean {
+  return (FINANCE_PATHS as readonly string[]).includes(pathname);
+}
+
 type MenuProps = {
   mobileOpen: boolean;
   onMobileClose: () => void;
@@ -24,7 +29,11 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
   const location = useLocation();
   const { selectedExpenseTracker, setSelectedExpenseTracker } = useSelectedExpenseTracker();
   const budgetName = selectedExpenseTracker?.name ?? '—';
-  const isNutritionSection = location.pathname.startsWith('/nutrition');
+  const pathname = location.pathname;
+
+  const isNutritionSection = pathname.startsWith('/nutrition');
+  const isHabitSection = pathname.startsWith('/habits');
+  const isModuleHubSection = pathname === '/moduly';
 
   const drawer = (
     <Box sx={{ textAlign: 'center' }}>
@@ -54,19 +63,72 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
             </Typography>
             <Button
               component={Link}
-              to="/"
+              to="/moduly"
               size="small"
               variant="text"
               onClick={onMobileClose}
               sx={{ alignSelf: 'flex-start', mt: 0.5, px: 0, minWidth: 0, textTransform: 'none' }}
             >
-              Zpět na aplikaci
+              Zpět na moduly
             </Button>
+          </>
+        ) : isHabitSection ? (
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
+              Návyky
+            </Typography>
+            <Typography
+              variant="subtitle1"
+              fontWeight={600}
+              sx={{ textAlign: 'left', lineHeight: 1.3 }}
+              noWrap
+              title={budgetName}
+            >
+              {budgetName}
+            </Typography>
+            <Button
+              component={Link}
+              to="/moduly"
+              size="small"
+              variant="text"
+              onClick={onMobileClose}
+              sx={{ alignSelf: 'flex-start', mt: 0.5, px: 0, minWidth: 0, textTransform: 'none' }}
+            >
+              Zpět na moduly
+            </Button>
+          </>
+        ) : isModuleHubSection ? (
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
+              Moduly
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'left', lineHeight: 1.35 }}>
+              Vyber oblast níže
+            </Typography>
+            <Typography
+              variant="subtitle1"
+              fontWeight={600}
+              sx={{ textAlign: 'left', lineHeight: 1.3, mt: 0.5 }}
+              noWrap
+              title={budgetName}
+            >
+              Rozpočet: {budgetName}
+            </Typography>
+            {selectedExpenseTracker && (
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => setSelectedExpenseTracker(null)}
+                sx={{ alignSelf: 'flex-start', mt: 0.25, px: 0, minWidth: 0, textTransform: 'none' }}
+              >
+                Zrušit výběr trackera
+              </Button>
+            )}
           </>
         ) : (
           <>
             <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
-              Rozpočet
+              Finance
             </Typography>
             <Typography
               variant="subtitle1"
@@ -87,6 +149,16 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
                 Zrušit výběr trackera
               </Button>
             )}
+            <Button
+              component={Link}
+              to="/moduly"
+              size="small"
+              variant="text"
+              onClick={onMobileClose}
+              sx={{ alignSelf: 'flex-start', mt: 0.25, px: 0, minWidth: 0, textTransform: 'none' }}
+            >
+              Zpět na moduly
+            </Button>
           </>
         )}
       </Toolbar>
@@ -165,23 +237,59 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
               )}
             </NavLink>
           </>
-        ) : (
+        ) : isHabitSection ? (
           <>
-            <NavLink to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+            <NavLink to="/habits/agenda" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
               {({ isActive }) => (
                 <ListItemButton selected={isActive} onClick={onMobileClose}>
-                  <ListItemText primary="Domů" />
+                  <ListItemText primary="Denní agenda" />
                 </ListItemButton>
               )}
             </NavLink>
-            <NavLink to="/trackers" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+            <NavLink to="/habits/week" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
               {({ isActive }) => (
                 <ListItemButton selected={isActive} onClick={onMobileClose}>
-                  <ListItemText primary="Trackery" />
+                  <ListItemText primary="Týdenní přehled" />
                 </ListItemButton>
               )}
             </NavLink>
-            <Divider sx={{ my: 1 }} />
+            <NavLink
+              to="/habits/list"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+            >
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Seznam návyků" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink to="/habits/new" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Nový návyk" />
+                </ListItemButton>
+              )}
+            </NavLink>
+          </>
+        ) : isModuleHubSection ? (
+          <>
+            <NavLink to="/domu" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton
+                  selected={isFinancePath(pathname) || isActive}
+                  onClick={onMobileClose}
+                >
+                  <ListItemText primary="Finance" secondary="Rozpočet a přehledy" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink to="/habits" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Návyky" secondary="Agenda a rozvrh" />
+                </ListItemButton>
+              )}
+            </NavLink>
             <NavLink
               to="/nutrition/dashboard"
               style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
@@ -189,6 +297,23 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
               {({ isActive }) => (
                 <ListItemButton selected={isActive} onClick={onMobileClose}>
                   <ListItemText primary="Výživa" secondary="Jídlo a váha" />
+                </ListItemButton>
+              )}
+            </NavLink>
+          </>
+        ) : (
+          <>
+            <NavLink to="/domu" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Přehled" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink to="/trackers" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Trackery" />
                 </ListItemButton>
               )}
             </NavLink>

@@ -4,7 +4,7 @@ import { Box, Button, Typography } from '@mui/material';
 import { FC } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 
-/** Redirect na Domů se záložkou kategorií; bez trackera zůstává nápověda. */
+/** Redirect na přehled (`/domu`) se záložkou kategorií; bez trackera zůstává nápověda. */
 export const CategoriesPage: FC = () => {
   const { selectedExpenseTracker } = useSelectedExpenseTracker();
   const trackerId = selectedExpenseTracker?.id;
@@ -25,5 +25,5 @@ export const CategoriesPage: FC = () => {
     );
   }
 
-  return <Navigate to="/?tab=categories" replace />;
+  return <Navigate to="/domu?tab=categories" replace />;
 };
