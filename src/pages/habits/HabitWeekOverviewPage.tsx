@@ -23,7 +23,9 @@ import { Fragment, FC, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { completionStateToDialogStatus } from './habitCompletionMappers';
 import { habitCompletionUpsertOrThrow } from './habitCompletionUpsertWithError';
+import { parseOptionalMoneyKc } from './habitMoneyParse';
 import { HabitCompletionFormDialog, type HabitCompletionDialogStatus } from './HabitCompletionFormDialog';
+import { normalizeHabitScore } from './HabitScoreRating';
 import { normalizeDayBlocks } from './habitDayOverviewNormalize';
 import { HABIT_BLOCK_LABELS, HABIT_DAY_LABELS, HABIT_DAY_BLOCKS_ORDER } from './habitUiConstants';
 
@@ -142,6 +144,9 @@ export const HabitWeekOverviewPage: FC = () => {
     HabitCompletionUpsertRequestDtoStatus.DONE,
   );
   const [dialogNote, setDialogNote] = useState('');
+  const [dialogSatisfactionScore, setDialogSatisfactionScore] = useState(0);
+  const [dialogExecutionScore, setDialogExecutionScore] = useState(0);
+  const [dialogActualPrice, setDialogActualPrice] = useState('');
 
   const weekQuery = useQuery({
     queryKey: getHabitFindWeekOverviewQueryKey(trackerId, { weekStart: weekStartStr }),
@@ -174,12 +179,24 @@ export const HabitWeekOverviewPage: FC = () => {
     });
 
   const upsertMutation = useMutation({
-    mutationFn: async (input: { habitId: string; date: string; status: HabitCompletionDialogStatus; note?: string }) => {
+    mutationFn: async (input: {
+      habitId: string;
+      date: string;
+      status: HabitCompletionDialogStatus;
+      note?: string;
+      satisfactionScore: number;
+      executionScore: number;
+      actualPrice: string;
+    }) => {
+      const price = parseOptionalMoneyKc(input.actualPrice);
       await habitCompletionUpsertOrThrow(trackerId, {
         habitId: input.habitId,
         date: input.date,
         status: input.status,
         note: input.note?.trim() || undefined,
+        satisfactionScore: normalizeHabitScore(input.satisfactionScore),
+        executionScore: normalizeHabitScore(input.executionScore),
+        ...(price != null ? { actualPrice: price } : {}),
       });
     },
     onSuccess: async (_, vars) => {
@@ -190,6 +207,9 @@ export const HabitWeekOverviewPage: FC = () => {
       enqueueSnackbar('Stav uložen', { variant: 'success' });
       setCellDialog(null);
       setDialogNote('');
+      setDialogSatisfactionScore(0);
+      setDialogExecutionScore(0);
+      setDialogActualPrice('');
     },
     onError: (err: unknown) => {
       const msg =
@@ -206,6 +226,13 @@ export const HabitWeekOverviewPage: FC = () => {
   ) => {
     setDialogStatus(completionStateToDialogStatus(completion?.status));
     setDialogNote(completion?.note ?? '');
+    setDialogSatisfactionScore(normalizeHabitScore(completion?.satisfactionScore));
+    setDialogExecutionScore(normalizeHabitScore(completion?.executionScore));
+    setDialogActualPrice(
+      completion?.actualPrice != null && completion.actualPrice !== 0
+        ? String(completion.actualPrice)
+        : '',
+    );
     setCellDialog({ habitId, habitName, date, completion });
   };
 
@@ -218,6 +245,9 @@ export const HabitWeekOverviewPage: FC = () => {
       date: cellDialog.date,
       status: dialogStatus,
       note: dialogNote,
+      satisfactionScore: dialogSatisfactionScore,
+      executionScore: dialogExecutionScore,
+      actualPrice: dialogActualPrice,
     });
   };
 
@@ -418,6 +448,12 @@ export const HabitWeekOverviewPage: FC = () => {
         onStatusChange={setDialogStatus}
         note={dialogNote}
         onNoteChange={setDialogNote}
+        satisfactionScore={dialogSatisfactionScore}
+        onSatisfactionScoreChange={setDialogSatisfactionScore}
+        executionScore={dialogExecutionScore}
+        onExecutionScoreChange={setDialogExecutionScore}
+        actualPrice={dialogActualPrice}
+        onActualPriceChange={setDialogActualPrice}
         onSubmit={submitDialog}
         submitting={upsertMutation.isPending}
       />

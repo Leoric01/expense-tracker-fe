@@ -12,5 +12,8 @@ export interface HabitCompletionStateDto {
   date?: string;
   status?: HabitCompletionStateDtoStatus;
   note?: string;
+  satisfactionScore?: number;
+  executionScore?: number;
+  actualPrice?: number;
   completedAt?: string;
 }

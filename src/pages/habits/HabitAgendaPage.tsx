@@ -44,7 +44,9 @@ import { FC, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { completionStateToDialogStatus } from './habitCompletionMappers';
 import { habitCompletionUpsertOrThrow } from './habitCompletionUpsertWithError';
+import { parseOptionalMoneyKc } from './habitMoneyParse';
 import { HabitCompletionFormDialog, type HabitCompletionDialogStatus } from './HabitCompletionFormDialog';
+import { HabitScoreRatingInline, normalizeHabitScore } from './HabitScoreRating';
 import { normalizeDayBlocks } from './habitDayOverviewNormalize';
 import { HABIT_BLOCK_LABELS, HABIT_DAY_LABELS, HABIT_TYPE_LABELS, HABIT_DAY_BLOCKS_ORDER } from './habitUiConstants';
 
@@ -147,6 +149,9 @@ export const HabitAgendaPage: FC = () => {
     HabitCompletionUpsertRequestDtoStatus.DONE,
   );
   const [dialogNote, setDialogNote] = useState('');
+  const [dialogSatisfactionScore, setDialogSatisfactionScore] = useState(0);
+  const [dialogExecutionScore, setDialogExecutionScore] = useState(0);
+  const [dialogActualPrice, setDialogActualPrice] = useState('');
 
   const agendaQuery = useQuery({
     queryKey: getHabitFindAgendaForDateQueryKey(trackerId, { date: dateStr }),
@@ -180,12 +185,23 @@ export const HabitAgendaPage: FC = () => {
     });
 
   const upsertMutation = useMutation({
-    mutationFn: async (input: { habitId: string; status: HabitCompletionDialogStatus; note?: string }) => {
+    mutationFn: async (input: {
+      habitId: string;
+      status: HabitCompletionDialogStatus;
+      note?: string;
+      satisfactionScore: number;
+      executionScore: number;
+      actualPrice: string;
+    }) => {
+      const price = parseOptionalMoneyKc(input.actualPrice);
       await habitCompletionUpsertOrThrow(trackerId, {
         habitId: input.habitId,
         date: dateStr,
         status: input.status,
         note: input.note?.trim() || undefined,
+        satisfactionScore: normalizeHabitScore(input.satisfactionScore),
+        executionScore: normalizeHabitScore(input.executionScore),
+        ...(price != null ? { actualPrice: price } : {}),
       });
     },
     onSuccess: async () => {
@@ -194,6 +210,9 @@ export const HabitAgendaPage: FC = () => {
       enqueueSnackbar('Stav uložen', { variant: 'success' });
       setCompletionCtx(null);
       setDialogNote('');
+      setDialogSatisfactionScore(0);
+      setDialogExecutionScore(0);
+      setDialogActualPrice('');
     },
     onError: (err: unknown) => {
       const msg =
@@ -205,12 +224,20 @@ export const HabitAgendaPage: FC = () => {
   const openCompletionPreset = (habitId: string, habitName: string, preset: HabitCompletionDialogStatus) => {
     setDialogStatus(preset);
     setDialogNote('');
+    setDialogSatisfactionScore(0);
+    setDialogExecutionScore(0);
+    setDialogActualPrice('');
     setCompletionCtx({ habitId, habitName });
   };
 
   const openCompletionEdit = (habitId: string, habitName: string, completion: HabitCompletionStateDto) => {
     setDialogStatus(completionStateToDialogStatus(completion.status));
     setDialogNote(completion.note ?? '');
+    setDialogSatisfactionScore(normalizeHabitScore(completion.satisfactionScore));
+    setDialogExecutionScore(normalizeHabitScore(completion.executionScore));
+    setDialogActualPrice(
+      completion.actualPrice != null && completion.actualPrice !== 0 ? String(completion.actualPrice) : '',
+    );
     setCompletionCtx({ habitId, habitName, existingCompletion: completion });
   };
 
@@ -222,6 +249,9 @@ export const HabitAgendaPage: FC = () => {
       habitId: completionCtx.habitId,
       status: dialogStatus,
       note: dialogNote,
+      satisfactionScore: dialogSatisfactionScore,
+      executionScore: dialogExecutionScore,
+      actualPrice: dialogActualPrice,
     });
   };
 
@@ -359,6 +389,12 @@ export const HabitAgendaPage: FC = () => {
         onStatusChange={setDialogStatus}
         note={dialogNote}
         onNoteChange={setDialogNote}
+        satisfactionScore={dialogSatisfactionScore}
+        onSatisfactionScoreChange={setDialogSatisfactionScore}
+        executionScore={dialogExecutionScore}
+        onExecutionScoreChange={setDialogExecutionScore}
+        actualPrice={dialogActualPrice}
+        onActualPriceChange={setDialogActualPrice}
         onSubmit={submitCompletionDialog}
         submitting={upsertMutation.isPending}
       />
@@ -427,6 +463,19 @@ const AgendaHabitCard: FC<AgendaHabitCardProps> = ({
                 Také v blocích: {other}
               </Typography>
             ) : null}
+            {(normalizeHabitScore(item.satisfactionScore) > 0 ||
+              normalizeHabitScore(item.utilityScore) > 0 ||
+              item.estimatedPrice != null) && (
+              <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
+                <HabitScoreRatingInline label="Spokojenost (návyk)" score={item.satisfactionScore} />
+                <HabitScoreRatingInline label="Užitečnost" score={item.utilityScore} />
+                {item.estimatedPrice != null && item.estimatedPrice > 0 ? (
+                  <Typography variant="caption" color="text.secondary">
+                    Odhad ceny: {item.estimatedPrice} Kč
+                  </Typography>
+                ) : null}
+              </Stack>
+            )}
           </Box>
 
           <Stack alignItems={{ xs: 'stretch', sm: 'flex-end' }} spacing={1} sx={{ minWidth: { sm: 200 } }}>
@@ -471,6 +520,23 @@ const AgendaHabitCard: FC<AgendaHabitCardProps> = ({
                       </Typography>
                     )}
                   </Stack>
+                  {(normalizeHabitScore(c.satisfactionScore) > 0 ||
+                    normalizeHabitScore(c.executionScore) > 0 ||
+                    (c.actualPrice != null && c.actualPrice > 0)) && (
+                    <Stack
+                      spacing={0.25}
+                      alignItems={{ xs: 'flex-start', sm: 'flex-end' }}
+                      sx={{ width: '100%' }}
+                    >
+                      <HabitScoreRatingInline label="Spokojenost" score={c.satisfactionScore} />
+                      <HabitScoreRatingInline label="Provedení" score={c.executionScore} />
+                      {c.actualPrice != null && c.actualPrice > 0 ? (
+                        <Typography variant="caption" color="text.secondary">
+                          Cena: {c.actualPrice} Kč
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  )}
                   {c.note?.trim() ? (
                     <Typography variant="body2" color="text.secondary" sx={{ textAlign: { sm: 'right' } }}>
                       {c.note}

@@ -25,12 +25,13 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { FC, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { HABIT_TYPE_LABELS } from './habitUiConstants';
 
 type ActiveFilter = 'all' | 'active' | 'inactive';
 
 export const HabitsListPage: FC = () => {
+  const navigate = useNavigate();
   const { selectedExpenseTracker } = useSelectedExpenseTracker();
   const trackerId = selectedExpenseTracker?.id ?? '';
 
@@ -184,18 +185,25 @@ export const HabitsListPage: FC = () => {
                       typeKey && HABIT_TYPE_LABELS[typeKey] ? HABIT_TYPE_LABELS[typeKey] : row.habitType ?? '—';
                     const slots = row.scheduleSlots?.length ?? 0;
                     return (
-                      <TableRow key={id ?? row.name} hover>
+                      <TableRow
+                        key={id ?? row.name}
+                        hover
+                        onClick={id ? () => navigate(`/habits/${id}`) : undefined}
+                        sx={id ? { cursor: 'pointer' } : undefined}
+                      >
                         <TableCell>
                           {id ? (
-                            <Button
-                              component={Link}
+                            <Link
                               to={`/habits/${id}`}
-                              sx={{ textTransform: 'none', p: 0, minWidth: 0, fontWeight: 600 }}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ textDecoration: 'none', color: 'inherit', fontWeight: 600 }}
                             >
                               {row.name ?? '—'}
-                            </Button>
+                            </Link>
                           ) : (
-                            row.name ?? '—'
+                            <Typography component="span" fontWeight={600}>
+                              {row.name ?? '—'}
+                            </Typography>
                           )}
                         </TableCell>
                         <TableCell>{typeLabel}</TableCell>

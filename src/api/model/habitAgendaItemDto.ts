@@ -16,6 +16,9 @@ export interface HabitAgendaItemDto {
   habitType?: HabitAgendaItemDtoHabitType;
   expectedMinutes?: number;
   sortOrder?: number;
+  satisfactionScore?: number;
+  utilityScore?: number;
+  estimatedPrice?: number;
   dayBlocks?: HabitAgendaItemDtoDayBlocksItem[];
   completion?: HabitCompletionStateDto;
 }

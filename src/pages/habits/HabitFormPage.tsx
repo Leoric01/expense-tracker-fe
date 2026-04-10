@@ -34,6 +34,8 @@ import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { HabitScheduleMatrix } from './HabitScheduleMatrix';
+import { parseOptionalMoneyKc } from './habitMoneyParse';
+import { HabitScoreRatingRow, normalizeHabitScore } from './HabitScoreRating';
 import {
   HABIT_TYPE_OPTIONS,
   keySetToScheduleSlots,
@@ -50,8 +52,12 @@ function buildUpsertBody(args: {
   active: boolean;
   sortOrder: number;
   scheduleKeys: Set<string>;
+  satisfactionScore: number;
+  utilityScore: number;
+  estimatedPrice: string;
 }): HabitUpsertRequestDto {
   const scheduleSlots = keySetToScheduleSlots(args.scheduleKeys);
+  const est = parseOptionalMoneyKc(args.estimatedPrice);
   return {
     name: args.name.trim(),
     description: args.description.trim() || undefined,
@@ -61,6 +67,9 @@ function buildUpsertBody(args: {
     validTo: args.validTo ? args.validTo.format('YYYY-MM-DD') : (null as unknown as string),
     active: args.active,
     sortOrder: args.sortOrder,
+    satisfactionScore: normalizeHabitScore(args.satisfactionScore),
+    utilityScore: normalizeHabitScore(args.utilityScore),
+    ...(est != null ? { estimatedPrice: est } : {}),
     scheduleSlots,
   } as HabitUpsertRequestDto;
 }
@@ -86,6 +95,9 @@ export const HabitFormPage: FC = () => {
   const [sortOrder, setSortOrder] = useState(0);
   const [scheduleKeys, setScheduleKeys] = useState<Set<string>>(new Set());
   const [scheduleError, setScheduleError] = useState(false);
+  const [satisfactionScore, setSatisfactionScore] = useState(0);
+  const [utilityScore, setUtilityScore] = useState(0);
+  const [estimatedPrice, setEstimatedPrice] = useState('');
 
   const detailQuery = useQuery({
     queryKey: getHabitFindByIdQueryKey(trackerId, habitId ?? ''),
@@ -119,6 +131,9 @@ export const HabitFormPage: FC = () => {
     setActive(h.active ?? true);
     setSortOrder(h.sortOrder ?? 0);
     setScheduleKeys(slotsToKeySet(h.scheduleSlots));
+    setSatisfactionScore(normalizeHabitScore(h.satisfactionScore));
+    setUtilityScore(normalizeHabitScore(h.utilityScore));
+    setEstimatedPrice(h.estimatedPrice != null && h.estimatedPrice !== 0 ? String(h.estimatedPrice) : '');
   }, [isEdit, detailQuery.data]);
 
   const createMutation = useMutation({
@@ -202,6 +217,9 @@ export const HabitFormPage: FC = () => {
       active,
       sortOrder,
       scheduleKeys,
+      satisfactionScore,
+      utilityScore,
+      estimatedPrice,
     });
 
     if (isEdit) {
@@ -333,6 +351,31 @@ export const HabitFormPage: FC = () => {
                   <Checkbox checked={active} onChange={(ev) => setActive(ev.target.checked)} disabled={saving} />
                 }
                 label="Aktivní"
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                Hodnocení 0–10: půl hvězdy = 1 bod. 0 = nevyplněno.
+              </Typography>
+              <HabitScoreRatingRow
+                label="Spokojenost s návykem"
+                value={satisfactionScore}
+                onChange={setSatisfactionScore}
+                disabled={saving}
+              />
+              <HabitScoreRatingRow
+                label="Užitečnost návyku"
+                value={utilityScore}
+                onChange={setUtilityScore}
+                disabled={saving}
+              />
+              <TextField
+                label="Odhadovaná cena (Kč, volitelné)"
+                value={estimatedPrice}
+                onChange={(ev) => setEstimatedPrice(ev.target.value)}
+                type="text"
+                inputMode="decimal"
+                fullWidth
+                disabled={saving}
+                placeholder="Nevyplněno"
               />
             </Stack>
           </Paper>

@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import { FC } from 'react';
 import type { HabitCompletionDialogStatus } from './habitCompletionMappers';
+import { HabitScoreRatingRow } from './HabitScoreRating';
 
 export type { HabitCompletionDialogStatus } from './habitCompletionMappers';
 
@@ -30,6 +31,12 @@ type HabitCompletionFormDialogProps = {
   onStatusChange: (status: HabitCompletionDialogStatus) => void;
   note: string;
   onNoteChange: (note: string) => void;
+  satisfactionScore: number;
+  onSatisfactionScoreChange: (v: number) => void;
+  executionScore: number;
+  onExecutionScoreChange: (v: number) => void;
+  actualPrice: string;
+  onActualPriceChange: (v: string) => void;
   onSubmit: () => void;
   submitting: boolean;
 };
@@ -44,6 +51,12 @@ export const HabitCompletionFormDialog: FC<HabitCompletionFormDialogProps> = ({
   onStatusChange,
   note,
   onNoteChange,
+  satisfactionScore,
+  onSatisfactionScoreChange,
+  executionScore,
+  onExecutionScoreChange,
+  actualPrice,
+  onActualPriceChange,
   onSubmit,
   submitting,
 }) => {
@@ -94,6 +107,28 @@ export const HabitCompletionFormDialog: FC<HabitCompletionFormDialogProps> = ({
               />
             </RadioGroup>
           </FormControl>
+          <HabitScoreRatingRow
+            label="Spokojenost se splněním"
+            value={satisfactionScore}
+            onChange={onSatisfactionScoreChange}
+            disabled={submitting}
+          />
+          <HabitScoreRatingRow
+            label="Hodnocení provedení"
+            value={executionScore}
+            onChange={onExecutionScoreChange}
+            disabled={submitting}
+          />
+          <TextField
+            label="Skutečná cena (Kč, volitelné)"
+            value={actualPrice}
+            onChange={(e) => onActualPriceChange(e.target.value)}
+            type="text"
+            inputMode="decimal"
+            fullWidth
+            disabled={submitting}
+            placeholder="Nevyplněno"
+          />
           <TextField
             label="Poznámka (volitelná)"
             placeholder="Bez poznámky odešli prázdné pole"

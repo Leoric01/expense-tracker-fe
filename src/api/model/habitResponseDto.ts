@@ -18,6 +18,9 @@ export interface HabitResponseDto {
   validTo?: string;
   active?: boolean;
   sortOrder?: number;
+  satisfactionScore?: number;
+  utilityScore?: number;
+  estimatedPrice?: number;
   scheduleSlots?: HabitScheduleSlotResponseDto[];
   createdDate?: string;
   lastModifiedDate?: string;

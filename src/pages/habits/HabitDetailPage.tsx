@@ -28,6 +28,7 @@ import { useSnackbar } from 'notistack';
 import { FC, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { HabitScheduleMatrix } from './HabitScheduleMatrix';
+import { HabitScoreRatingRow } from './HabitScoreRating';
 import { HABIT_TYPE_LABELS, slotsToKeySet } from './habitUiConstants';
 
 export const HabitDetailPage: FC = () => {
@@ -219,6 +220,14 @@ export const HabitDetailPage: FC = () => {
             }
           />
           <DetailRow label="Pořadí" value={String(habit.sortOrder ?? 0)} />
+          <HabitScoreRatingRow label="Spokojenost s návykem" value={habit.satisfactionScore ?? 0} />
+          <HabitScoreRatingRow label="Užitečnost návyku" value={habit.utilityScore ?? 0} />
+          <DetailRow
+            label="Odhadovaná cena"
+            value={
+              habit.estimatedPrice != null && habit.estimatedPrice > 0 ? `${habit.estimatedPrice} Kč` : '—'
+            }
+          />
           {(habit.createdDate || habit.lastModifiedDate) && (
             <Typography variant="caption" color="text.secondary">
               Vytvořeno: {habit.createdDate ?? '—'} · Upraveno: {habit.lastModifiedDate ?? '—'}

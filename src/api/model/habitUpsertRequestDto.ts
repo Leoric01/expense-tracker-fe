@@ -17,5 +17,8 @@ export interface HabitUpsertRequestDto {
   validTo?: string;
   active?: boolean;
   sortOrder?: number;
+  satisfactionScore?: number;
+  utilityScore?: number;
+  estimatedPrice?: number;
   scheduleSlots?: HabitScheduleSlotRequestDto[];
 }

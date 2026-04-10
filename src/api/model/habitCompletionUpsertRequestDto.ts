@@ -12,4 +12,7 @@ export interface HabitCompletionUpsertRequestDto {
   date?: string;
   status?: HabitCompletionUpsertRequestDtoStatus;
   note?: string;
+  satisfactionScore?: number;
+  executionScore?: number;
+  actualPrice?: number;
 }
