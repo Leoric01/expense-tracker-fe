@@ -13,7 +13,10 @@ import { PageHeading } from '@components/PageHeading';
 import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { Box, Button, IconButton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
+import { Box, Button, IconButton, Stack, Typography, useTheme } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
@@ -76,57 +79,309 @@ function buildHabitRowsForBlock(
     );
 }
 
-function weekCellGlyph(
-  item: HabitAgendaItemDto | undefined,
-): { char: string; title: string; sx: Record<string, unknown> } {
+type CellIndicator = {
+  icon: 'check' | 'half' | 'skip' | 'miss' | 'pending' | 'none';
+  title: string;
+  bg: string;
+  fg: string;
+};
+
+function weekCellIndicator(item: HabitAgendaItemDto | undefined): CellIndicator {
   if (!item) {
-    return {
-      char: '–',
-      title: 'Není naplánováno',
-      sx: { color: 'text.disabled', fontSize: '1.1rem', fontWeight: 600 },
-    };
+    return { icon: 'none', title: 'Není naplánováno', bg: 'transparent', fg: 'text.disabled' };
   }
   const st = item.completion?.status;
   if (st === HabitCompletionStateDtoStatus.DONE) {
-    return {
-      char: '✓',
-      title: 'Splněno',
-      sx: { color: 'success.main', fontSize: '1.2rem', fontWeight: 700 },
-    };
+    return { icon: 'check', title: 'Splněno', bg: 'success.main', fg: '#fff' };
   }
   if (st === HabitCompletionStateDtoStatus.PARTIALLY_COMPLETED) {
-    return {
-      char: '◐',
-      title: 'Částečně splněno',
-      sx: { color: 'info.main', fontSize: '1.2rem', fontWeight: 700 },
-    };
+    return { icon: 'half', title: 'Částečně splněno', bg: 'info.main', fg: '#fff' };
   }
   if (st === HabitCompletionStateDtoStatus.SKIPPED) {
-    return {
-      char: '↷',
-      title: 'Přeskočeno',
-      sx: { color: 'warning.main', fontSize: '1.2rem', fontWeight: 700 },
-    };
+    return { icon: 'skip', title: 'Přeskočeno', bg: 'warning.main', fg: '#fff' };
   }
   if (st === HabitCompletionStateDtoStatus.MISSED) {
-    return {
-      char: '✕',
-      title: 'Zmeškáno',
-      sx: { color: 'error.main', fontSize: '1.05rem', fontWeight: 700 },
-    };
+    return { icon: 'miss', title: 'Zmeškáno', bg: 'error.main', fg: '#fff' };
   }
-  return {
-    char: '○',
-    title: 'Naplánováno, bez záznamu',
-    sx: { color: 'text.disabled', fontSize: '1.1rem', fontWeight: 700 },
-  };
+  return { icon: 'pending', title: 'Naplánováno, bez záznamu', bg: 'action.disabledBackground', fg: 'text.disabled' };
 }
+
+const STATUS_ICON_MAP = {
+  check: <CheckRoundedIcon sx={{ fontSize: 14 }} />,
+  half: <RemoveRoundedIcon sx={{ fontSize: 14 }} />,
+  skip: <Typography component="span" sx={{ fontSize: 11, fontWeight: 700, lineHeight: 1 }}>S</Typography>,
+  miss: <CloseRoundedIcon sx={{ fontSize: 14 }} />,
+  pending: null,
+  none: null,
+} as const;
 
 type CellDialogState = {
   habitId: string;
   habitName: string;
   date: string;
   completion: HabitCompletionStateDto | undefined;
+};
+
+const BLOCK_ACCENT_COLORS: Record<(typeof HABIT_DAY_BLOCKS_ORDER)[number], string> = {
+  [HABIT_DAY_BLOCKS_ORDER[0]]: 'warning.main',
+  [HABIT_DAY_BLOCKS_ORDER[1]]: 'info.main',
+  [HABIT_DAY_BLOCKS_ORDER[2]]: 'success.main',
+  [HABIT_DAY_BLOCKS_ORDER[3]]: 'secondary.main',
+  [HABIT_DAY_BLOCKS_ORDER[4]]: 'primary.main',
+};
+
+const WeekGrid: FC<{
+  sortedDays: HabitDayOverviewDto[];
+  todayStr: string;
+  openCellDialog: (
+    habitId: string,
+    habitName: string,
+    date: string,
+    completion: HabitCompletionStateDto | undefined,
+  ) => void;
+}> = ({ sortedDays, todayStr, openCellDialog }) => {
+  const theme = useTheme();
+  const totalCols = sortedDays.length + 1;
+  const colTemplate = `minmax(120px, 1.8fr) repeat(${sortedDays.length}, minmax(38px, 1fr))`;
+
+  return (
+    <Box sx={{ overflowX: 'auto', pb: 1 }}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: colTemplate,
+          minWidth: 560,
+          borderRadius: 2,
+          border: 1,
+          borderColor: 'divider',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header row */}
+        <Box
+          sx={{
+            gridColumn: '1',
+            p: 1.5,
+            display: 'flex',
+            alignItems: 'flex-end',
+            bgcolor: '#14182c',
+          }}
+        />
+        {sortedDays.map((d) => {
+          const ds = d.date ?? '';
+          const isToday = ds === todayStr;
+          const dow = d.dayOfWeek;
+          const dowLabel =
+            dow && dow in HABIT_DAY_LABELS
+              ? HABIT_DAY_LABELS[dow as keyof typeof HABIT_DAY_LABELS]
+              : '';
+          const dateShort = ds ? dayjs(ds).locale('cs').format('D. M.') : '';
+          return (
+            <Box
+              key={ds}
+              sx={{
+                textAlign: 'center',
+                py: 1,
+                px: 0.5,
+                position: 'relative',
+                bgcolor: isToday ? '#1c2138' : '#14182c',
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  color: isToday ? 'primary.main' : 'text.secondary',
+                  display: 'block',
+                  lineHeight: 1.4,
+                }}
+              >
+                {dowLabel}
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: isToday ? 700 : 500,
+                  color: isToday ? 'text.primary' : 'text.secondary',
+                  lineHeight: 1.4,
+                }}
+              >
+                {dateShort}
+              </Typography>
+            </Box>
+          );
+        })}
+
+        {/* Separator under header */}
+        <Box sx={{ gridColumn: `1 / ${totalCols + 1}`, borderBottom: 1, borderColor: 'divider' }} />
+
+        {/* Blocks */}
+        {HABIT_DAY_BLOCKS_ORDER.map((block) => {
+          const rows = buildHabitRowsForBlock(sortedDays, block);
+          const accent = BLOCK_ACCENT_COLORS[block];
+          return (
+            <Fragment key={block}>
+              {/* Block section header - spans full width */}
+              <Box
+                sx={{
+                  gridColumn: `1 / ${totalCols + 1}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  px: 1.5,
+                  py: 0.75,
+                  bgcolor: 'action.hover',
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 4,
+                    height: 18,
+                    borderRadius: 1,
+                    bgcolor: accent,
+                    flexShrink: 0,
+                  }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    color: accent,
+                    lineHeight: 1,
+                  }}
+                >
+                  {HABIT_BLOCK_LABELS[block]}
+                </Typography>
+              </Box>
+
+              {rows.length === 0 ? (
+                <Box
+                  sx={{
+                    gridColumn: `1 / ${totalCols + 1}`,
+                    px: 2,
+                    py: 1,
+                    borderBottom: 1,
+                    borderColor: 'divider',
+                    bgcolor: '#222a3c',
+                  }}
+                >
+                  <Typography variant="caption" color="text.disabled">
+                    Žádné návyky
+                  </Typography>
+                </Box>
+              ) : (
+                rows.map((row, rowIdx) => (
+                  <Fragment key={`${block}-${row.habitId}`}>
+                    {/* Habit name cell */}
+                    <Box
+                      sx={{
+                        px: 1.5,
+                        py: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderBottom: rowIdx === rows.length - 1 ? 1 : 0,
+                        borderColor: 'divider',
+                        bgcolor: '#222a3c',
+                      }}
+                    >
+                      <Typography
+                        component={Link}
+                        to={`/habits/${row.habitId}`}
+                        variant="body2"
+                        sx={{
+                          fontWeight: 500,
+                          color: 'text.primary',
+                          textDecoration: 'none',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          '&:hover': { color: 'primary.main' },
+                        }}
+                      >
+                        {row.name || '—'}
+                      </Typography>
+                    </Box>
+
+                    {/* Day cells */}
+                    {sortedDays.map((d) => {
+                      const ds = d.date ?? '';
+                      const isToday = ds === todayStr;
+                      const item = getAgendaItem(d, block, row.habitId);
+                      const ind = weekCellIndicator(item);
+                      const scheduled = Boolean(item);
+                      const icon = STATUS_ICON_MAP[ind.icon];
+                      return (
+                        <Box
+                          key={`${row.habitId}-${ds}`}
+                          onClick={() => {
+                            if (!scheduled || !row.habitId || !ds) return;
+                            openCellDialog(row.habitId, row.name, ds, item?.completion);
+                          }}
+                          title={ind.title}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            py: 1,
+                            cursor: scheduled ? 'pointer' : 'default',
+                            borderBottom: rowIdx === rows.length - 1 ? 1 : 0,
+                            borderColor: 'divider',
+                            transition: 'background-color 0.1s',
+                            bgcolor: isToday ? '#2a3348' : '#222a3c',
+                            '&:hover': scheduled
+                              ? { bgcolor: 'action.hover' }
+                              : {},
+                          }}
+                        >
+                          {ind.icon === 'none' ? (
+                            <Typography
+                              component="span"
+                              sx={{ color: 'text.disabled', fontSize: '0.75rem' }}
+                            >
+                              –
+                            </Typography>
+                          ) : (
+                            <Box
+                              sx={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: '50%',
+                                bgcolor: ind.bg,
+                                color: ind.fg,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'transform 0.15s',
+                                ...(scheduled
+                                  ? {
+                                      '&:hover': {
+                                        transform: 'scale(1.15)',
+                                        boxShadow: (t: typeof theme) =>
+                                          `0 0 0 3px ${t.palette.action.focus}`,
+                                      },
+                                    }
+                                  : {}),
+                              }}
+                            >
+                              {icon}
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Fragment>
+                ))
+              )}
+            </Fragment>
+          );
+        })}
+      </Box>
+    </Box>
+  );
 };
 
 export const HabitWeekOverviewPage: FC = () => {
@@ -303,125 +558,11 @@ export const HabitWeekOverviewPage: FC = () => {
       )}
 
       {!weekQuery.isLoading && !weekQuery.isError && sortedDays.length > 0 && (
-        <TableContainer sx={{ maxWidth: '100%', overflowX: 'auto' }}>
-          <Table size="small" stickyHeader sx={{ minWidth: 640 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ minWidth: 160, fontWeight: 700 }}>Návyk</TableCell>
-                {sortedDays.map((d) => {
-                  const ds = d.date ?? '';
-                  const isToday = ds === todayStr;
-                  const dow = d.dayOfWeek;
-                  const dowLabel =
-                    dow && dow in HABIT_DAY_LABELS
-                      ? HABIT_DAY_LABELS[dow as keyof typeof HABIT_DAY_LABELS]
-                      : '';
-                  const dateShort = ds ? dayjs(ds).locale('cs').format('D. M.') : '';
-                  return (
-                    <TableCell
-                      key={ds}
-                      align="center"
-                      sx={{
-                        fontWeight: 700,
-                        whiteSpace: 'nowrap',
-                        ...(isToday
-                          ? {
-                              bgcolor: 'action.selected',
-                              boxShadow: (t) => `inset 0 3px 0 0 ${t.palette.primary.main}`,
-                            }
-                          : {}),
-                      }}
-                    >
-                      <Typography variant="caption" display="block" color="text.secondary">
-                        {dowLabel}
-                      </Typography>
-                      <Typography variant="body2" fontWeight={700}>
-                        {dateShort}
-                      </Typography>
-                    </TableCell>
-                  );
-                })}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {HABIT_DAY_BLOCKS_ORDER.map((block) => {
-                const rows = buildHabitRowsForBlock(sortedDays, block);
-                return (
-                  <Fragment key={block}>
-                    <TableRow>
-                      <TableCell
-                        colSpan={sortedDays.length + 1}
-                        sx={{
-                          bgcolor: 'action.hover',
-                          py: 1,
-                          fontWeight: 700,
-                          borderBottom: 1,
-                          borderColor: 'divider',
-                        }}
-                      >
-                        {HABIT_BLOCK_LABELS[block]}
-                      </TableCell>
-                    </TableRow>
-                    {rows.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={sortedDays.length + 1}>
-                          <Typography variant="body2" color="text.secondary">
-                            V tomto bloku tento týden žádné návyky
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      rows.map((row) => (
-                        <TableRow key={`${block}-${row.habitId}`} hover>
-                          <TableCell sx={{ verticalAlign: 'middle' }}>
-                            <Typography
-                              component={Link}
-                              to={`/habits/${row.habitId}`}
-                              variant="body2"
-                              fontWeight={600}
-                              sx={{ color: 'text.primary', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
-                            >
-                              {row.name || '—'}
-                            </Typography>
-                          </TableCell>
-                          {sortedDays.map((d) => {
-                            const ds = d.date ?? '';
-                            const isToday = ds === todayStr;
-                            const item = getAgendaItem(d, block, row.habitId);
-                            const g = weekCellGlyph(item);
-                            const scheduled = Boolean(item);
-                            return (
-                              <TableCell
-                                key={`${row.habitId}-${ds}`}
-                                align="center"
-                                onClick={() => {
-                                  if (!scheduled || !row.habitId || !ds) {
-                                    return;
-                                  }
-                                  openCellDialog(row.habitId, row.name, ds, item?.completion);
-                                }}
-                                sx={{
-                                  cursor: scheduled ? 'pointer' : 'default',
-                                  verticalAlign: 'middle',
-                                  ...(isToday ? { bgcolor: 'action.selected' } : {}),
-                                  '&:hover': scheduled ? { bgcolor: 'action.hover' } : {},
-                                }}
-                              >
-                                <Typography component="span" title={g.title} sx={g.sx}>
-                                  {g.char}
-                                </Typography>
-                              </TableCell>
-                            );
-                          })}
-                        </TableRow>
-                      ))
-                    )}
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <WeekGrid
+          sortedDays={sortedDays}
+          todayStr={todayStr}
+          openCellDialog={openCellDialog}
+        />
       )}
 
       {!weekQuery.isLoading && !weekQuery.isError && sortedDays.length === 0 && (
