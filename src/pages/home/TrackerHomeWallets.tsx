@@ -49,6 +49,8 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Autocomplete,
@@ -360,6 +362,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const [rangeTo, setRangeTo] = useState(() => formatDateDdMmYyyyFromDate(lastDayOfMonth()));
   const [selectedDisplayAssetId, setSelectedDisplayAssetId] = useState('');
   const [displayCurrencySubmitting, setDisplayCurrencySubmitting] = useState(false);
+  const [showAmounts, setShowAmounts] = useState(true);
   /** Po „Bez konverze“ nezobrazuj converted UI, dokud tracker + dashboard nepotvrdí vymazání (jinak drží starý response). */
   const [suppressConvertedUiUntilClear, setSuppressConvertedUiUntilClear] = useState(false);
 
@@ -574,6 +577,12 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   );
 
   const hasAnyHoldings = summaries.length > 0;
+  const amountMaskSx = showAmounts
+    ? undefined
+    : {
+        filter: 'blur(6px)',
+        userSelect: 'none' as const,
+      };
 
   /** Součet `endBalance` z dashboardu podle měny (stejný API response jako karty). */
   const totalFundsDisplayText = useMemo(() => {
@@ -1049,10 +1058,21 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
               fontWeight: 600,
               fontVariantNumeric: 'tabular-nums',
               color: 'text.primary',
+              ...amountMaskSx,
             }}
           >
             {rangeParamsOk && !rangeOrderInvalid ? totalFundsDisplayText : '—'}
           </Box>
+          <Tooltip title={showAmounts ? 'Skrýt částky' : 'Zobrazit částky'}>
+            <IconButton
+              size="small"
+              onClick={() => setShowAmounts((prev) => !prev)}
+              aria-label={showAmounts ? 'Skrýt částky' : 'Zobrazit částky'}
+              sx={{ ml: 0.5, verticalAlign: 'middle' }}
+            >
+              {showAmounts ? <VisibilityOutlinedIcon fontSize="small" /> : <VisibilityOffOutlinedIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
         </Typography>
       </Stack>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 1, mt: 2 }}>
@@ -1276,7 +1296,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                     {hasDisplayCurrency && card.convertedTotalBalance != null && (
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                         Celkem instituce:{' '}
-                        <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                        <Box component="span" sx={{ fontWeight: 600, color: 'text.primary', ...amountMaskSx }}>
                           {formatAmount(card.convertedTotalBalance, displayAssetScale, displayAssetCode)}
                         </Box>
                       </Typography>
@@ -1290,7 +1310,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                           {hasDisplayCurrency && acc.convertedTotalBalance != null && (
                             <Typography variant="caption" color="text.secondary">
                               Celkem účet:{' '}
-                              <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                              <Box component="span" sx={{ fontWeight: 600, color: 'text.primary', ...amountMaskSx }}>
                                 {formatAmount(acc.convertedTotalBalance, displayAssetScale, displayAssetCode)}
                               </Box>
                             </Typography>
@@ -1374,12 +1394,14 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         Zůstatek
                                       </Typography>
                                       <Typography variant="body1" sx={{ fontWeight: 600, lineHeight: 1.25 }}>
-                                        {formatWalletAmount(w.currentBalance, w.currencyCode, rowScale)}
+                                        <Box component="span" sx={amountMaskSx}>
+                                          {formatWalletAmount(w.currentBalance, w.currencyCode, rowScale)}
+                                        </Box>
                                       </Typography>
                                       {shouldShowConvertedHolding && (
                                         <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.35 }}>
                                           V display měně{' '}
-                                          <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                                          <Box component="span" sx={{ fontWeight: 600, color: 'text.primary', ...amountMaskSx }}>
                                             {formatAmount(
                                               sm.convertedEndBalance,
                                               displayAssetScale,
@@ -1392,7 +1414,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         <>
                                           <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.35 }}>
                                             Start v display měně{' '}
-                                            <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                                            <Box component="span" sx={{ fontWeight: 600, color: 'text.primary', ...amountMaskSx }}>
                                               {formatAmount(
                                                 sm.convertedStartBalance,
                                                 displayAssetScale,
@@ -1402,7 +1424,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                           </Typography>
                                           <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.35 }}>
                                             Konvertovaná změna období{' '}
-                                            <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                                            <Box component="span" sx={{ fontWeight: 600, color: 'text.primary', ...amountMaskSx }}>
                                               {formatAmount(
                                                 convertedPeriodDiff,
                                                 displayAssetScale,
@@ -1460,7 +1482,10 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         display="block"
                                         sx={{ lineHeight: 1.35 }}
                                       >
-                                        Začátek {formatWalletAmount(sm.startBalance, w.currencyCode, rowScale)}
+                                        Začátek{' '}
+                                        <Box component="span" sx={amountMaskSx}>
+                                          {formatWalletAmount(sm.startBalance, w.currencyCode, rowScale)}
+                                        </Box>
                                       </Typography>
                                       <Typography
                                         variant="caption"
@@ -1468,7 +1493,10 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         display="block"
                                         sx={{ lineHeight: 1.35 }}
                                       >
-                                        Příjem {formatWalletAmount(sm.totalIncome, w.currencyCode, rowScale)}
+                                        Příjem{' '}
+                                        <Box component="span" sx={amountMaskSx}>
+                                          {formatWalletAmount(sm.totalIncome, w.currencyCode, rowScale)}
+                                        </Box>
                                       </Typography>
                                       <Typography
                                         variant="caption"
@@ -1476,7 +1504,10 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         display="block"
                                         sx={{ lineHeight: 1.35 }}
                                       >
-                                        Výdaj {formatWalletAmount(sm.totalExpense, w.currencyCode, rowScale)}
+                                        Výdaj{' '}
+                                        <Box component="span" sx={amountMaskSx}>
+                                          {formatWalletAmount(sm.totalExpense, w.currencyCode, rowScale)}
+                                        </Box>
                                       </Typography>
                                       <Divider sx={{ alignSelf: 'stretch', width: '100%', my: 0.35 }} />
                                       <Typography
@@ -1485,7 +1516,10 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                         display="block"
                                         sx={{ lineHeight: 1.35 }}
                                       >
-                                        Čistá změna {formatWalletAmount(sm.difference, w.currencyCode, rowScale)}
+                                        Čistá změna{' '}
+                                        <Box component="span" sx={amountMaskSx}>
+                                          {formatWalletAmount(sm.difference, w.currencyCode, rowScale)}
+                                        </Box>
                                       </Typography>
                                     </Stack>
                                   </Box>
