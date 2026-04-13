@@ -335,9 +335,9 @@ export const HabitAgendaPage: FC = () => {
 
             return (
               <Box key={blockKey}>
-                <Typography variant="h6" fontWeight={700} sx={{ mb: 1.5 }}>
+                <PageHeading component="h2" gutterBottom={false} sx={{ mb: 1.5 }}>
                   {blockLabel}
-                </Typography>
+                </PageHeading>
                 {items.length === 0 ? (
                   <Typography variant="body2" color="text.secondary" sx={{ pl: 0.5 }}>
                     Žádné návyky
