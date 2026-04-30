@@ -25,7 +25,8 @@ export interface TransactionResponseDto {
   rootCategoryId?: string;
   rootCategoryName?: string;
   amount?: number;
-  currencyCode?: string;
+  assetCode?: string;
+  assetScale?: number;
   exchangeRate?: number;
   feeAmount?: number;
   settledAmount?: number;

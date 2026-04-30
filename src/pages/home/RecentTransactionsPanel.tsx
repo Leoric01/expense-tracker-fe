@@ -7,6 +7,7 @@ import type {
   PagedModelTransactionResponseDto,
   TransactionFindAllPageableParams,
   TransactionResponseDto,
+  UpdateTransactionRequestDto,
 } from '@api/model';
 import {
   TransactionFindAllPageableTransactionType,
@@ -16,7 +17,10 @@ import {
 } from '@api/model';
 import {
   getTransactionFindAllPageableQueryKey,
+  transactionCancel,
   transactionFindAllPageable,
+  transactionUpdate,
+  transactionUploadAttachment,
 } from '@api/transaction-controller/transaction-controller';
 import { holdingFindAll } from '@api/holding-controller/holding-controller';
 import { useDebouncedValue } from '@hooks/useDebouncedValue';
@@ -25,6 +29,10 @@ import {
   Box,
   Button,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Link,
   Paper,
   Stack,
@@ -46,12 +54,14 @@ import {
   formatDateDdMmYyyyFromDate,
   formatDateTimeDdMmYyyyHhMm,
   parseCsDateTime,
+  toIsoFromDateTimeInput,
 } from '@utils/dateTimeCs';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { FC, Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { FC, Fragment, type ChangeEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { asCategoryChildren, toCategoryTree } from '@pages/categories/categoryTreeUtils';
 import { holdingLabel } from './holdingAdapter';
-import { formatWalletAmount, formatWalletAmountWholeUnits } from './walletDisplay';
+import { apiErrorMessage } from '@utils/apiErrorMessage';
+import { useSnackbar } from 'notistack';
 
 /** Všechny podkategorie (ne kořeny) v pořadí stromu DFS s hloubkou pro odsazení v menu. */
 function buildSubcategoryMenuRows(tree: CategoryResponseDto[]): { id: string; label: string; depth: number }[] {
@@ -190,6 +200,24 @@ function amountColorForType(t: string | undefined, theme: Theme): string {
   }
 }
 
+function formatAssetAmount(
+  amountMinor: number | undefined,
+  assetCode?: string,
+  assetScale?: number,
+): string {
+  if (amountMinor == null || !Number.isFinite(amountMinor)) return '—';
+  const code = (assetCode?.trim() || 'CZK').toUpperCase();
+  const scale = Number.isFinite(assetScale) && assetScale != null && assetScale >= 0
+    ? Math.min(Math.floor(assetScale), 20)
+    : 2;
+  const major = amountMinor / 10 ** scale;
+  const formatted = new Intl.NumberFormat('cs-CZ', {
+    minimumFractionDigits: scale,
+    maximumFractionDigits: scale,
+  }).format(major);
+  return `${formatted} ${code}`;
+}
+
 function holdingCellText(row: TransactionResponseDto): string {
   const t = row.transactionType as string | undefined;
   if (t === TransactionResponseDtoTransactionType.TRANSFER) {
@@ -211,7 +239,19 @@ function dash(s?: string | null): string {
   return t ? t : '—';
 }
 
-function TransactionDetailBlock({ row }: { row: TransactionResponseDto }) {
+function TransactionDetailBlock({
+  row,
+  actionPending,
+  onEdit,
+  onCancel,
+  onUploadAttachment,
+}: {
+  row: TransactionResponseDto;
+  actionPending: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+  onUploadAttachment: (file: File) => void;
+}) {
   const kv = (label: string, value: ReactNode) => (
     <Stack
       direction={{ xs: 'column', sm: 'row' }}
@@ -234,15 +274,43 @@ function TransactionDetailBlock({ row }: { row: TransactionResponseDto }) {
 
   const t = row.transactionType as string | undefined;
   const attachments = row.attachments ?? [];
+  const canCancel = Boolean(row.id) && row.status !== TransactionResponseDtoStatus.CANCELLED;
 
   return (
     <Box sx={{ py: 1.5, px: 0.5 }}>
-      <Stack spacing={0}>
+      <Stack spacing={1.25}>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Button size="small" variant="outlined" onClick={onEdit} disabled={!row.id || actionPending}>
+            Upravit
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            color="error"
+            onClick={onCancel}
+            disabled={!canCancel || actionPending}
+          >
+            Zrušit transakci
+          </Button>
+          <Button size="small" variant="outlined" component="label" disabled={!row.id || actionPending}>
+            Nahrát přílohu
+            <input
+              hidden
+              type="file"
+              onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) onUploadAttachment(file);
+              }}
+            />
+          </Button>
+        </Stack>
+        <Stack spacing={0}>
         {kv('ID', dash(row.id))}
         {kv('Stav', statusLabel(row.status))}
         {kv('Typ', txTypeLabel(t))}
         {kv('Datum transakce', formatDateTimeDdMmYyyyHhMm(row.transactionDate))}
-        {kv('Částka', formatWalletAmount(row.amount, row.currencyCode))}
+        {kv('Částka', formatAssetAmount(row.amount, row.assetCode, row.assetScale))}
         {row.balanceAdjustmentDirection
           ? kv('Směr korekce', balanceDirectionLabel(row.balanceAdjustmentDirection))
           : null}
@@ -298,6 +366,7 @@ function TransactionDetailBlock({ row }: { row: TransactionResponseDto }) {
               </Stack>,
             )
           : kv('Přílohy', '—')}
+        </Stack>
       </Stack>
     </Box>
   );
@@ -314,9 +383,24 @@ type TypeFilterValue = '' | TransactionFindAllPageableTransactionType;
 
 export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }) => {
   const theme = useTheme();
+  const { enqueueSnackbar } = useSnackbar();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [editingTx, setEditingTx] = useState<TransactionResponseDto | null>(null);
+  const [editHoldingId, setEditHoldingId] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editCurrencyCode, setEditCurrencyCode] = useState('');
+  const [editExchangeRate, setEditExchangeRate] = useState('');
+  const [editFeeAmount, setEditFeeAmount] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+  const [editDateCs, setEditDateCs] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editExternalRef, setEditExternalRef] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
+  const [actionPending, setActionPending] = useState(false);
 
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 300);
@@ -365,6 +449,153 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     setDateFromCs(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
     setDateToCs(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
   }, []);
+
+  const invalidateTransactions = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
+    await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
+    await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+  }, [queryClient, trackerId]);
+
+  const openEditDialog = useCallback((row: TransactionResponseDto) => {
+    setEditingTx(row);
+    setEditHoldingId(row.holdingId ?? '');
+    setEditAmount(row.amount != null ? String(row.amount) : '');
+    setEditCurrencyCode(row.assetCode ?? '');
+    setEditExchangeRate(row.exchangeRate != null ? String(row.exchangeRate) : '');
+    setEditFeeAmount(row.feeAmount != null ? String(row.feeAmount) : '');
+    setEditCategoryId(row.categoryId ?? '');
+    setEditDateCs(formatDateTimeDdMmYyyyHhMm(row.transactionDate));
+    setEditDescription(row.description ?? '');
+    setEditNote(row.note ?? '');
+    setEditExternalRef(row.externalRef ?? '');
+    setEditError(null);
+  }, []);
+
+  const closeEditDialog = useCallback(() => {
+    if (actionPending) return;
+    setEditingTx(null);
+    setEditError(null);
+  }, [actionPending]);
+
+  const handleEditSubmit = useCallback(async () => {
+    const transactionId = editingTx?.id;
+    if (!transactionId) return;
+    const transactionDate = toIsoFromDateTimeInput(editDateCs);
+    if (!transactionDate) {
+      setEditError('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm.');
+      return;
+    }
+    const parseOptionalNumber = (value: string, label: string): number | undefined => {
+      const trimmed = value.trim();
+      if (!trimmed) return undefined;
+      const parsed = Number(trimmed.replace(',', '.'));
+      if (!Number.isFinite(parsed)) {
+        throw new Error(`${label} musí být číslo.`);
+      }
+      return parsed;
+    };
+
+    let amount: number | undefined;
+    let exchangeRate: number | undefined;
+    let feeAmount: number | undefined;
+    try {
+      amount = parseOptionalNumber(editAmount, 'Částka');
+      exchangeRate = parseOptionalNumber(editExchangeRate, 'Kurz');
+      feeAmount = parseOptionalNumber(editFeeAmount, 'Fee');
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Neplatná číselná hodnota.');
+      return;
+    }
+
+    setActionPending(true);
+    setEditError(null);
+    try {
+      const payload: UpdateTransactionRequestDto = {
+        ...(editHoldingId ? { holdingId: editHoldingId } : {}),
+        ...(amount != null ? { amount } : {}),
+        ...(editCurrencyCode.trim() ? { currencyCode: editCurrencyCode.trim().toUpperCase() } : {}),
+        ...(exchangeRate != null ? { exchangeRate } : {}),
+        ...(feeAmount != null ? { feeAmount } : {}),
+        ...(editCategoryId ? { categoryId: editCategoryId } : {}),
+        transactionDate,
+        description: editDescription.trim(),
+        note: editNote.trim(),
+        externalRef: editExternalRef.trim(),
+      };
+      const res = await transactionUpdate(trackerId, transactionId, payload);
+      if (res.status < 200 || res.status >= 300) {
+        enqueueSnackbar(apiErrorMessage(res.data, 'Transakci se nepodařilo upravit'), { variant: 'error' });
+        return;
+      }
+      enqueueSnackbar('Transakce byla upravena', { variant: 'success' });
+      setEditingTx(null);
+      await invalidateTransactions();
+    } catch {
+      enqueueSnackbar('Transakci se nepodařilo upravit', { variant: 'error' });
+    } finally {
+      setActionPending(false);
+    }
+  }, [
+    editAmount,
+    editCategoryId,
+    editCurrencyCode,
+    editDateCs,
+    editDescription,
+    editExchangeRate,
+    editExternalRef,
+    editFeeAmount,
+    editHoldingId,
+    editNote,
+    editingTx?.id,
+    enqueueSnackbar,
+    invalidateTransactions,
+    trackerId,
+  ]);
+
+  const handleCancelTransaction = useCallback(
+    async (row: TransactionResponseDto) => {
+      const transactionId = row.id;
+      if (!transactionId || actionPending) return;
+      if (!window.confirm('Opravdu zrušit tuto transakci?')) return;
+      setActionPending(true);
+      try {
+        const res = await transactionCancel(trackerId, transactionId);
+        if (res.status < 200 || res.status >= 300) {
+          enqueueSnackbar(apiErrorMessage(res.data, 'Transakci se nepodařilo zrušit'), { variant: 'error' });
+          return;
+        }
+        enqueueSnackbar('Transakce byla zrušena', { variant: 'success' });
+        await invalidateTransactions();
+      } catch {
+        enqueueSnackbar('Transakci se nepodařilo zrušit', { variant: 'error' });
+      } finally {
+        setActionPending(false);
+      }
+    },
+    [actionPending, enqueueSnackbar, invalidateTransactions, trackerId],
+  );
+
+  const handleUploadAttachment = useCallback(
+    async (row: TransactionResponseDto, file: File) => {
+      const transactionId = row.id;
+      if (!transactionId || actionPending) return;
+      setActionPending(true);
+      try {
+        const res = await transactionUploadAttachment(trackerId, transactionId, { file });
+        if (res.status < 200 || res.status >= 300) {
+          enqueueSnackbar(apiErrorMessage(res.data, 'Přílohu se nepodařilo nahrát'), { variant: 'error' });
+          return;
+        }
+        enqueueSnackbar('Příloha byla nahrána', { variant: 'success' });
+        await invalidateTransactions();
+      } catch {
+        enqueueSnackbar('Přílohu se nepodařilo nahrát', { variant: 'error' });
+      } finally {
+        setActionPending(false);
+      }
+    },
+    [actionPending, enqueueSnackbar, invalidateTransactions, trackerId],
+  );
 
   const listParams = useMemo((): TransactionFindAllPageableParams => {
     const params: TransactionFindAllPageableParams = {
@@ -491,8 +722,12 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
   const totals = txPaged?.totals;
 
   const totalsCurrency = useMemo(() => {
-    const code = recentTx.find((r) => r.currencyCode?.trim())?.currencyCode;
+    const code = recentTx.find((r) => r.assetCode?.trim())?.assetCode;
     return (code ?? 'CZK').toUpperCase();
+  }, [recentTx]);
+
+  const totalsAssetScale = useMemo(() => {
+    return recentTx.find((r) => r.assetScale != null)?.assetScale ?? 2;
   }, [recentTx]);
 
   return (
@@ -560,7 +795,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
               }}
             >
               {totals?.expenseAmount != null
-                ? formatWalletAmountWholeUnits(totals.expenseAmount, totalsCurrency)
+                ? formatAssetAmount(totals.expenseAmount, totalsCurrency, totalsAssetScale)
                 : '—'}
             </Box>
           </Typography>
@@ -577,7 +812,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
               }}
             >
               {totals?.incomeAmount != null
-                ? formatWalletAmountWholeUnits(totals.incomeAmount, totalsCurrency)
+                ? formatAssetAmount(totals.incomeAmount, totalsCurrency, totalsAssetScale)
                 : '—'}
             </Box>
           </Typography>
@@ -601,7 +836,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
               }}
             >
               {totals?.netAmount != null
-                ? formatWalletAmountWholeUnits(totals.netAmount, totalsCurrency)
+                ? formatAssetAmount(totals.netAmount, totalsCurrency, totalsAssetScale)
                 : '—'}
             </Box>
           </Typography>
@@ -777,13 +1012,19 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
                         color: amountColorForType(row.transactionType as string | undefined, theme),
                       }}
                     >
-                      {formatWalletAmountWholeUnits(row.amount, row.currencyCode)}
+                      {formatAssetAmount(row.amount, row.assetCode, row.assetScale)}
                     </TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell colSpan={7} sx={{ py: 0, borderBottom: open ? undefined : 'none' }}>
                       <Collapse in={open} timeout="auto" unmountOnExit>
-                        <TransactionDetailBlock row={row} />
+                        <TransactionDetailBlock
+                          row={row}
+                          actionPending={actionPending}
+                          onEdit={() => openEditDialog(row)}
+                          onCancel={() => void handleCancelTransaction(row)}
+                          onUploadAttachment={(file) => void handleUploadAttachment(row, file)}
+                        />
                       </Collapse>
                     </TableCell>
                   </TableRow>
@@ -812,6 +1053,104 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
           `${from}–${to} z ${count !== -1 ? count : `více než ${to}`}`
         }
       />
+      <Dialog open={Boolean(editingTx)} onClose={closeEditDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Upravit transakci</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Autocomplete
+              size="small"
+              options={holdingSelectOptions}
+              getOptionLabel={(o) => o.label}
+              value={holdingSelectOptions.find((o) => o.id === editHoldingId) ?? null}
+              onChange={(_, v) => setEditHoldingId(v?.id ?? '')}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              filterOptions={filterOptionsByQuery}
+              noOptionsText="Žádná shoda"
+              renderInput={(params) => <TextField {...params} label="Pozice" />}
+            />
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                label="Částka"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                fullWidth
+                inputMode="decimal"
+                error={Boolean(editError)}
+              />
+              <TextField
+                label="Měna"
+                value={editCurrencyCode}
+                onChange={(e) => setEditCurrencyCode(e.target.value)}
+                fullWidth
+                inputProps={{ maxLength: 16, style: { textTransform: 'uppercase' } }}
+              />
+            </Stack>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                label="Kurz"
+                value={editExchangeRate}
+                onChange={(e) => setEditExchangeRate(e.target.value)}
+                fullWidth
+                inputMode="decimal"
+              />
+              <TextField
+                label="Fee"
+                value={editFeeAmount}
+                onChange={(e) => setEditFeeAmount(e.target.value)}
+                fullWidth
+                inputMode="decimal"
+              />
+            </Stack>
+            <Autocomplete
+              size="small"
+              options={categorySelectOptions}
+              getOptionLabel={(o) => o.label}
+              value={categorySelectOptions.find((o) => o.id === editCategoryId) ?? null}
+              onChange={(_, v) => setEditCategoryId(v?.id ?? '')}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              filterOptions={filterOptionsByQuery}
+              noOptionsText="Žádná shoda"
+              renderInput={(params) => <TextField {...params} label="Kategorie" />}
+            />
+            <TextField
+              label="Datum transakce"
+              value={editDateCs}
+              onChange={(e) => setEditDateCs(e.target.value)}
+              fullWidth
+              error={Boolean(editError)}
+              helperText={editError ?? 'Formát dd.MM.yyyy HH:mm'}
+            />
+            <TextField
+              label="Popis"
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label="Poznámka"
+              value={editNote}
+              onChange={(e) => setEditNote(e.target.value)}
+              fullWidth
+              multiline
+              minRows={2}
+            />
+            <TextField
+              label="Externí reference"
+              value={editExternalRef}
+              onChange={(e) => setEditExternalRef(e.target.value)}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeEditDialog} disabled={actionPending}>
+            Zrušit
+          </Button>
+          <Button variant="contained" onClick={() => void handleEditSubmit()} disabled={actionPending}>
+            Uložit
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };
