@@ -924,6 +924,140 @@ export const useCategoryUpdate = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getCategoryUpdateMutationOptions(options), queryClient);
 };
+export type categoryExportBulkResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type categoryExportBulkResponseSuccess = categoryExportBulkResponse200 & {
+  headers: Headers;
+};
+export type categoryExportBulkResponse = categoryExportBulkResponseSuccess;
+
+export const getCategoryExportBulkUrl = (trackerId: string) => {
+  return `/api/category/${trackerId}/export`;
+};
+
+export const categoryExportBulk = async (
+  trackerId: string,
+  options?: RequestInit,
+): Promise<categoryExportBulkResponse> => {
+  const res = await fetch(getCategoryExportBulkUrl(trackerId), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: categoryExportBulkResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as categoryExportBulkResponse;
+};
+
+export const getCategoryExportBulkQueryKey = (trackerId: string) => {
+  return [`/api/category/${trackerId}/export`] as const;
+};
+
+export const getCategoryExportBulkQueryOptions = <
+  TData = Awaited<ReturnType<typeof categoryExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof categoryExportBulk>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getCategoryExportBulkQueryKey(trackerId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof categoryExportBulk>>> = ({ signal }) =>
+    categoryExportBulk(trackerId, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof categoryExportBulk>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type CategoryExportBulkQueryResult = NonNullable<
+  Awaited<ReturnType<typeof categoryExportBulk>>
+>;
+export type CategoryExportBulkQueryError = unknown;
+
+export function useCategoryExportBulk<
+  TData = Awaited<ReturnType<typeof categoryExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof categoryExportBulk>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryExportBulk>>,
+          TError,
+          Awaited<ReturnType<typeof categoryExportBulk>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryExportBulk<
+  TData = Awaited<ReturnType<typeof categoryExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryExportBulk>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryExportBulk>>,
+          TError,
+          Awaited<ReturnType<typeof categoryExportBulk>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryExportBulk<
+  TData = Awaited<ReturnType<typeof categoryExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof categoryExportBulk>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useCategoryExportBulk<
+  TData = Awaited<ReturnType<typeof categoryExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof categoryExportBulk>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getCategoryExportBulkQueryOptions(trackerId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
 export type categoryFindAllActiveResponse200 = {
   data: Blob;
   status: 200;

@@ -66,6 +66,7 @@ export const router = createBrowserRouter([
         ],
       },
       { path: 'importy', element: <Navigate to="/domu?tab=importy" replace /> },
+      { path: 'exporty', element: <Navigate to="/domu?tab=exporty" replace /> },
       { path: 'wallets', element: <Navigate to="/domu" replace /> },
       { path: 'transactions', element: <Navigate to="/domu" replace /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */

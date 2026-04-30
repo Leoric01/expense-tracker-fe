@@ -6,7 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
-export interface BulkBudgetImportItemDto {
+export interface BulkBudgetImportByCategoryIdItemDto {
   /** @minLength 1 */
   budgetPlanName: string;
   /** @minLength 1 */
@@ -14,8 +14,7 @@ export interface BulkBudgetImportItemDto {
   amount: number;
   /** @minLength 1 */
   currency: string;
-  /** @minLength 1 */
-  categoryName: string;
+  categoryId: string;
   intervalValue?: number;
   recurring?: boolean;
 }
