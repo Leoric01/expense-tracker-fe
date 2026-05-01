@@ -31,6 +31,7 @@ import { FinanceModuleLayout } from '@pages/finance/FinanceModuleLayout';
 import { FinanceExportyPage } from '@pages/home/BudgetPlanExportPanel';
 import { FinanceImportyPage } from '@pages/home/BudgetPlanImportPanel';
 import { TransactionsPage } from '@pages/TransactionsPage';
+import { TransactionsTransfersPage } from '@pages/TransactionsTransfersPage';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 export const router = createBrowserRouter([
@@ -57,6 +58,7 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <Navigate to="history" replace /> },
               { path: 'history', element: <TransactionsPage /> },
+              { path: 'prevody', element: <TransactionsTransfersPage /> },
             ],
           },
         ],

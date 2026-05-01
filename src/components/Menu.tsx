@@ -38,8 +38,8 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
   const isTrackerSection = pathname.startsWith('/trackers');
 
   const { data: trackersResponse } = useQuery({
-    queryKey: ['/api/expense-trackers/mine', { page: 0, size: 200, sort: 'name,asc' }],
-    queryFn: () => expenseTrackerFindAllMine({ page: 0, size: 200, sort: 'name,asc' }),
+    queryKey: ['/api/expense-trackers/mine', { page: 0, size: 200, sort: ['name,asc'] }],
+    queryFn: () => expenseTrackerFindAllMine({ page: 0, size: 200, sort: ['name,asc'] }),
     staleTime: 30_000,
   });
 
@@ -351,6 +351,13 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
               {({ isActive }) => (
                 <ListItemButton selected={isActive} onClick={onMobileClose} sx={{ pl: 3 }}>
                   <ListItemText primary="Historie" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink to="/transactions/prevody" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose} sx={{ pl: 3 }}>
+                  <ListItemText primary="Převody" />
                 </ListItemButton>
               )}
             </NavLink>

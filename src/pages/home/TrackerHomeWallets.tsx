@@ -49,7 +49,6 @@ import {
   Autocomplete,
   Box,
   Button,
-  ButtonBase,
   Card,
   CardContent,
   Chip,
@@ -90,8 +89,6 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { DragEvent, FC, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { TransactionsV2Panel } from './TransactionsV2Panel';
 import { BalanceCorrectionDialog, type BalanceCorrectionConfirmPayload } from './BalanceCorrectionDialog';
 import { TransferBetweenWalletsDialog, type TransferConfirmPayload } from './TransferBetweenWalletsDialog';
 import { assetSelectLabel, inferAssetMeta } from './holdingAdapter';
@@ -106,7 +103,6 @@ import {
 
 type Props = {
   trackerId: string;
-  trackerName: string;
 };
 
 type HoldingSummaryRow = HoldingSummaryResponseDto & {
@@ -230,19 +226,19 @@ function flattenOrderedInstitutionHoldings(
 
 function buildInstitutionCards(orderedInstitutions: InstitutionSummaryResponseDto[]): InstitutionCardModel[] {
   return orderedInstitutions
-    .map((inst) => {
+    .flatMap((inst): InstitutionCardModel[] => {
       const institutionId = inst.institutionId?.trim();
-      if (!institutionId) return null;
+      if (!institutionId) return [];
       const institutionName = inst.institutionName?.trim() || '—';
       const totalBalance = inst.totalBalance;
       const convertedTotalBalance = inst.convertedTotalBalance;
       const accounts = (inst.accounts ?? [])
-        .map((acc) => {
+        .flatMap((acc): InstitutionCardModel['accounts'] => {
           const accountName = acc.accountName?.trim() || '—';
           const accountTotalBalance = acc.totalBalance;
           const accountConvertedTotalBalance = acc.convertedTotalBalance;
           const holdings = (acc.holdings ?? [])
-            .map((h) => {
+            .flatMap((h): { summary: HoldingSummaryRow; wallet: WalletResponseDto }[] => {
               const summary: HoldingSummaryRow = {
                 ...h,
                 institutionId,
@@ -251,31 +247,32 @@ function buildInstitutionCards(orderedInstitutions: InstitutionSummaryResponseDt
                 accountName: h.accountName ?? acc.accountName,
               };
               const wallet = holdingSummaryToWallet(summary);
-              return wallet.id ? { summary, wallet } : null;
-            })
-            .filter((x): x is { summary: HoldingSummaryRow; wallet: WalletResponseDto } => Boolean(x));
+              return wallet.id ? [{ summary, wallet }] : [];
+            });
           return holdings.length
-            ? {
-                accountId: acc.accountId,
-                accountName,
-                totalBalance: accountTotalBalance,
-                convertedTotalBalance: accountConvertedTotalBalance,
-                holdings,
-              }
-            : null;
-        })
-        .filter((x): x is InstitutionCardModel['accounts'][number] => Boolean(x));
+            ? [
+                {
+                  accountId: acc.accountId,
+                  accountName,
+                  totalBalance: accountTotalBalance,
+                  convertedTotalBalance: accountConvertedTotalBalance,
+                  holdings,
+                },
+              ]
+            : [];
+        });
       return accounts.length
-        ? {
-            institutionId,
-            institutionName,
-            totalBalance,
-            convertedTotalBalance,
-            accounts,
-          }
-        : null;
-    })
-    .filter((x): x is InstitutionCardModel => Boolean(x));
+        ? [
+            {
+              institutionId,
+              institutionName,
+              totalBalance,
+              convertedTotalBalance,
+              accounts,
+            },
+          ]
+        : [];
+    });
 }
 
 /**
@@ -311,26 +308,10 @@ function nativeMinorToDisplayMinorApprox(
   return majorToMinorUnitsForScale(displayMajor, displayScale);
 }
 
-export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
+export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const ignoreClickUntilRef = useRef(0);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab');
-  const prevodyTab = tabParam === 'prevody';
-
-  const sectionNavBtnSx = (active: boolean) => ({
-    borderRadius: 1,
-    px: 0.5,
-    py: 0.25,
-    typography: 'h6' as const,
-    fontWeight: 600,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase' as const,
-    color: active ? 'primary.main' : 'text.secondary',
-    textDecoration: active ? 'underline' : 'none',
-    textUnderlineOffset: 6,
-  });
 
   const [createOpen, setCreateOpen] = useState(false);
   const [manageStructureOpen, setManageStructureOpen] = useState(false);
@@ -350,9 +331,13 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const [assetSubmitting, setAssetSubmitting] = useState(false);
   const [newAssetCode, setNewAssetCode] = useState('');
   const [newAssetName, setNewAssetName] = useState('');
-  const [newAssetType, setNewAssetType] = useState(CreateAssetRequestDtoAssetType.FIAT);
+  const [newAssetType, setNewAssetType] = useState<CreateAssetRequestDtoAssetType>(
+    CreateAssetRequestDtoAssetType.FIAT,
+  );
   const [newAssetScale, setNewAssetScale] = useState('2');
-  const [newMarketSource, setNewMarketSource] = useState(CreateAssetRequestDtoMarketDataSource.NONE);
+  const [newMarketSource, setNewMarketSource] = useState<CreateAssetRequestDtoMarketDataSource>(
+    CreateAssetRequestDtoMarketDataSource.NONE,
+  );
   const [newMarketKey, setNewMarketKey] = useState('');
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -1287,7 +1272,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                             >
                                               <Box component="span" sx={amountMaskSx}>
                                                 {formatAmount(
-                                                  sm.convertedEndBalance,
+                                                  sm.convertedEndBalance!,
                                                   displayAssetScale,
                                                   displayAssetCode,
                                                 )}
@@ -1483,7 +1468,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
                                             Δ {displayCode}:{' '}
                                             <Box component="span" sx={{ fontWeight: 600, ...amountMaskSx }}>
                                               {formatAmount(
-                                                convertedPeriodDiff,
+                                                convertedPeriodDiff!,
                                                 displayAssetScale,
                                                 displayAssetCode,
                                               )}
@@ -1537,24 +1522,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           })}
         </Box>
       )}
-
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{ mt: 4, mb: 1, alignItems: 'center', flexWrap: 'wrap' }}
-        component="nav"
-        aria-label="Přepnout sekci"
-      >
-        <ButtonBase
-          disableRipple
-          onClick={() => setSearchParams({ tab: 'prevody' })}
-          sx={sectionNavBtnSx(prevodyTab)}
-        >
-          Převody V2
-        </ButtonBase>
-      </Stack>
-
-      {prevodyTab && <TransactionsV2Panel trackerId={trackerId} />}
 
       <TransferBetweenWalletsDialog
         open={Boolean(transferPair)}
