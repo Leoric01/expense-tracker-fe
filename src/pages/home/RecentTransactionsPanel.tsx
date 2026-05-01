@@ -500,9 +500,14 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [editingTx, setEditingTx] = useState<TransactionRow | null>(null);
   const [editHoldingId, setEditHoldingId] = useState('');
+  const [editSourceHoldingId, setEditSourceHoldingId] = useState('');
+  const [editTargetHoldingId, setEditTargetHoldingId] = useState('');
   const [editAmount, setEditAmount] = useState('');
+  const [editSettledAmount, setEditSettledAmount] = useState('');
   const [editCurrencyCode, setEditCurrencyCode] = useState('');
   const [editAssetScale, setEditAssetScale] = useState<number | undefined>();
+  const [editSourceAssetScale, setEditSourceAssetScale] = useState<number | undefined>();
+  const [editTargetAssetScale, setEditTargetAssetScale] = useState<number | undefined>();
   const [editExchangeRate, setEditExchangeRate] = useState('');
   const [editFeeAmount, setEditFeeAmount] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
@@ -578,12 +583,22 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const openEditDialog = useCallback((row: TransactionRow) => {
     setEditingTx(row);
     setEditHoldingId(row.holdingId ?? '');
+    setEditSourceHoldingId(row.sourceHoldingId ?? '');
+    setEditTargetHoldingId(row.targetHoldingId ?? '');
+    const isTransfer = row.transactionType === TransactionPageItemResponseDtoTransactionType.TRANSFER;
+    const srcScale = isTransfer ? (row.sourceHoldingAssetScale ?? row.assetScale ?? DEFAULT_FIAT_SCALE) : (row.assetScale ?? DEFAULT_FIAT_SCALE);
+    const tgtScale = isTransfer ? (row.targetHoldingAssetScale ?? row.assetScale ?? DEFAULT_FIAT_SCALE) : (row.assetScale ?? DEFAULT_FIAT_SCALE);
     const amountMajor = minorUnitsToMajorForScale(row.amount, row.assetScale ?? DEFAULT_FIAT_SCALE);
     setEditAmount(amountMajor == null || !Number.isFinite(amountMajor) ? '' : String(amountMajor));
+    const settledMajor = minorUnitsToMajorForScale(row.settledAmount, tgtScale);
+    setEditSettledAmount(settledMajor != null && Number.isFinite(settledMajor) ? String(settledMajor) : '');
+    const feeMajor = minorUnitsToMajorForScale(row.feeAmount, srcScale);
+    setEditFeeAmount(feeMajor != null && Number.isFinite(feeMajor) ? String(feeMajor) : '');
     setEditCurrencyCode(row.assetCode ?? '');
     setEditAssetScale(row.assetScale);
+    setEditSourceAssetScale(srcScale);
+    setEditTargetAssetScale(tgtScale);
     setEditExchangeRate(row.exchangeRate != null ? String(row.exchangeRate) : '');
-    setEditFeeAmount(row.feeAmount != null ? String(row.feeAmount) : '');
     setEditCategoryId(row.categoryId ?? '');
     setEditDateCs(formatDateTimeDdMmYyyyHhMm(row.transactionDate));
     setEditDescription(row.description ?? '');
@@ -618,14 +633,18 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
 
     let amount: number | undefined;
     let amountMinor: number | undefined;
+    let feeAmountMinor: number | undefined;
+    let settledAmountMinor: number | undefined;
     let exchangeRate: number | undefined;
-    let feeAmount: number | undefined;
     try {
       amount = parseAmount(editAmount);
       amountMinor =
         amount != null ? majorToMinorUnitsForScale(amount, editAssetScale ?? DEFAULT_FIAT_SCALE) : undefined;
+      const feeMajor = parseOptionalNumber(editFeeAmount, 'Fee');
+      feeAmountMinor = feeMajor != null ? majorToMinorUnitsForScale(feeMajor, editSourceAssetScale ?? editAssetScale ?? DEFAULT_FIAT_SCALE) : undefined;
+      const settledMajor = parseOptionalNumber(editSettledAmount, 'Vypořádaná částka');
+      settledAmountMinor = settledMajor != null ? majorToMinorUnitsForScale(settledMajor, editTargetAssetScale ?? editAssetScale ?? DEFAULT_FIAT_SCALE) : undefined;
       exchangeRate = parseOptionalNumber(editExchangeRate, 'Kurz');
-      feeAmount = parseOptionalNumber(editFeeAmount, 'Fee');
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Neplatná číselná hodnota.');
       return;
@@ -640,10 +659,13 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     try {
       const payload: UpdateTransactionRequestDto = {
         ...(editHoldingId ? { holdingId: editHoldingId } : {}),
+        ...(editSourceHoldingId ? { sourceHoldingId: editSourceHoldingId } : {}),
+        ...(editTargetHoldingId ? { targetHoldingId: editTargetHoldingId } : {}),
         ...(amountMinor != null ? { amount: amountMinor } : {}),
+        ...(settledAmountMinor != null ? { settledAmount: settledAmountMinor } : {}),
         ...(editCurrencyCode.trim() ? { currencyCode: editCurrencyCode.trim().toUpperCase() } : {}),
         ...(exchangeRate != null ? { exchangeRate } : {}),
-        ...(feeAmount != null ? { feeAmount } : {}),
+        ...(feeAmountMinor != null ? { feeAmount: feeAmountMinor } : {}),
         ...(editCategoryId ? { categoryId: editCategoryId } : {}),
         transactionDate,
         description: editDescription.trim(),
@@ -666,6 +688,8 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   }, [
     editAmount,
     editAssetScale,
+    editSourceAssetScale,
+    editTargetAssetScale,
     editCategoryId,
     editCurrencyCode,
     editDateCs,
@@ -674,6 +698,9 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     editExternalRef,
     editFeeAmount,
     editHoldingId,
+    editSourceHoldingId,
+    editTargetHoldingId,
+    editSettledAmount,
     editNote,
     editingTx?.id,
     enqueueSnackbar,
@@ -1325,55 +1352,114 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
         }
       />
       <Dialog open={Boolean(editingTx)} onClose={closeEditDialog} fullWidth maxWidth="sm">
-        <DialogTitle>Upravit transakci</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <Autocomplete
-              size="small"
-              options={holdingSelectOptions}
-              getOptionLabel={(o) => o.label}
-              value={holdingSelectOptions.find((o) => o.id === editHoldingId) ?? null}
-              onChange={(_, v) => {
-                setEditHoldingId(v?.id ?? '');
-                setEditAssetScale(v?.assetScale);
-                if (v?.assetCode) setEditCurrencyCode(v.assetCode);
-              }}
-              isOptionEqualToValue={(a, b) => a.id === b.id}
-              filterOptions={filterOptionsByQuery}
-              noOptionsText="Žádná shoda"
-              renderInput={(params) => <TextField {...params} label="Pozice" />}
-            />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <DialogTitle sx={{ pb: 1 }}>Upravit transakci</DialogTitle>
+        <DialogContent sx={{ pt: '8px !important' }}>
+          <Stack spacing={1}>
+            {editingTx?.transactionType === TransactionPageItemResponseDtoTransactionType.TRANSFER ? (
+              <Stack direction="row" spacing={1}>
+                <Autocomplete
+                  size="small"
+                  fullWidth
+                  options={holdingSelectOptions}
+                  getOptionLabel={(o) => o.label}
+                  value={holdingSelectOptions.find((o) => o.id === editSourceHoldingId) ?? null}
+                  onChange={(_, v) => {
+                    setEditSourceHoldingId(v?.id ?? '');
+                    setEditAssetScale(v?.assetScale);
+                    setEditSourceAssetScale(v?.assetScale);
+                    if (v?.assetCode) setEditCurrencyCode(v.assetCode);
+                  }}
+                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                  filterOptions={filterOptionsByQuery}
+                  noOptionsText="Žádná shoda"
+                  renderInput={(params) => <TextField {...params} label="Zdrojová pozice" />}
+                />
+                <Autocomplete
+                  size="small"
+                  fullWidth
+                  options={holdingSelectOptions}
+                  getOptionLabel={(o) => o.label}
+                  value={holdingSelectOptions.find((o) => o.id === editTargetHoldingId) ?? null}
+                  onChange={(_, v) => {
+                    setEditTargetHoldingId(v?.id ?? '');
+                    setEditTargetAssetScale(v?.assetScale);
+                  }}
+                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                  filterOptions={filterOptionsByQuery}
+                  noOptionsText="Žádná shoda"
+                  renderInput={(params) => <TextField {...params} label="Cílová pozice" />}
+                />
+              </Stack>
+            ) : (
+              <Autocomplete
+                size="small"
+                options={holdingSelectOptions}
+                getOptionLabel={(o) => o.label}
+                value={holdingSelectOptions.find((o) => o.id === editHoldingId) ?? null}
+                onChange={(_, v) => {
+                  setEditHoldingId(v?.id ?? '');
+                  setEditAssetScale(v?.assetScale);
+                  if (v?.assetCode) setEditCurrencyCode(v.assetCode);
+                }}
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                filterOptions={filterOptionsByQuery}
+                noOptionsText="Žádná shoda"
+                renderInput={(params) => <TextField {...params} label="Pozice" />}
+              />
+            )}
+            <Stack direction="row" spacing={1}>
               <AmountTextFieldCs
+                size="small"
                 label="Částka"
                 canonical={editAmount}
                 setCanonical={setEditAmount}
                 fullWidth
                 error={Boolean(editError)}
-                helperText="Částka v hlavních jednotkách vybrané měny"
+                helperText=""
+              />
+              <AmountTextFieldCs
+                size="small"
+                label="Vypořádaná č."
+                canonical={editSettledAmount}
+                setCanonical={setEditSettledAmount}
+                fullWidth
+                helperText=""
               />
               <TextField
+                size="small"
                 label="Měna"
                 value={editCurrencyCode}
                 onChange={(e) => setEditCurrencyCode(e.target.value)}
-                fullWidth
+                sx={{ maxWidth: 90 }}
                 inputProps={{ maxLength: 16, style: { textTransform: 'uppercase' } }}
               />
             </Stack>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Stack direction="row" spacing={1}>
               <TextField
+                size="small"
                 label="Kurz"
                 value={editExchangeRate}
                 onChange={(e) => setEditExchangeRate(e.target.value)}
                 fullWidth
                 inputMode="decimal"
               />
-              <TextField
+              <AmountTextFieldCs
+                size="small"
                 label="Fee"
-                value={editFeeAmount}
-                onChange={(e) => setEditFeeAmount(e.target.value)}
+                canonical={editFeeAmount}
+                setCanonical={setEditFeeAmount}
                 fullWidth
-                inputMode="decimal"
+                helperText=""
+              />
+              <TextField
+                size="small"
+                label="Datum"
+                value={editDateCs}
+                onChange={(e) => setEditDateCs(e.target.value)}
+                fullWidth
+                error={Boolean(editError)}
+                helperText={editError ?? undefined}
+                placeholder="dd.MM.yyyy HH:mm"
               />
             </Stack>
             <Autocomplete
@@ -1393,40 +1479,37 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
               renderInput={(params) => <TextField {...params} label="Kategorie" />}
             />
             <TextField
-              label="Datum transakce"
-              value={editDateCs}
-              onChange={(e) => setEditDateCs(e.target.value)}
-              fullWidth
-              error={Boolean(editError)}
-              helperText={editError ?? 'Formát dd.MM.yyyy HH:mm'}
-            />
-            <TextField
+              size="small"
               label="Popis"
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value)}
               fullWidth
             />
-            <TextField
-              label="Poznámka"
-              value={editNote}
-              onChange={(e) => setEditNote(e.target.value)}
-              fullWidth
-              multiline
-              minRows={2}
-            />
-            <TextField
-              label="Externí reference"
-              value={editExternalRef}
-              onChange={(e) => setEditExternalRef(e.target.value)}
-              fullWidth
-            />
+            <Stack direction="row" spacing={1}>
+              <TextField
+                size="small"
+                label="Poznámka"
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                fullWidth
+                multiline
+                minRows={2}
+              />
+              <TextField
+                size="small"
+                label="Externí reference"
+                value={editExternalRef}
+                onChange={(e) => setEditExternalRef(e.target.value)}
+                fullWidth
+              />
+            </Stack>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={closeEditDialog} disabled={actionPending}>
+        <DialogActions sx={{ pt: 0 }}>
+          <Button size="small" onClick={closeEditDialog} disabled={actionPending}>
             Zrušit
           </Button>
-          <Button variant="contained" onClick={() => void handleEditSubmit()} disabled={actionPending}>
+          <Button size="small" variant="contained" onClick={() => void handleEditSubmit()} disabled={actionPending}>
             Uložit
           </Button>
         </DialogActions>

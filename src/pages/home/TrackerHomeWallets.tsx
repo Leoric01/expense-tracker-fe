@@ -441,7 +441,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     staleTime: 60_000,
   });
 
-  const { data: trackerDetail } = useQuery({
+  useQuery({
     queryKey: getExpenseTrackerFindByIdQueryKey(trackerId),
     queryFn: async () => {
       const res = await expenseTrackerFindById(trackerId);
@@ -452,9 +452,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     staleTime: 30_000,
   });
 
-  useEffect(() => {
-    setSelectedDisplayAssetId(trackerDetail?.preferredDisplayAssetId ?? '');
-  }, [trackerDetail?.preferredDisplayAssetId]);
 
   const displayCurrencyOptions = useMemo(() => {
     const rows = displayAssetsPaged?.content ?? [];
@@ -533,18 +530,22 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const displayAssetScale = dashboard?.displayAssetScale ?? DEFAULT_FIAT_SCALE;
   const hasDisplayCurrency =
     !suppressConvertedUiUntilClear &&
+    Boolean(selectedDisplayAssetId) &&
     Boolean(displayAssetCode && dashboard?.displayAssetScale != null);
 
   useEffect(() => {
+    setSelectedDisplayAssetId('');
+    setSuppressConvertedUiUntilClear(false);
+  }, [trackerId]);
+
+  useEffect(() => {
     if (!suppressConvertedUiUntilClear) return;
-    const trackerCleared = !trackerDetail?.preferredDisplayAssetId;
     const dashboardCleared = !(dashboard?.displayAssetCode ?? '').trim();
-    if (trackerCleared && dashboardCleared) {
+    if (dashboardCleared) {
       setSuppressConvertedUiUntilClear(false);
     }
   }, [
     suppressConvertedUiUntilClear,
-    trackerDetail?.preferredDisplayAssetId,
     dashboard?.displayAssetCode,
   ]);
 
@@ -1018,6 +1019,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
 
   const handleDisplayCurrencyChange = async (nextAssetId: string) => {
     if (!trackerId || nextAssetId === selectedDisplayAssetId) return;
+    const previousDisplayAssetId = selectedDisplayAssetId;
     if (nextAssetId === '') {
       setSuppressConvertedUiUntilClear(true);
     } else {
@@ -1031,11 +1033,18 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       } as Parameters<typeof expenseTrackerUpdate>[1]);
       if (res.status < 200 || res.status >= 300) {
         enqueueSnackbar(apiErrorMessage(res.data, 'Display měnu se nepodařilo uložit'), { variant: 'error' });
-        setSelectedDisplayAssetId(trackerDetail?.preferredDisplayAssetId ?? '');
+        setSelectedDisplayAssetId(previousDisplayAssetId);
         setSuppressConvertedUiUntilClear(false);
         return;
       }
       enqueueSnackbar('Display měna byla uložena', { variant: 'success' });
+      if (!nextAssetId) {
+        queryClient.setQueryData(
+          getExpenseTrackerFindByIdQueryKey(trackerId),
+          (prev: ExpenseTrackerResponseDto | undefined) =>
+            prev ? { ...prev, preferredDisplayAssetId: undefined, preferredDisplayAssetCode: undefined } : prev,
+        );
+      }
       await queryClient.refetchQueries({ queryKey: getExpenseTrackerFindByIdQueryKey(trackerId) });
       await queryClient.refetchQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
       if (mainTab === 1) {
@@ -1047,7 +1056,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       await queryClient.invalidateQueries({ queryKey: ['/api/expense-trackers/mine'] });
     } catch {
       enqueueSnackbar('Display měnu se nepodařilo uložit', { variant: 'error' });
-      setSelectedDisplayAssetId(trackerDetail?.preferredDisplayAssetId ?? '');
+      setSelectedDisplayAssetId(previousDisplayAssetId);
       setSuppressConvertedUiUntilClear(false);
     } finally {
       setDisplayCurrencySubmitting(false);
