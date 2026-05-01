@@ -311,24 +311,15 @@ function TransactionDetailBlock({
   onCancel: () => void;
   onUploadAttachment: (file: File) => void;
 }) {
-  const kv = (label: string, value: ReactNode) => (
-    <Stack
-      direction={{ xs: 'column', sm: 'row' }}
-      spacing={{ xs: 0, sm: 1 }}
-      sx={{ py: 0.35, alignItems: { sm: 'baseline' } }}
-    >
-      <Typography
-        component="span"
-        variant="body2"
-        color="text.secondary"
-        sx={{ minWidth: { sm: 180 }, flexShrink: 0 }}
-      >
+  const kv = (label: string, value: ReactNode, span: 'full' | 'half' = 'half') => (
+    <Box sx={{ gridColumn: span === 'full' ? '1 / -1' : undefined }}>
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ lineHeight: 1.2 }}>
         {label}
       </Typography>
-      <Typography component="span" variant="body2" sx={{ wordBreak: 'break-word' }}>
+      <Typography variant="body2" sx={{ wordBreak: 'break-word', fontWeight: value === '—' ? 400 : 500, lineHeight: 1.4 }}>
         {value}
       </Typography>
-    </Stack>
+    </Box>
   );
 
   const t = row.transactionType as string | undefined;
@@ -365,69 +356,107 @@ function TransactionDetailBlock({
             />
           </Button>
         </Stack>
-        <Stack spacing={0}>
-        {kv('ID', dash(row.id))}
-        {kv('Stav', statusLabel(row.status))}
-        {kv('Typ', txTypeLabel(t))}
-        {kv('Datum transakce', formatDateTimeDdMmYyyyHhMm(row.transactionDate))}
-        {kv('Částka', formatAssetAmount(row.amount, row.assetCode, row.assetScale))}
-        {convertedAmountText ? kv('Přepočteno', convertedAmountText) : null}
-        {row.balanceAdjustmentDirection
-          ? kv('Směr korekce', balanceDirectionLabel(row.balanceAdjustmentDirection))
-          : null}
-        {t === TransactionPageItemResponseDtoTransactionType.TRANSFER ? (
-          <>
-            {kv('Pozice zdroj', dash(row.sourceHoldingName || row.sourceHoldingId))}
-            {kv('ID zdrojové pozice', dash(row.sourceHoldingId))}
-            {kv('Pozice cíl', dash(row.targetHoldingName || row.targetHoldingId))}
-            {kv('ID cílové pozice', dash(row.targetHoldingId))}
-          </>
-        ) : (
-          <>
-            {kv('Pozice', dash(row.holdingName || row.holdingId))}
-            {kv('ID pozice', dash(row.holdingId))}
-          </>
-        )}
-        {kv('Hlavní kategorie', dash(row.rootCategoryName || row.rootCategoryId))}
-        {kv('ID hlavní kategorie', dash(row.rootCategoryId))}
-        {kv('Kategorie', dash(row.categoryName || row.categoryId))}
-        {kv('ID kategorie', dash(row.categoryId))}
-        {kv('Popis', dash(row.description))}
-        {kv('Poznámka', dash(row.note))}
-        {kv('Externí reference', dash(row.externalRef))}
-        {kv(
-          'Vytvořeno',
-          row.createdDate?.trim() ? formatDateTimeDdMmYyyyHhMm(row.createdDate) : '—',
-        )}
-        {kv(
-          'Naposledy upraveno',
-          row.lastModifiedDate?.trim() ? formatDateTimeDdMmYyyyHhMm(row.lastModifiedDate) : '—',
-        )}
-        {attachments.length > 0
-          ? kv(
-              'Přílohy',
-              <Stack component="span" spacing={0.5} sx={{ display: 'inline-flex', flexDirection: 'column' }}>
-                {attachments.map((a, i) => (
-                  <span key={a.id ?? `${a.fileName}-${i}`}>
-                    {a.fileUrl ? (
-                      <Link href={a.fileUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                        {dash(a.fileName) !== '—' ? a.fileName : a.fileUrl}
-                      </Link>
-                    ) : (
-                      dash(a.fileName)
-                    )}
-                    {a.contentType ? (
-                      <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
-                        ({a.contentType}
-                        {a.fileSize != null ? `, ${a.fileSize} B` : ''})
-                      </Typography>
-                    ) : null}
-                  </span>
-                ))}
-              </Stack>,
-            )
-          : kv('Přílohy', '—')}
-        </Stack>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr 1fr', md: '1fr 1fr 1fr' },
+            columnGap: 2,
+            rowGap: 0.75,
+          }}
+        >
+          {kv('ID', dash(row.id))}
+          {kv('Stav', statusLabel(row.status))}
+          {kv('Typ', txTypeLabel(t))}
+          {kv('Datum transakce', formatDateTimeDdMmYyyyHhMm(row.transactionDate))}
+          {kv('Částka', formatAssetAmount(row.amount, row.assetCode, row.assetScale))}
+          {kv(
+            'Vypořádaná částka',
+            row.settledAmount != null
+              ? formatAssetAmount(
+                  row.settledAmount,
+                  t === TransactionPageItemResponseDtoTransactionType.TRANSFER
+                    ? (row.targetHoldingAssetCode ?? row.assetCode)
+                    : row.assetCode,
+                  t === TransactionPageItemResponseDtoTransactionType.TRANSFER
+                    ? (row.targetHoldingAssetScale ?? row.assetScale)
+                    : row.assetScale,
+                )
+              : '—',
+          )}
+          {kv(
+            'Poplatek',
+            row.feeAmount != null
+              ? formatAssetAmount(
+                  row.feeAmount,
+                  t === TransactionPageItemResponseDtoTransactionType.TRANSFER
+                    ? (row.sourceHoldingAssetCode ?? row.assetCode)
+                    : row.assetCode,
+                  t === TransactionPageItemResponseDtoTransactionType.TRANSFER
+                    ? (row.sourceHoldingAssetScale ?? row.assetScale)
+                    : row.assetScale,
+                )
+              : '—',
+          )}
+          {kv('Kurz', row.exchangeRate != null ? String(row.exchangeRate) : '—')}
+          {convertedAmountText ? kv('Přepočteno', convertedAmountText) : null}
+          {row.balanceAdjustmentDirection
+            ? kv('Směr korekce', balanceDirectionLabel(row.balanceAdjustmentDirection))
+            : null}
+
+          {t === TransactionPageItemResponseDtoTransactionType.TRANSFER ? (
+            <>
+              {kv('Pozice zdroj', dash([row.sourceHoldingName || row.sourceHoldingId, row.sourceHoldingAssetCode].filter(Boolean).join(' ')))}
+              {kv('ID zdrojové pozice', dash(row.sourceHoldingId))}
+              {kv('Pozice cíl', dash([row.targetHoldingName || row.targetHoldingId, row.targetHoldingAssetCode].filter(Boolean).join(' ')))}
+              {kv('ID cílové pozice', dash(row.targetHoldingId))}
+            </>
+          ) : (
+            <>
+              {kv('Pozice', dash(row.holdingName || row.holdingId))}
+              {kv('ID pozice', dash(row.holdingId))}
+            </>
+          )}
+
+          {kv('Hlavní kategorie', dash(row.rootCategoryName || row.rootCategoryId))}
+          {kv('ID hlavní kategorie', dash(row.rootCategoryId))}
+          {kv('Kategorie', dash(row.categoryName || row.categoryId))}
+          {kv('ID kategorie', dash(row.categoryId))}
+
+          {kv('Popis', dash(row.description), 'full')}
+          {kv('Poznámka', dash(row.note), 'full')}
+          {kv('Externí reference', dash(row.externalRef), 'full')}
+
+          {kv('Vytvořeno', row.createdDate?.trim() ? formatDateTimeDdMmYyyyHhMm(row.createdDate) : '—')}
+          {kv('Naposledy upraveno', row.lastModifiedDate?.trim() ? formatDateTimeDdMmYyyyHhMm(row.lastModifiedDate) : '—')}
+
+          {kv(
+            'Přílohy',
+            attachments.length > 0
+              ? (
+                <Stack component="span" spacing={0.5} sx={{ display: 'inline-flex', flexDirection: 'column' }}>
+                  {attachments.map((a, i) => (
+                    <span key={a.id ?? `${a.fileName}-${i}`}>
+                      {a.fileUrl ? (
+                        <Link href={a.fileUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                          {dash(a.fileName) !== '—' ? a.fileName : a.fileUrl}
+                        </Link>
+                      ) : (
+                        dash(a.fileName)
+                      )}
+                      {a.contentType ? (
+                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                          ({a.contentType}
+                          {a.fileSize != null ? `, ${a.fileSize} B` : ''})
+                        </Typography>
+                      ) : null}
+                    </span>
+                  ))}
+                </Stack>
+              )
+              : '—',
+            'full',
+          )}
+        </Box>
       </Stack>
     </Box>
   );

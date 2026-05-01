@@ -18,8 +18,12 @@ export interface TransactionResponseDto {
   holdingName?: string;
   sourceHoldingId?: string;
   sourceHoldingName?: string;
+  sourceHoldingAssetCode?: string;
+  sourceHoldingAssetScale?: number;
   targetHoldingId?: string;
   targetHoldingName?: string;
+  targetHoldingAssetCode?: string;
+  targetHoldingAssetScale?: number;
   categoryId?: string;
   categoryName?: string;
   rootCategoryId?: string;
