@@ -27,6 +27,7 @@ import { HabitsModuleLayout } from '@pages/habits/HabitsModuleLayout';
 import { HabitWeekOverviewPage } from '@pages/habits/HabitWeekOverviewPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
+import { FinanceModuleLayout } from '@pages/finance/FinanceModuleLayout';
 import { TransactionsPage } from '@pages/TransactionsPage';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
@@ -41,9 +42,21 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/moduly" replace /> },
       { path: 'moduly', element: <ModuleHubPage /> },
-      { path: 'prehled', element: <Home /> },
       { path: 'trackers', element: <ExpenseTrackers /> },
-      { path: 'categories', element: <CategoriesPage /> },
+      {
+        element: <FinanceModuleLayout />,
+        children: [
+          { path: 'prehled', element: <Home /> },
+          { path: 'categories', element: <CategoriesPage /> },
+          {
+            path: 'transactions',
+            children: [
+              { index: true, element: <Navigate to="history" replace /> },
+              { path: 'history', element: <TransactionsPage /> },
+            ],
+          },
+        ],
+      },
       { path: 'nutrition/setup', element: <NutritionSetupPage /> },
       { path: 'nutrition/goal-plan/new', element: <NutritionGoalPlanCreatePage /> },
       { path: 'nutrition/goal-plan/:goalPlanId', element: <NutritionGoalPlanSummaryPage /> },
@@ -69,8 +82,6 @@ export const router = createBrowserRouter([
       { path: 'importy', element: <Navigate to="/prehled?tab=importy" replace /> },
       { path: 'exporty', element: <Navigate to="/prehled?tab=exporty" replace /> },
       { path: 'wallets', element: <Navigate to="/prehled" replace /> },
-      { path: 'transactions', element: <Navigate to="/transactions/history" replace /> },
-      { path: 'transactions/history', element: <TransactionsPage /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */
       { path: 'settings', element: <Profile /> },
       { path: 'profile', element: <Navigate to="/settings" replace /> },

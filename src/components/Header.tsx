@@ -15,6 +15,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { isFinanceModulePath } from '@utils/financeModulePaths';
 import { FC, MouseEvent, useMemo, useState } from 'react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 
@@ -30,7 +31,7 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
   const location = useLocation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
-  const showFinanceSummary = location.pathname.startsWith('/prehled');
+  const showFinanceSummary = isFinanceModulePath(location.pathname);
 
   const initials = useMemo(() => {
     const name = userData?.fullName?.trim();
