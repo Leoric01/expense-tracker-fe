@@ -294,7 +294,6 @@ export const expenseTrackerFindById = async (
   options?: RequestInit,
 ): Promise<expenseTrackerFindByIdResponse> => {
   const res = await fetch(getExpenseTrackerFindByIdUrl(id), {
-    cache: 'no-store',
     ...options,
     method: 'GET',
   });
@@ -528,7 +527,6 @@ export const expenseTrackerUpdate = async (
   options?: RequestInit,
 ): Promise<expenseTrackerUpdateResponse> => {
   const res = await fetch(getExpenseTrackerUpdateUrl(id), {
-    cache: 'no-store',
     ...options,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },

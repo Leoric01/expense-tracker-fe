@@ -4,6 +4,7 @@ import {
 } from '@api/transaction-v-2-controller/transaction-v-2-controller';
 import type {
   CreateAssetExchangeV2RequestDto,
+  CreateAssetExchangeV2ResponseDto,
   CreateWalletTransferV2RequestDto,
   CreateWalletTransferV2ResponseDto,
   HoldingResponseDto,
@@ -56,7 +57,6 @@ const EMPTY_FORM = {
   amount: '',
   settledAmount: '',
   feeAmount: '',
-  currencyCode: '',
   exchangeRate: '',
   transactionDate: '',
   description: '',
@@ -65,6 +65,7 @@ const EMPTY_FORM = {
 };
 
 type FormState = typeof EMPTY_FORM;
+type TransactionV2Result = CreateWalletTransferV2ResponseDto | CreateAssetExchangeV2ResponseDto;
 
 function parseOptionalNumber(s: string): number | undefined {
   const t = s.trim().replace(',', '.');
@@ -87,7 +88,7 @@ export const TransactionsV2Panel: FC<Props> = ({ trackerId }) => {
     ...EMPTY_FORM,
     transactionDate: defaultDatetimeLocal(),
   }));
-  const [lastResult, setLastResult] = useState<CreateWalletTransferV2ResponseDto | null>(null);
+  const [lastResult, setLastResult] = useState<TransactionV2Result | null>(null);
 
   const { data: holdingsRes } = useQuery({
     queryKey: ['holdingFindAll', trackerId, 'v2-panel'] as const,
@@ -121,7 +122,7 @@ export const TransactionsV2Panel: FC<Props> = ({ trackerId }) => {
     mutation: {
       onSuccess: (res) => {
         queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
-        const dto = res.data as unknown as CreateWalletTransferV2ResponseDto;
+        const dto = res.data as unknown as CreateAssetExchangeV2ResponseDto;
         setLastResult(dto);
         enqueueSnackbar('Výměna aktiv byla vytvořena', { variant: 'success' });
         setForm({ ...EMPTY_FORM, transactionDate: defaultDatetimeLocal() });
@@ -203,7 +204,6 @@ export const TransactionsV2Panel: FC<Props> = ({ trackerId }) => {
       const payload: CreateAssetExchangeV2RequestDto = {
         ...commonFields,
         ...(feeAmountVal != null ? { feeAmount: majorToMinorUnitsForScale(feeAmountVal, sourceScale) } : {}),
-        ...(form.currencyCode.trim() ? { currencyCode: form.currencyCode.trim() } : {}),
         ...(parseOptionalNumber(form.exchangeRate) != null ? { exchangeRate: parseOptionalNumber(form.exchangeRate) } : {}),
       };
       assetExchangeMutation.mutate({ trackerId, data: payload });
@@ -325,24 +325,15 @@ export const TransactionsV2Panel: FC<Props> = ({ trackerId }) => {
                     placeholder="volitelné"
                   />
                   <TextField
-                    label="Kód měny"
-                    value={form.currencyCode}
-                    onChange={set('currencyCode')}
+                    label="Kurz"
+                    value={form.exchangeRate}
+                    onChange={set('exchangeRate')}
+                    inputMode="decimal"
                     fullWidth
                     disabled={saving}
-                    placeholder="např. CZK"
-                    inputProps={{ maxLength: 10 }}
+                    placeholder="volitelné"
                   />
                 </Stack>
-                <TextField
-                  label="Kurz"
-                  value={form.exchangeRate}
-                  onChange={set('exchangeRate')}
-                  inputMode="decimal"
-                  disabled={saving}
-                  placeholder="volitelné"
-                  sx={{ maxWidth: { sm: '50%' } }}
-                />
               </Stack>
             )}
 

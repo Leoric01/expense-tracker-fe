@@ -526,6 +526,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const [transactionType, setTransactionType] = useState<TypeFilterValue>('');
   const [dateFilterCleared, setDateFilterCleared] = useState(false);
   const [txSort, setTxSort] = useState<TxSortState>({ field: 'date', direction: 'desc' });
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   useEffect(() => {
     setDateFilterCleared(false);
@@ -914,6 +915,8 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   };
 
   const convertedNetAmount = totals?.converted?.netAmount;
+  const expenseTotalsByAsset = formatTotalsByAsset('expenseAmount');
+  const incomeTotalsByAsset = formatTotalsByAsset('incomeAmount');
   const netTotalsByAsset = (totals?.byAsset ?? [])
     .filter((row) => row.netAmount != null)
     .map((row) => {
@@ -924,6 +927,77 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
         text: formatAssetAmount(row.netAmount, code, row.assetScale),
       };
     });
+  const convertedExpenseTotal = formatConvertedTotal('expenseAmount');
+  const convertedIncomeTotal = formatConvertedTotal('incomeAmount');
+  const convertedNetTotal = formatConvertedTotal('netAmount');
+
+  const renderSummaryLine = (
+    text: string,
+    color: string,
+    key = text,
+    variant: 'main' | 'converted' = 'main',
+  ) => (
+    <Box
+      component="span"
+      key={key}
+      sx={{
+        display: 'block',
+        color,
+        fontWeight: variant === 'converted' ? 700 : 500,
+        fontSize: variant === 'converted' ? '1.1rem' : '0.9rem',
+        lineHeight: 1.25,
+        fontVariantNumeric: 'tabular-nums',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {text}
+    </Box>
+  );
+
+  const renderSummaryDivider = (key: string) => (
+    <Box
+      component="hr"
+      key={key}
+      sx={{
+        width: '100%',
+        m: 0,
+        border: 0,
+        borderTop: '1px solid',
+        borderColor: 'divider',
+      }}
+    />
+  );
+
+  const renderSummaryColumn = (
+    label: string,
+    labelColor: string,
+    children: ReactNode,
+  ) => (
+    <Box
+      sx={{
+        minWidth: 0,
+        width: { xs: '100%', md: 'max-content' },
+        maxWidth: 260,
+        pl: 1.25,
+        pr: 1.5,
+        py: 1.75,
+        borderRadius: 2.25,
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+      }}
+    >
+      <Typography
+        variant="subtitle1"
+        sx={{ color: labelColor, fontWeight: 700, fontSize: '1.15rem', mb: 1.25, textAlign: 'right' }}
+      >
+        {label}
+      </Typography>
+      <Stack spacing={0.9} sx={{ alignItems: 'flex-end', textAlign: 'right' }}>
+        {children}
+      </Stack>
+    </Box>
+  );
 
   const sortDirectionFor = (field: SortField): SortDirection => {
     return txSort?.field === field ? txSort.direction : 'asc';
@@ -936,7 +1010,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
-            sm: 'auto auto minmax(0, 1fr)',
+            sm: 'auto auto minmax(0, 1fr) auto',
           },
           alignItems: 'baseline',
           columnGap: 2,
@@ -954,149 +1028,35 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
           Historie transakcí
         </Typography>
 
-        <Typography
-          variant="body2"
-          component="span"
-          sx={{ gridColumn: { xs: '1', sm: '2' }, whiteSpace: 'nowrap' }}
-        >
-          <Box component="span" sx={{ color: 'text.secondary' }}>
-            Počet záznamů:
-          </Box>{' '}
-          <Box
-            component="span"
-            sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}
-          >
-            {totalElements.toLocaleString('cs-CZ')}
-          </Box>
-        </Typography>
-
-        <Box
-          sx={{
-            gridColumn: { xs: '1', sm: '3' },
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'baseline',
-            justifyContent: 'flex-end',
-            gap: { xs: 1.5, sm: 2, md: 3 },
-            minWidth: 0,
-          }}
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          flexWrap="wrap"
+          useFlexGap
+          sx={{ gridColumn: { xs: '1', sm: '2' } }}
         >
           <Typography variant="body2" component="span" sx={{ whiteSpace: 'nowrap' }}>
             <Box component="span" sx={{ color: 'text.secondary' }}>
-              Celkové výdaje:
+              Počet záznamů:
             </Box>{' '}
             <Box
               component="span"
-              sx={{
-                fontWeight: 600,
-                fontVariantNumeric: 'tabular-nums',
-                color: theme.palette.error.main,
-              }}
+              sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}
             >
-              <Stack component="span" spacing={0.25}>
-                {formatTotalsByAsset('expenseAmount').length > 0 ? (
-                  formatTotalsByAsset('expenseAmount').map((part) => (
-                    <Box component="span" key={part}>
-                      {part}
-                    </Box>
-                  ))
-                ) : (
-                  <Box component="span">—</Box>
-                )}
-                {formatConvertedTotal('expenseAmount') ? (
-                  <Typography component="span" variant="caption" color="text.secondary">
-                    {formatConvertedTotal('expenseAmount')}
-                  </Typography>
-                ) : null}
-              </Stack>
+              {totalElements.toLocaleString('cs-CZ')}
             </Box>
           </Typography>
-          <Typography variant="body2" component="span" sx={{ whiteSpace: 'nowrap' }}>
-            <Box component="span" sx={{ color: 'text.secondary' }}>
-              Celkové příjmy:
-            </Box>{' '}
-            <Box
-              component="span"
-              sx={{
-                fontWeight: 600,
-                fontVariantNumeric: 'tabular-nums',
-                color: theme.palette.success.main,
-              }}
-            >
-              <Stack component="span" spacing={0.25}>
-                {formatTotalsByAsset('incomeAmount').length > 0 ? (
-                  formatTotalsByAsset('incomeAmount').map((part) => (
-                    <Box component="span" key={part}>
-                      {part}
-                    </Box>
-                  ))
-                ) : (
-                  <Box component="span">—</Box>
-                )}
-                {formatConvertedTotal('incomeAmount') ? (
-                  <Typography component="span" variant="caption" color="text.secondary">
-                    {formatConvertedTotal('incomeAmount')}
-                  </Typography>
-                ) : null}
-              </Stack>
-            </Box>
-          </Typography>
-          <Typography variant="body2" component="span" sx={{ whiteSpace: 'nowrap' }}>
-            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-              Výsledná bilance:
-            </Box>{' '}
-            <Box
-              component="span"
-              sx={{
-                fontWeight: 600,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              <Stack component="span" spacing={0.25}>
-                {netTotalsByAsset.length > 0 ? (
-                  netTotalsByAsset.map((part) => (
-                    <Box
-                      component="span"
-                      key={part.key}
-                      sx={{
-                        color:
-                          part.amount < 0
-                            ? theme.palette.error.main
-                            : part.amount > 0
-                              ? theme.palette.success.main
-                              : theme.palette.text.primary,
-                      }}
-                    >
-                      {part.text}
-                    </Box>
-                  ))
-                ) : (
-                  <Box component="span" sx={{ color: theme.palette.text.secondary }}>
-                    —
-                  </Box>
-                )}
-                {formatConvertedTotal('netAmount') ? (
-                  <Typography
-                    component="span"
-                    variant="caption"
-                    sx={{
-                      color:
-                        convertedNetAmount == null
-                          ? theme.palette.text.secondary
-                          : convertedNetAmount < 0
-                            ? theme.palette.error.main
-                            : convertedNetAmount > 0
-                              ? theme.palette.success.main
-                              : theme.palette.text.primary,
-                    }}
-                  >
-                    {formatConvertedTotal('netAmount')}
-                  </Typography>
-                ) : null}
-              </Stack>
-            </Box>
-          </Typography>
-        </Box>
+        </Stack>
+        <Box sx={{ display: { xs: 'none', sm: 'block' }, gridColumn: '3' }} aria-hidden />
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => setSummaryOpen(true)}
+          sx={{ gridColumn: { xs: '1', sm: '4' }, justifySelf: { xs: 'flex-start', sm: 'flex-end' } }}
+        >
+          Souhrn
+        </Button>
       </Box>
 
       <Stack spacing={2} sx={{ mb: 2 }}>
@@ -1176,6 +1136,111 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
           </Typography>
         ) : null}
       </Stack>
+
+      <Dialog
+        open={summaryOpen}
+        onClose={() => setSummaryOpen(false)}
+        maxWidth={false}
+        PaperProps={{ sx: { width: 'fit-content', maxWidth: 'calc(100vw - 32px)' } }}
+      >
+        <DialogTitle
+          sx={{
+            px: 2.5,
+            pb: 1.25,
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: 2,
+          }}
+        >
+          <Box component="span">Souhrn transakcí</Box>
+          <Typography variant="body2" color="text.secondary" component="span" sx={{ whiteSpace: 'nowrap' }}>
+            {dateFromCs} - {dateToCs}
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 2.5, pb: 2.5 }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(3, max-content)' },
+              gap: 2.5,
+              justifyContent: 'center',
+              mx: 'auto',
+              pt: 0.75,
+            }}
+          >
+            {renderSummaryColumn(
+              'Celkové výdaje',
+              theme.palette.error.main,
+              [
+                ...(expenseTotalsByAsset.length > 0
+                  ? expenseTotalsByAsset.map((part) => renderSummaryLine(part, theme.palette.error.main))
+                  : [renderSummaryLine('—', theme.palette.text.secondary)]),
+                ...(convertedExpenseTotal
+                  ? [
+                      renderSummaryDivider('converted-expense-divider'),
+                      renderSummaryLine(convertedExpenseTotal, theme.palette.error.main, 'converted-expense', 'converted'),
+                    ]
+                  : []),
+              ],
+            )}
+            {renderSummaryColumn(
+              'Celkové příjmy',
+              theme.palette.success.main,
+              [
+                ...(incomeTotalsByAsset.length > 0
+                  ? incomeTotalsByAsset.map((part) => renderSummaryLine(part, theme.palette.success.main))
+                  : [renderSummaryLine('—', theme.palette.text.secondary)]),
+                ...(convertedIncomeTotal
+                  ? [
+                      renderSummaryDivider('converted-income-divider'),
+                      renderSummaryLine(convertedIncomeTotal, theme.palette.success.main, 'converted-income', 'converted'),
+                    ]
+                  : []),
+              ],
+            )}
+            {renderSummaryColumn(
+              'Výsledná bilance',
+              theme.palette.text.primary,
+              [
+                ...(netTotalsByAsset.length > 0
+                  ? netTotalsByAsset.map((part) =>
+                      renderSummaryLine(
+                        part.text,
+                        part.amount < 0
+                          ? theme.palette.error.main
+                          : part.amount > 0
+                            ? theme.palette.success.main
+                            : theme.palette.text.primary,
+                        part.key,
+                      ),
+                    )
+                  : [renderSummaryLine('—', theme.palette.text.secondary)]),
+                ...(convertedNetTotal
+                  ? [
+                      renderSummaryDivider('converted-net-divider'),
+                      renderSummaryLine(
+                        convertedNetTotal,
+                        convertedNetAmount == null
+                          ? theme.palette.text.secondary
+                          : convertedNetAmount < 0
+                            ? theme.palette.error.main
+                            : convertedNetAmount > 0
+                              ? theme.palette.success.main
+                              : theme.palette.text.primary,
+                        'converted-net',
+                        'converted',
+                      ),
+                    ]
+                  : []),
+              ],
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, pt: 0 }}>
+          <Button onClick={() => setSummaryOpen(false)}>Zavřít</Button>
+        </DialogActions>
+      </Dialog>
 
       <Table
         size="small"

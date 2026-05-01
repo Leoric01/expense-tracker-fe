@@ -10,9 +10,8 @@ export interface CreateAssetExchangeV2RequestDto {
   sourceHoldingId?: string;
   targetHoldingId?: string;
   amount?: number;
-  settledAmount?: number;
   feeAmount?: number;
-  currencyCode?: string;
+  settledAmount?: number;
   exchangeRate?: number;
   transactionDate?: string;
   description?: string;
