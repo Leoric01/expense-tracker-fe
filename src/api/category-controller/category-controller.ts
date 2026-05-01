@@ -25,6 +25,7 @@ import type {
   CategoryDeactivateParams,
   CategoryFindAllActiveParams,
   CategoryFindAllParams,
+  CategoryMovementSummaryParams,
   CategoryUploadIconBody,
   CategoryUploadIconParams,
   CreateCategoryBulkRequestDto,
@@ -924,6 +925,173 @@ export const useCategoryUpdate = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getCategoryUpdateMutationOptions(options), queryClient);
 };
+export type categoryMovementSummaryResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type categoryMovementSummaryResponseSuccess = categoryMovementSummaryResponse200 & {
+  headers: Headers;
+};
+export type categoryMovementSummaryResponse = categoryMovementSummaryResponseSuccess;
+
+export const getCategoryMovementSummaryUrl = (
+  trackerId: string,
+  params: CategoryMovementSummaryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/category/${trackerId}/summary?${stringifiedParams}`
+    : `/api/category/${trackerId}/summary`;
+};
+
+export const categoryMovementSummary = async (
+  trackerId: string,
+  params: CategoryMovementSummaryParams,
+  options?: RequestInit,
+): Promise<categoryMovementSummaryResponse> => {
+  const res = await fetch(getCategoryMovementSummaryUrl(trackerId, params), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: categoryMovementSummaryResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as categoryMovementSummaryResponse;
+};
+
+export const getCategoryMovementSummaryQueryKey = (
+  trackerId: string,
+  params?: CategoryMovementSummaryParams,
+) => {
+  return [`/api/category/${trackerId}/summary`, ...(params ? [params] : [])] as const;
+};
+
+export const getCategoryMovementSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof categoryMovementSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params: CategoryMovementSummaryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryMovementSummary>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getCategoryMovementSummaryQueryKey(trackerId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof categoryMovementSummary>>> = ({
+    signal,
+  }) => categoryMovementSummary(trackerId, params, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof categoryMovementSummary>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type CategoryMovementSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof categoryMovementSummary>>
+>;
+export type CategoryMovementSummaryQueryError = unknown;
+
+export function useCategoryMovementSummary<
+  TData = Awaited<ReturnType<typeof categoryMovementSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params: CategoryMovementSummaryParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryMovementSummary>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryMovementSummary>>,
+          TError,
+          Awaited<ReturnType<typeof categoryMovementSummary>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryMovementSummary<
+  TData = Awaited<ReturnType<typeof categoryMovementSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params: CategoryMovementSummaryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryMovementSummary>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryMovementSummary>>,
+          TError,
+          Awaited<ReturnType<typeof categoryMovementSummary>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryMovementSummary<
+  TData = Awaited<ReturnType<typeof categoryMovementSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params: CategoryMovementSummaryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryMovementSummary>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useCategoryMovementSummary<
+  TData = Awaited<ReturnType<typeof categoryMovementSummary>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params: CategoryMovementSummaryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryMovementSummary>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getCategoryMovementSummaryQueryOptions(trackerId, params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
 export type categoryExportBulkResponse200 = {
   data: Blob;
   status: 200;
