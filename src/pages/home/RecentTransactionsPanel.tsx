@@ -264,10 +264,30 @@ function formatAssetAmount(
     : 2;
   const major = amountMinor / 10 ** scale;
   const formatted = new Intl.NumberFormat('cs-CZ', {
-    minimumFractionDigits: scale,
+    minimumFractionDigits: 0,
     maximumFractionDigits: scale,
   }).format(major);
   return `${formatted} ${code}`;
+}
+
+function formatExchangeRateLabel(
+  exchangeRate: number | undefined,
+  sourceAssetCode?: string,
+  targetAssetCode?: string,
+  targetAssetScale?: number,
+): string {
+  if (exchangeRate == null || !Number.isFinite(exchangeRate)) return '—';
+  const sourceCode = (sourceAssetCode?.trim() || 'SRC').toUpperCase();
+  const targetCode = (targetAssetCode?.trim() || 'TGT').toUpperCase();
+  const scale = Number.isFinite(targetAssetScale) && targetAssetScale != null && targetAssetScale >= 0
+    ? Math.min(Math.floor(targetAssetScale), 20)
+    : 2;
+  const formatted = new Intl.NumberFormat('cs-CZ', {
+    useGrouping: false,
+    minimumFractionDigits: scale,
+    maximumFractionDigits: scale,
+  }).format(exchangeRate);
+  return `1 ${sourceCode} = ${formatted} ${targetCode}`;
 }
 
 function formatConvertedAmount(row: TransactionRow): string | null {
@@ -439,7 +459,21 @@ function TransactionDetailBlock({
                 )
               : '—',
           )}
-          {kv('Kurz', row.exchangeRate != null ? String(row.exchangeRate) : '—')}
+          {kv(
+            'Kurz',
+            formatExchangeRateLabel(
+              row.exchangeRate,
+              t === TransactionPageItemResponseDtoTransactionType.TRANSFER
+                ? (row.sourceHoldingAssetCode ?? row.assetCode)
+                : row.assetCode,
+              t === TransactionPageItemResponseDtoTransactionType.TRANSFER
+                ? (row.targetHoldingAssetCode ?? row.convertedInto ?? row.assetCode)
+                : (row.convertedInto ?? row.assetCode),
+              t === TransactionPageItemResponseDtoTransactionType.TRANSFER
+                ? (row.targetHoldingAssetScale ?? row.convertedAssetScale ?? row.assetScale)
+                : (row.convertedAssetScale ?? row.assetScale),
+            ),
+          )}
           {convertedAmountParts.length > 0
             ? kv(
                 'Přepočteno',

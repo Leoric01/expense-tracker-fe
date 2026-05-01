@@ -1,0 +1,199 @@
+import { assetFindAll, getAssetFindAllQueryKey } from '@api/asset-controller/asset-controller';
+import {
+  expenseTrackerUpdate,
+} from '@api/expense-tracker-controller/expense-tracker-controller';
+import {
+  getInstitutionDashboardQueryKey,
+  institutionDashboard,
+} from '@api/institution-controller/institution-controller';
+import type {
+  InstitutionDashboardResponseDto,
+  PagedModelAssetResponseDto,
+} from '@api/model';
+import { DisplayCurrencySelect } from '@components/DisplayCurrencySelect';
+import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
+import { Box, Stack, Typography } from '@mui/material';
+import { dateRangeDdMmYyyyToIsoParams, firstDayOfMonth, lastDayOfMonth } from '@utils/dashboardPeriod';
+import { formatDateDdMmYyyyFromDate } from '@utils/dateTimeCs';
+import { formatAmount } from '@utils/formatAmount';
+import { DEFAULT_FIAT_SCALE } from '@utils/moneyMinorUnits';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FC, useEffect, useMemo, useState } from 'react';
+import { formatWalletAmount } from '@pages/home/walletDisplay';
+
+const ASSET_LIST_PARAMS = { page: 0, size: 500 } as const;
+
+export const HeaderFinanceSummary: FC = () => {
+  const { selectedExpenseTracker } = useSelectedExpenseTracker();
+  const trackerId = selectedExpenseTracker?.id ?? '';
+  const queryClient = useQueryClient();
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedDisplayAssetId, setSelectedDisplayAssetId] = useState('');
+  const [selectedDisplayAssetCode, setSelectedDisplayAssetCode] = useState('');
+
+  const dashboardParams = useMemo(
+    () =>
+      dateRangeDdMmYyyyToIsoParams(
+        formatDateDdMmYyyyFromDate(firstDayOfMonth()),
+        formatDateDdMmYyyyFromDate(lastDayOfMonth()),
+      ),
+    [],
+  );
+
+  const { data: dashboard } = useQuery({
+    queryKey: getInstitutionDashboardQueryKey(trackerId, dashboardParams ?? undefined),
+    queryFn: async () => {
+      if (!dashboardParams) throw new Error('dashboard');
+      const res = await institutionDashboard(trackerId, dashboardParams);
+      if (res.status < 200 || res.status >= 300) throw new Error('dashboard');
+      return res.data as InstitutionDashboardResponseDto;
+    },
+    enabled: Boolean(trackerId && dashboardParams),
+    staleTime: 30_000,
+  });
+
+  const { data: displayAssetsPaged } = useQuery({
+    queryKey: getAssetFindAllQueryKey(ASSET_LIST_PARAMS),
+    queryFn: async () => {
+      const res = await assetFindAll(ASSET_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('display-assets');
+      return res.data as PagedModelAssetResponseDto;
+    },
+    enabled: Boolean(trackerId),
+    staleTime: 60_000,
+  });
+
+  const displayAssets = useMemo(() => displayAssetsPaged?.content ?? [], [displayAssetsPaged]);
+  const displayAssetCode = dashboard?.displayAssetCode?.trim().toUpperCase() ?? '';
+  const displayAssetScale = dashboard?.displayAssetScale ?? DEFAULT_FIAT_SCALE;
+  const hasExplicitSelection = Boolean(selectedDisplayAssetId);
+  const dashboardMatchesExplicitSelection =
+    !selectedDisplayAssetCode ||
+    !displayAssetCode ||
+    selectedDisplayAssetCode === displayAssetCode;
+  const hasDisplayCurrency = Boolean(
+    hasExplicitSelection &&
+      displayAssetCode &&
+      dashboard?.displayAssetScale != null &&
+      dashboardMatchesExplicitSelection,
+  );
+
+  useEffect(() => {
+    if (!trackerId) {
+      setSelectedDisplayAssetId('');
+      setSelectedDisplayAssetCode('');
+      return;
+    }
+    const key = `tracker-${trackerId}-display-currency-selection`;
+    const persisted = localStorage.getItem(key) ?? '';
+    const persistedCode = localStorage.getItem(`tracker-${trackerId}-display-currency-selection-code`) ?? '';
+    setSelectedDisplayAssetId(persisted);
+    setSelectedDisplayAssetCode(persistedCode);
+    window.dispatchEvent(
+      new CustomEvent('display-currency-selection-changed', {
+        detail: { trackerId, assetId: persisted, assetCode: persistedCode },
+      }),
+    );
+  }, [trackerId]);
+
+  useEffect(() => {
+    if (!trackerId || !selectedDisplayAssetId || displayAssets.length === 0) return;
+    const exists = displayAssets.some((a) => a.id === selectedDisplayAssetId);
+    if (exists) return;
+    localStorage.removeItem(`tracker-${trackerId}-display-currency-selection`);
+    localStorage.removeItem(`tracker-${trackerId}-display-currency-selection-code`);
+    setSelectedDisplayAssetId('');
+    setSelectedDisplayAssetCode('');
+    window.dispatchEvent(
+      new CustomEvent('display-currency-selection-changed', {
+        detail: { trackerId, assetId: '', assetCode: '' },
+      }),
+    );
+  }, [displayAssets, selectedDisplayAssetId, trackerId]);
+
+  const totalFundsText = useMemo(() => {
+    if (!dashboard) return '—';
+    if (hasDisplayCurrency) {
+      if (dashboard.grandTotalConverted == null) return '—';
+      return formatAmount(dashboard.grandTotalConverted, displayAssetScale, displayAssetCode);
+    }
+    const byCurrency = new Map<string, { sum: number; scale: number }>();
+    for (const inst of dashboard.institutions ?? []) {
+      for (const acc of inst.accounts ?? []) {
+        for (const h of acc.holdings ?? []) {
+          const code = (h.assetCode?.trim() || 'CZK').toUpperCase();
+          const scale = h.assetScale ?? DEFAULT_FIAT_SCALE;
+          const prev = byCurrency.get(code);
+          const add = h.endBalance ?? 0;
+          if (!prev) byCurrency.set(code, { sum: add, scale });
+          else byCurrency.set(code, { sum: prev.sum + add, scale: prev.scale });
+        }
+      }
+    }
+    const parts = [...byCurrency.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([code, { sum, scale }]) => formatWalletAmount(sum, code, scale));
+    return parts.length > 0 ? parts.join(', ') : '—';
+  }, [dashboard, displayAssetCode, displayAssetScale, hasDisplayCurrency]);
+
+  const syncDisplayCurrency = async (nextAssetId: string) => {
+    if (!trackerId) return;
+    setSubmitting(true);
+    try {
+      const res = await expenseTrackerUpdate(trackerId, {
+        preferredDisplayAssetId: nextAssetId ? nextAssetId : null,
+      } as Parameters<typeof expenseTrackerUpdate>[1]);
+      if (res.status < 200 || res.status >= 300) return;
+      await queryClient.invalidateQueries({
+        queryKey: getInstitutionDashboardQueryKey(trackerId),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['/api/expense-trackers/mine'] });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDisplayCurrencyChange = async (nextAssetId: string) => {
+    if (!trackerId || nextAssetId === selectedDisplayAssetId) return;
+    const key = `tracker-${trackerId}-display-currency-selection`;
+    const codeKey = `tracker-${trackerId}-display-currency-selection-code`;
+    const nextCode =
+      displayAssets.find((asset) => asset.id === nextAssetId)?.code?.trim().toUpperCase() ?? '';
+    if (nextAssetId) localStorage.setItem(key, nextAssetId);
+    else localStorage.removeItem(key);
+    if (nextCode) localStorage.setItem(codeKey, nextCode);
+    else localStorage.removeItem(codeKey);
+    setSelectedDisplayAssetId(nextAssetId);
+    setSelectedDisplayAssetCode(nextCode);
+    window.dispatchEvent(
+      new CustomEvent('display-currency-selection-changed', {
+        detail: { trackerId, assetId: nextAssetId, assetCode: nextCode },
+      }),
+    );
+    await syncDisplayCurrency(nextAssetId);
+  };
+
+  if (!trackerId) return null;
+
+  return (
+    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'center' }}>
+      <DisplayCurrencySelect
+        value={selectedDisplayAssetId}
+        assets={displayAssets}
+        disabled={submitting}
+        onChange={(assetId) => {
+          void handleDisplayCurrencyChange(assetId);
+        }}
+        sx={{ minWidth: { xs: '100%', sm: 220 }, bgcolor: 'background.paper', borderRadius: 1 }}
+      />
+      <Typography variant="body2" component="p" sx={{ m: 0 }}>
+        <Box component="span" sx={{ color: 'text.secondary', mr: 0.5 }}>
+          Celkové prostředky:
+        </Box>
+        <Box component="span" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+          {totalFundsText}
+        </Box>
+      </Typography>
+    </Stack>
+  );
+};

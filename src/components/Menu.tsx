@@ -1,6 +1,21 @@
 import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
-import { Box, Drawer, List, ListItemButton, ListItemText, Toolbar, Typography } from '@mui/material';
-import { FC } from 'react';
+import { expenseTrackerFindAllMine } from '@api/expense-tracker-controller/expense-tracker-controller';
+import type { PagedModelExpenseTrackerMineResponseDto } from '@api/model';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import CheckIcon from '@mui/icons-material/Check';
+import {
+  Box,
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Menu as MuiMenu,
+  Toolbar,
+  Typography,
+} from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
+import { FC, MouseEvent, useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 
 const drawerWidth = 260;
@@ -12,13 +27,42 @@ type MenuProps = {
 
 export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
   const location = useLocation();
-  const { selectedExpenseTracker } = useSelectedExpenseTracker();
+  const { selectedExpenseTracker, setSelectedExpenseTracker } = useSelectedExpenseTracker();
   const budgetName = selectedExpenseTracker?.name ?? '—';
   const pathname = location.pathname;
+  const [trackerMenuAnchorEl, setTrackerMenuAnchorEl] = useState<HTMLElement | null>(null);
 
   const isNutritionSection = pathname.startsWith('/nutrition');
   const isHabitSection = pathname.startsWith('/habits');
   const isModuleHubSection = pathname === '/moduly';
+  const isTrackerSection = pathname.startsWith('/trackers');
+
+  const { data: trackersResponse } = useQuery({
+    queryKey: ['/api/expense-trackers/mine', { page: 0, size: 200, sort: 'name,asc' }],
+    queryFn: () => expenseTrackerFindAllMine({ page: 0, size: 200, sort: 'name,asc' }),
+    staleTime: 30_000,
+  });
+
+  const trackerOptions = useMemo(() => {
+    const paged = trackersResponse?.data as PagedModelExpenseTrackerMineResponseDto | undefined;
+    const items = paged?.content ?? [];
+    return items.filter((item): item is { id: string; name?: string } => Boolean(item?.id));
+  }, [trackersResponse]);
+
+  const openTrackerMenu = (event: MouseEvent<HTMLElement>) => {
+    setTrackerMenuAnchorEl(event.currentTarget);
+  };
+
+  const closeTrackerMenu = () => {
+    setTrackerMenuAnchorEl(null);
+  };
+
+  const handleTrackerSelect = (tracker: { id: string; name?: string } | null) => {
+    setSelectedExpenseTracker(tracker ? { id: tracker.id, name: tracker.name ?? '—' } : null);
+    closeTrackerMenu();
+  };
+
+  const trackerMenuOpen = Boolean(trackerMenuAnchorEl);
 
   const drawer = (
     <Box sx={{ textAlign: 'center' }}>
@@ -37,57 +81,102 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
             <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
               Výživa
             </Typography>
-            <Typography
-              variant="subtitle1"
-              fontWeight={600}
-              sx={{ textAlign: 'left', lineHeight: 1.3 }}
-              noWrap
-              title={budgetName}
+            <ListItemButton
+              onClick={openTrackerMenu}
+              sx={{ p: 0, borderRadius: 1, minHeight: 'unset', justifyContent: 'space-between', gap: 0.5 }}
             >
-              {budgetName}
-            </Typography>
+              <Typography
+                variant="subtitle1"
+                fontWeight={600}
+                sx={{ textAlign: 'left', lineHeight: 1.3, minWidth: 0 }}
+                noWrap
+                title={budgetName}
+              >
+                {budgetName}
+              </Typography>
+              <ArrowDropDownIcon fontSize="small" color="action" />
+            </ListItemButton>
           </>
         ) : isHabitSection ? (
           <>
             <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
               Návyky
             </Typography>
-            <Typography
-              variant="subtitle1"
-              fontWeight={600}
-              sx={{ textAlign: 'left', lineHeight: 1.3 }}
-              noWrap
-              title={budgetName}
+            <ListItemButton
+              onClick={openTrackerMenu}
+              sx={{ p: 0, borderRadius: 1, minHeight: 'unset', justifyContent: 'space-between', gap: 0.5 }}
             >
-              {budgetName}
-            </Typography>
+              <Typography
+                variant="subtitle1"
+                fontWeight={600}
+                sx={{ textAlign: 'left', lineHeight: 1.3, minWidth: 0 }}
+                noWrap
+                title={budgetName}
+              >
+                {budgetName}
+              </Typography>
+              <ArrowDropDownIcon fontSize="small" color="action" />
+            </ListItemButton>
           </>
         ) : isModuleHubSection ? (
           <>
-            <Typography
-              variant="subtitle1"
-              fontWeight={600}
-              sx={{ textAlign: 'left', lineHeight: 1.3 }}
-              noWrap
-              title={budgetName}
+            <ListItemButton
+              onClick={openTrackerMenu}
+              sx={{ p: 0, borderRadius: 1, minHeight: 'unset', justifyContent: 'space-between', gap: 0.5 }}
             >
-              Rozpočet: {budgetName}
+              <Typography
+                variant="subtitle1"
+                fontWeight={600}
+                sx={{ textAlign: 'left', lineHeight: 1.3, minWidth: 0 }}
+                noWrap
+                title={budgetName}
+              >
+                Rozpočet: {budgetName}
+              </Typography>
+              <ArrowDropDownIcon fontSize="small" color="action" />
+            </ListItemButton>
+          </>
+        ) : isTrackerSection ? (
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
+              Trackery
             </Typography>
+            <ListItemButton
+              onClick={openTrackerMenu}
+              sx={{ p: 0, borderRadius: 1, minHeight: 'unset', justifyContent: 'space-between', gap: 0.5 }}
+            >
+              <Typography
+                variant="subtitle1"
+                fontWeight={600}
+                sx={{ textAlign: 'left', lineHeight: 1.3, minWidth: 0 }}
+                noWrap
+                title={budgetName}
+              >
+                {budgetName}
+              </Typography>
+              <ArrowDropDownIcon fontSize="small" color="action" />
+            </ListItemButton>
           </>
         ) : (
           <>
             <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
               Finance
             </Typography>
-            <Typography
-              variant="subtitle1"
-              fontWeight={600}
-              sx={{ textAlign: 'left', lineHeight: 1.3 }}
-              noWrap
-              title={budgetName}
+            <ListItemButton
+              onClick={openTrackerMenu}
+              sx={{ p: 0, borderRadius: 1, minHeight: 'unset', justifyContent: 'space-between', gap: 0.5 }}
             >
-              {budgetName}
-            </Typography>
+              <Typography
+                variant="subtitle1"
+                fontWeight={600}
+                sx={{ textAlign: 'left', lineHeight: 1.3, minWidth: 0 }}
+                noWrap
+                title={budgetName}
+              >
+                {budgetName}
+              </Typography>
+              <ArrowDropDownIcon fontSize="small" color="action" />
+            </ListItemButton>
           </>
         )}
       </Toolbar>
@@ -200,7 +289,24 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
               )}
             </NavLink>
           </>
-        ) : isModuleHubSection ? null : (
+        ) : isModuleHubSection ? null : isTrackerSection ? (
+          <>
+            <NavLink to="/trackers" end style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Trackery" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink to="/moduly" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Moduly" />
+                </ListItemButton>
+              )}
+            </NavLink>
+          </>
+        ) : (
           <>
             <NavLink to="/prehled" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
               {({ isActive }) => (
@@ -216,23 +322,56 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
                 </ListItemButton>
               )}
             </NavLink>
-            <NavLink to="/transactions" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+            <ListItemButton
+              selected={pathname.startsWith('/transactions')}
+              onClick={onMobileClose}
+              sx={{ cursor: 'default' }}
+              disableRipple
+            >
+              <ListItemText
+                primary="Transakce"
+                primaryTypographyProps={{ fontWeight: 600, color: 'text.secondary' }}
+              />
+            </ListItemButton>
+            <NavLink to="/transactions/history" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
               {({ isActive }) => (
-                <ListItemButton selected={isActive} onClick={onMobileClose}>
-                  <ListItemText primary="Transakce" />
-                </ListItemButton>
-              )}
-            </NavLink>
-            <NavLink to="/trackers" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-              {({ isActive }) => (
-                <ListItemButton selected={isActive} onClick={onMobileClose}>
-                  <ListItemText primary="Trackery" />
+                <ListItemButton selected={isActive} onClick={onMobileClose} sx={{ pl: 3 }}>
+                  <ListItemText primary="Historie" />
                 </ListItemButton>
               )}
             </NavLink>
           </>
         )}
       </List>
+      <MuiMenu
+        anchorEl={trackerMenuAnchorEl}
+        open={trackerMenuOpen}
+        onClose={closeTrackerMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      >
+        <ListItemButton
+          selected={!selectedExpenseTracker}
+          onClick={() => handleTrackerSelect(null)}
+          sx={{ minWidth: 240 }}
+        >
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            {!selectedExpenseTracker ? <CheckIcon fontSize="small" color="primary" /> : null}
+          </ListItemIcon>
+          <ListItemText primary="Bez vybraného trackeru" />
+        </ListItemButton>
+        {trackerOptions.map((tracker) => {
+          const isSelected = selectedExpenseTracker?.id === tracker.id;
+          return (
+            <ListItemButton key={tracker.id} selected={isSelected} onClick={() => handleTrackerSelect(tracker)}>
+              <ListItemIcon sx={{ minWidth: 28 }}>
+                {isSelected ? <CheckIcon fontSize="small" color="primary" /> : null}
+              </ListItemIcon>
+              <ListItemText primary={tracker.name ?? '—'} />
+            </ListItemButton>
+          );
+        })}
+      </MuiMenu>
     </Box>
   );
 

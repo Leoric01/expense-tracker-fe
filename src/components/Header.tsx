@@ -2,6 +2,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import { useAuth } from '@auth/AuthContext';
+import { HeaderFinanceSummary } from '@components/HeaderFinanceSummary';
 import { useThemeMode } from '@components/contexts/ThemeModeContext';
 import {
   AppBar,
@@ -15,7 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 import { FC, MouseEvent, useMemo, useState } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 
 type HeaderProps = {
   onMenuToggle: () => void;
@@ -26,8 +27,10 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
   const { userData, logout } = useAuth();
   const { mode, toggleMode } = useThemeMode();
   const navigate = useNavigate();
+  const location = useLocation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
+  const showFinanceSummary = location.pathname.startsWith('/prehled');
 
   const initials = useMemo(() => {
     const name = userData?.fullName?.trim();
@@ -78,7 +81,8 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
         >
           Expense tracker
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          {showFinanceSummary && <HeaderFinanceSummary />}
           <Tooltip title={mode === 'dark' ? 'Přepnout na světlý režim' : 'Přepnout na tmavý režim'}>
             <IconButton onClick={toggleMode} color="inherit" aria-label="přepnout režim">
               {mode === 'dark' ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}

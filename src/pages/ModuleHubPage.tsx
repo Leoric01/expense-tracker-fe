@@ -1,5 +1,6 @@
 import { PageHeading } from '@components/PageHeading';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import RestaurantOutlinedIcon from '@mui/icons-material/RestaurantOutlined';
 import SelfImprovementOutlinedIcon from '@mui/icons-material/SelfImprovementOutlined';
 import { alpha, Box, Card, CardActionArea, CardContent, Stack, Typography } from '@mui/material';
@@ -20,9 +21,16 @@ const MODULES: ModuleCardConfig[] = [
   {
     to: '/prehled',
     title: 'Finance',
-    description: 'Rozpočet, účty, přehledy a trackery.',
+    description: 'Rozpočet, účty, přehledy a transakce.',
     Icon: AccountBalanceOutlinedIcon,
     accent: (t) => ({ bg: alpha(t.palette.primary.main, 0.12), fg: t.palette.primary.main }),
+  },
+  {
+    to: '/trackers',
+    title: 'Trackery',
+    description: 'Správa trackerů, přístupy a pozvánky.',
+    Icon: Inventory2OutlinedIcon,
+    accent: (t) => ({ bg: alpha(t.palette.info.main, 0.12), fg: t.palette.info.main }),
   },
   {
     to: '/habits',
@@ -55,7 +63,7 @@ export const ModuleHubPage: FC = () => {
           gridTemplateColumns: {
             xs: '1fr',
             sm: 'repeat(2, minmax(0, 1fr))',
-            md: 'repeat(3, minmax(0, 1fr))',
+            md: 'repeat(4, minmax(0, 1fr))',
           },
           maxWidth: 960,
           mt: 1,

@@ -40,15 +40,12 @@ import {
   CreateAccountRequestDtoAccountType,
   CreateAssetRequestDtoAssetType,
   CreateAssetRequestDtoMarketDataSource,
-  AssetResponseDtoMarketDataSource,
   CreateTransactionRequestDtoTransactionType,
 } from '@api/model';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Autocomplete,
@@ -65,7 +62,6 @@ import {
   DialogTitle,
   Divider,
   FormControl,
-  IconButton,
   InputLabel,
   MenuItem,
   Select,
@@ -83,7 +79,6 @@ import {
   lastDayOfMonth,
 } from '@utils/dashboardPeriod';
 import { formatDateDdMmYyyyFromDate, parseCsDateTime } from '@utils/dateTimeCs';
-import { DISPLAY_CURRENCY_POPULAR_CODES } from '@utils/displayCurrencyPopularCodes';
 import { formatAmount } from '@utils/formatAmount';
 import { DEFAULT_FIAT_SCALE, majorToMinorUnitsForScale } from '@utils/moneyMinorUnits';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -353,11 +348,8 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
 
   const [rangeFrom, setRangeFrom] = useState(() => formatDateDdMmYyyyFromDate(firstDayOfMonth()));
   const [rangeTo, setRangeTo] = useState(() => formatDateDdMmYyyyFromDate(lastDayOfMonth()));
-  const [selectedDisplayAssetId, setSelectedDisplayAssetId] = useState('');
-  const [displayCurrencySubmitting, setDisplayCurrencySubmitting] = useState(false);
-  const [showAmounts, setShowAmounts] = useState(true);
-  /** Po „Bez konverze“ nezobrazuj converted UI, dokud tracker + dashboard nepotvrdí vymazání (jinak drží starý response). */
-  const [suppressConvertedUiUntilClear, setSuppressConvertedUiUntilClear] = useState(false);
+  const [explicitDisplayAssetId, setExplicitDisplayAssetId] = useState('');
+  const [explicitDisplayAssetCode, setExplicitDisplayAssetCode] = useState('');
 
   const dashboardParams = useMemo(
     () => dateRangeDdMmYyyyToIsoParams(rangeFrom, rangeTo),
@@ -401,54 +393,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     enabled: createOpen || assetDialogOpen,
     staleTime: 60_000,
   });
-
-  const { data: displayAssetsPaged } = useQuery({
-    queryKey: getAssetFindAllQueryKey(ASSET_LIST_PARAMS),
-    queryFn: async () => {
-      const res = await assetFindAll(ASSET_LIST_PARAMS);
-      if (res.status < 200 || res.status >= 300) throw new Error('display-assets');
-      return res.data as PagedModelAssetResponseDto;
-    },
-    enabled: Boolean(trackerId),
-    staleTime: 60_000,
-  });
-
-  useQuery({
-    queryKey: getExpenseTrackerFindByIdQueryKey(trackerId),
-    queryFn: async () => {
-      const res = await expenseTrackerFindById(trackerId);
-      if (res.status < 200 || res.status >= 300) throw new Error('tracker-detail');
-      return res.data as ExpenseTrackerResponseDto;
-    },
-    enabled: Boolean(trackerId),
-    staleTime: 30_000,
-  });
-
-
-  const displayCurrencyOptions = useMemo(() => {
-    const rows = displayAssetsPaged?.content ?? [];
-    return [...rows]
-      .filter(
-        (a) =>
-          a.active !== false &&
-          a.id &&
-          a.marketDataSource !== AssetResponseDtoMarketDataSource.NONE &&
-          a.marketDataSource !== AssetResponseDtoMarketDataSource.MANUAL,
-      )
-      .sort((a, b) => (a.code ?? '').localeCompare(b.code ?? '', undefined, { sensitivity: 'base' }));
-  }, [displayAssetsPaged]);
-
-  const popularDisplayCurrencyOptions = useMemo(() => {
-    const byCode = new Map(displayCurrencyOptions.map((a) => [(a.code ?? '').toUpperCase(), a]));
-    return DISPLAY_CURRENCY_POPULAR_CODES.map((code) => byCode.get(code)).filter((a): a is AssetResponseDto =>
-      Boolean(a?.id),
-    );
-  }, [displayCurrencyOptions]);
-
-  const otherDisplayCurrencyOptions = useMemo(() => {
-    const popularIds = new Set(popularDisplayCurrencyOptions.map((a) => a.id));
-    return displayCurrencyOptions.filter((a) => !popularIds.has(a.id));
-  }, [displayCurrencyOptions, popularDisplayCurrencyOptions]);
 
   const assetOptions = useMemo(() => {
     const rows = assetsPaged?.content ?? [];
@@ -500,26 +444,42 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const dashboard = dashboardRes;
   const displayAssetCode = dashboard?.displayAssetCode?.trim().toUpperCase() ?? '';
   const displayAssetScale = dashboard?.displayAssetScale ?? DEFAULT_FIAT_SCALE;
+  const dashboardMatchesExplicitSelection =
+    !explicitDisplayAssetId ||
+    !explicitDisplayAssetCode ||
+    displayAssetCode === explicitDisplayAssetCode;
   const hasDisplayCurrency =
-    !suppressConvertedUiUntilClear &&
-    Boolean(selectedDisplayAssetId) &&
-    Boolean(displayAssetCode && dashboard?.displayAssetScale != null);
+    Boolean(
+      explicitDisplayAssetId &&
+      displayAssetCode &&
+      dashboard?.displayAssetScale != null &&
+      dashboardMatchesExplicitSelection,
+    );
 
   useEffect(() => {
-    setSelectedDisplayAssetId('');
-    setSuppressConvertedUiUntilClear(false);
+    if (!trackerId) {
+      setExplicitDisplayAssetId('');
+      setExplicitDisplayAssetCode('');
+      return;
+    }
+    const key = `tracker-${trackerId}-display-currency-selection`;
+    const codeKey = `tracker-${trackerId}-display-currency-selection-code`;
+    setExplicitDisplayAssetId(localStorage.getItem(key) ?? '');
+    setExplicitDisplayAssetCode(localStorage.getItem(codeKey) ?? '');
   }, [trackerId]);
 
   useEffect(() => {
-    if (!suppressConvertedUiUntilClear) return;
-    const dashboardCleared = !(dashboard?.displayAssetCode ?? '').trim();
-    if (dashboardCleared) {
-      setSuppressConvertedUiUntilClear(false);
-    }
-  }, [
-    suppressConvertedUiUntilClear,
-    dashboard?.displayAssetCode,
-  ]);
+    const handleDisplaySelectionChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ trackerId?: string; assetId?: string; assetCode?: string }>).detail;
+      if (!detail || detail.trackerId !== trackerId) return;
+      setExplicitDisplayAssetId(detail.assetId ?? '');
+      setExplicitDisplayAssetCode(detail.assetCode ?? '');
+    };
+    window.addEventListener('display-currency-selection-changed', handleDisplaySelectionChanged);
+    return () => {
+      window.removeEventListener('display-currency-selection-changed', handleDisplaySelectionChanged);
+    };
+  }, [trackerId]);
 
   const globalWalletOrder = useMemo(
     () => orderedWalletIdsFromWidgetPayload(dashboard?.widgetOrder),
@@ -563,33 +523,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   );
 
   const hasAnyHoldings = summaries.length > 0;
-  const amountMaskSx = showAmounts
-    ? undefined
-    : {
-        filter: 'blur(6px)',
-        userSelect: 'none' as const,
-      };
-
-  /** Součet `endBalance` z dashboardu podle měny (stejný API response jako karty). */
-  const totalFundsDisplayText = useMemo(() => {
-    if (hasDisplayCurrency) {
-      if (dashboard?.grandTotalConverted == null) return '—';
-      return formatAmount(dashboard.grandTotalConverted, displayAssetScale, displayAssetCode);
-    }
-    const byCurrency = new Map<string, { sum: number; scale: number }>();
-    for (const s of summaries) {
-      const code = (s.assetCode?.trim() || 'CZK').toUpperCase();
-      const scale = s.assetScale ?? DEFAULT_FIAT_SCALE;
-      const prev = byCurrency.get(code);
-      const add = s.endBalance ?? 0;
-      if (!prev) byCurrency.set(code, { sum: add, scale });
-      else byCurrency.set(code, { sum: prev.sum + add, scale: prev.scale });
-    }
-    const parts = [...byCurrency.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([code, { sum, scale }]) => formatWalletAmount(sum, code, scale));
-    return parts.length > 0 ? parts.join(', ') : '—';
-  }, [dashboard?.grandTotalConverted, displayAssetCode, displayAssetScale, hasDisplayCurrency, summaries]);
+  const amountMaskSx = undefined;
 
   const replaceWidgetOrder = useMutation({
     mutationFn: async (nextGlobal: string[]) => {
@@ -989,89 +923,42 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     setCorrectionWallet(w);
   };
 
-  const handleDisplayCurrencyChange = async (nextAssetId: string) => {
-    if (!trackerId || nextAssetId === selectedDisplayAssetId) return;
-    const previousDisplayAssetId = selectedDisplayAssetId;
-    if (nextAssetId === '') {
-      setSuppressConvertedUiUntilClear(true);
-    } else {
-      setSuppressConvertedUiUntilClear(false);
-    }
-    setSelectedDisplayAssetId(nextAssetId);
-    setDisplayCurrencySubmitting(true);
-    try {
-      const res = await expenseTrackerUpdate(trackerId, {
-        preferredDisplayAssetId: nextAssetId ? nextAssetId : null,
-      } as Parameters<typeof expenseTrackerUpdate>[1]);
-      if (res.status < 200 || res.status >= 300) {
-        enqueueSnackbar(apiErrorMessage(res.data, 'Display měnu se nepodařilo uložit'), { variant: 'error' });
-        setSelectedDisplayAssetId(previousDisplayAssetId);
-        setSuppressConvertedUiUntilClear(false);
-        return;
-      }
-      enqueueSnackbar('Display měna byla uložena', { variant: 'success' });
-      if (!nextAssetId) {
-        queryClient.setQueryData(
-          getExpenseTrackerFindByIdQueryKey(trackerId),
-          (prev: ExpenseTrackerResponseDto | undefined) =>
-            prev ? { ...prev, preferredDisplayAssetId: undefined, preferredDisplayAssetCode: undefined } : prev,
-        );
-      }
-      await queryClient.refetchQueries({ queryKey: getExpenseTrackerFindByIdQueryKey(trackerId) });
-      await queryClient.refetchQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/expense-trackers/mine'] });
-    } catch {
-      enqueueSnackbar('Display měnu se nepodařilo uložit', { variant: 'error' });
-      setSelectedDisplayAssetId(previousDisplayAssetId);
-      setSuppressConvertedUiUntilClear(false);
-    } finally {
-      setDisplayCurrencySubmitting(false);
-    }
-  };
-
   return (
     <Box>
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         spacing={1}
-        alignItems={{ xs: 'flex-start', sm: 'baseline' }}
+        alignItems={{ xs: 'stretch', sm: 'center' }}
         justifyContent="space-between"
         flexWrap="wrap"
         sx={{ mb: 1 }}
       >
-        <PageHeading component="h1" gutterBottom={false}>
-          {trackerName}
-        </PageHeading>
-        <Typography variant="body2" component="p" sx={{ m: 0 }}>
-          <Box component="span" sx={{ color: 'text.secondary', mr: 0.5 }}>
-            Celkové prostředky:
-          </Box>
-          <Box
-            component="span"
-            sx={{
-              fontWeight: 600,
-              fontVariantNumeric: 'tabular-nums',
-              color: 'text.primary',
-              ...amountMaskSx,
-            }}
-          >
-            {rangeParamsOk && !rangeOrderInvalid ? totalFundsDisplayText : '—'}
-          </Box>
-          <Tooltip title={showAmounts ? 'Skrýt částky' : 'Zobrazit částky'}>
-            <IconButton
-              size="small"
-              onClick={() => setShowAmounts((prev) => !prev)}
-              aria-label={showAmounts ? 'Skrýt částky' : 'Zobrazit částky'}
-              sx={{ ml: 0.5, verticalAlign: 'middle' }}
-            >
-              {showAmounts ? <VisibilityOutlinedIcon fontSize="small" /> : <VisibilityOffOutlinedIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
-        </Typography>
-      </Stack>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 1, mt: 2 }}>
         <PageHeading component="h2">Moje pozice</PageHeading>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { xs: 'stretch', sm: 'center' }, width: { xs: '100%', sm: 'auto' } }}>
+      </Stack>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={2}
+        alignItems={{ xs: 'stretch', sm: 'center' }}
+        useFlexGap
+        sx={{ mb: 2, width: '100%' }}
+      >
+        <Box sx={{ flex: { sm: '0 1 auto' }, minWidth: 0 }}>
+          <MonthDateRangePicker
+            from={rangeFrom}
+            to={rangeTo}
+            onChangeFrom={setRangeFrom}
+            onChangeTo={setRangeTo}
+            onChangeRange={({ from, to }) => {
+              setRangeFrom(from);
+              setRangeTo(to);
+            }}
+          />
+        </Box>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1}
+          sx={{ alignItems: { xs: 'stretch', sm: 'center' }, width: { xs: '100%', sm: 'auto' } }}
+        >
           <Button
             variant="outlined"
             startIcon={<AccountBalanceOutlinedIcon />}
@@ -1092,68 +979,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
             Přidat pozici
           </Button>
         </Stack>
-      </Stack>
-
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={2}
-        alignItems={{ xs: 'stretch', sm: 'center' }}
-        useFlexGap
-        sx={{ mb: 2, width: '100%' }}
-      >
-        <Box sx={{ flex: { sm: '0 1 auto' }, minWidth: 0 }}>
-          <MonthDateRangePicker
-            from={rangeFrom}
-            to={rangeTo}
-            onChangeFrom={setRangeFrom}
-            onChangeTo={setRangeTo}
-            onChangeRange={({ from, to }) => {
-              setRangeFrom(from);
-              setRangeTo(to);
-            }}
-          />
-        </Box>
-        <Box
-          sx={{
-            display: { xs: 'none', sm: 'block' },
-            flex: { sm: 1 },
-            minWidth: { sm: 16 },
-          }}
-          aria-hidden
-        />
-        <FormControl
-          size="small"
-          sx={{
-            minWidth: { xs: '100%', sm: 260 },
-            width: { xs: '100%', sm: 'auto' },
-            alignSelf: { xs: 'stretch', sm: 'center' },
-            flexShrink: 0,
-          }}
-        >
-          <InputLabel id="display-currency-select-label">Display měna</InputLabel>
-          <Select
-            labelId="display-currency-select-label"
-            label="Display měna"
-            value={selectedDisplayAssetId}
-            disabled={displayCurrencySubmitting || displayCurrencyOptions.length === 0}
-            onChange={(e) => {
-              void handleDisplayCurrencyChange(e.target.value);
-            }}
-          >
-            <MenuItem value="">Bez konverze</MenuItem>
-            {popularDisplayCurrencyOptions.map((asset) => (
-              <MenuItem key={asset.id} value={asset.id}>
-                {asset.code} - {asset.name}
-              </MenuItem>
-            ))}
-            {otherDisplayCurrencyOptions.length > 0 && <Divider />}
-            {otherDisplayCurrencyOptions.map((asset) => (
-              <MenuItem key={asset.id} value={asset.id}>
-                {asset.code} - {asset.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
       </Stack>
       {rangeOrderInvalid && (
         <Typography color="error" variant="body2" sx={{ mb: 2 }}>

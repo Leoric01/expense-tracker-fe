@@ -69,7 +69,8 @@ export const router = createBrowserRouter([
       { path: 'importy', element: <Navigate to="/prehled?tab=importy" replace /> },
       { path: 'exporty', element: <Navigate to="/prehled?tab=exporty" replace /> },
       { path: 'wallets', element: <Navigate to="/prehled" replace /> },
-      { path: 'transactions', element: <TransactionsPage /> },
+      { path: 'transactions', element: <Navigate to="/transactions/history" replace /> },
+      { path: 'transactions/history', element: <TransactionsPage /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */
       { path: 'settings', element: <Profile /> },
       { path: 'profile', element: <Navigate to="/settings" replace /> },
