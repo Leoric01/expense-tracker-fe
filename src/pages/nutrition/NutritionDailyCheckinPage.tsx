@@ -101,7 +101,7 @@ export const NutritionDailyCheckinPage: FC = () => {
     enabled: !!trackerId,
     queryFn: async (): Promise<NutritionTargetResponseDto | null> => {
       const res = await nutritionTargetFindCurrent(trackerId!);
-      if (res.status === 404) {
+      if ((res.status as number) === 404) {
         return null;
       }
       if (res.status !== 200) {
@@ -116,7 +116,7 @@ export const NutritionDailyCheckinPage: FC = () => {
     enabled: !!trackerId,
     queryFn: async (): Promise<DailyNutritionLogResponseDto | null> => {
       const res = await dailyNutritionLogFindByDate(trackerId!, logDateStr);
-      if (res.status === 404) {
+      if ((res.status as number) === 404) {
         return null;
       }
       if (res.status !== 200) {
@@ -131,7 +131,7 @@ export const NutritionDailyCheckinPage: FC = () => {
     enabled: !!trackerId,
     queryFn: async (): Promise<DailyBodyMeasurementLogResponseDto | null> => {
       const res = await dailyBodyMeasurementLogFindByDate(trackerId!, logDateStr);
-      if (res.status === 404) {
+      if ((res.status as number) === 404) {
         return null;
       }
       if (res.status !== 200) {

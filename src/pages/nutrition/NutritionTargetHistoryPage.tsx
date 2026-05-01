@@ -101,7 +101,7 @@ function ReasonBadges({ row }: { row: NutritionTargetResponseDto }) {
 
 async function fetchCurrentTarget(trackerId: string): Promise<NutritionTargetResponseDto | null> {
   const res = await nutritionTargetFindCurrent(trackerId);
-  if (res.status === 404) {
+  if ((res.status as number) === 404) {
     return null;
   }
   if (res.status !== 200) {

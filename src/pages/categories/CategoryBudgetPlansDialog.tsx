@@ -104,14 +104,18 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
   const [createName, setCreateName] = useState('');
   const [createAmountCanon, setCreateAmountCanon] = useState('');
   const [createCurrency, setCreateCurrency] = useState('CZK');
-  const [createPeriod, setCreatePeriod] = useState(CreateBudgetPlanRequestDtoPeriodType.MONTHLY);
+  const [createPeriod, setCreatePeriod] = useState<CreateBudgetPlanRequestDtoPeriodType>(
+    CreateBudgetPlanRequestDtoPeriodType.MONTHLY,
+  );
   const [createValidFrom, setCreateValidFrom] = useState('');
   const [createValidTo, setCreateValidTo] = useState('');
 
   const [editName, setEditName] = useState('');
   const [editAmountCanon, setEditAmountCanon] = useState('');
   const [editCurrency, setEditCurrency] = useState('CZK');
-  const [editPeriod, setEditPeriod] = useState(UpdateBudgetPlanRequestDtoPeriodType.MONTHLY);
+  const [editPeriod, setEditPeriod] = useState<UpdateBudgetPlanRequestDtoPeriodType>(
+    UpdateBudgetPlanRequestDtoPeriodType.MONTHLY,
+  );
   const [editValidFrom, setEditValidFrom] = useState('');
   const [editValidTo, setEditValidTo] = useState('');
 

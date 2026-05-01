@@ -104,7 +104,7 @@ export const HabitFormPage: FC = () => {
     enabled: isEdit && !!trackerId && !!habitId,
     queryFn: async ({ signal }) => {
       const res = await habitFindById(trackerId, habitId!, { signal });
-      if (res.status === 404) {
+      if ((res.status as number) === 404) {
         throw new Error('NOT_FOUND');
       }
       if (res.status < 200 || res.status >= 300) {

@@ -82,7 +82,9 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
   const [cName, setCName] = useState('');
   const [cAmount, setCAmount] = useState('');
   const [cCurrency, setCCurrency] = useState('CZK');
-  const [cPeriod, setCPeriod] = useState(CreateRecurringBudgetRequestDtoPeriodType.MONTHLY);
+  const [cPeriod, setCPeriod] = useState<CreateRecurringBudgetRequestDtoPeriodType>(
+    CreateRecurringBudgetRequestDtoPeriodType.MONTHLY,
+  );
   const [cInterval, setCInterval] = useState('1');
   const [cStart, setCStart] = useState('');
   const [cEnd, setCEnd] = useState('');
@@ -90,7 +92,9 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
   const [eName, setEName] = useState('');
   const [eAmount, setEAmount] = useState('');
   const [eCurrency, setECurrency] = useState('CZK');
-  const [ePeriod, setEPeriod] = useState(UpdateRecurringBudgetRequestDtoPeriodType.MONTHLY);
+  const [ePeriod, setEPeriod] = useState<UpdateRecurringBudgetRequestDtoPeriodType>(
+    UpdateRecurringBudgetRequestDtoPeriodType.MONTHLY,
+  );
   const [eInterval, setEInterval] = useState('1');
   const [eStart, setEStart] = useState('');
   const [eEnd, setEEnd] = useState('');

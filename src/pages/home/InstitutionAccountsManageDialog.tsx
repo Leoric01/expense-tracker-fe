@@ -78,12 +78,16 @@ export const InstitutionAccountsManageDialog: FC<Props> = ({ trackerId, open, on
   const queryClient = useQueryClient();
 
   const [newInstName, setNewInstName] = useState('');
-  const [newInstType, setNewInstType] = useState(CreateInstitutionRequestDtoInstitutionType.PERSONAL);
+  const [newInstType, setNewInstType] = useState<CreateInstitutionRequestDtoInstitutionType>(
+    CreateInstitutionRequestDtoInstitutionType.PERSONAL,
+  );
   const [instSubmitting, setInstSubmitting] = useState(false);
 
   const [expandedAddAccountInstId, setExpandedAddAccountInstId] = useState<string | null>(null);
   const [newAccName, setNewAccName] = useState('');
-  const [newAccType, setNewAccType] = useState(CreateAccountRequestDtoAccountType.CASH);
+  const [newAccType, setNewAccType] = useState<CreateAccountRequestDtoAccountType>(
+    CreateAccountRequestDtoAccountType.CASH,
+  );
   const [accSubmitting, setAccSubmitting] = useState(false);
 
   const { data: instPaged } = useQuery({
