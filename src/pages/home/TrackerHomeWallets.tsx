@@ -579,7 +579,12 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   }, [summaries]);
 
   const orderedHoldingsForCategories = useMemo(
-    () => institutionCards.flatMap((c) => c.accounts.flatMap((a) => a.holdings.map((h) => h.wallet))),
+    () =>
+      institutionCards.flatMap((c) =>
+        c.accounts.flatMap((a) =>
+          a.holdings.map((h) => ({ ...h.wallet, assetScale: h.summary.assetScale })),
+        ),
+      ),
     [institutionCards],
   );
 

@@ -792,6 +792,16 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   };
 
   const convertedNetAmount = totals?.converted?.netAmount;
+  const netTotalsByAsset = (totals?.byAsset ?? [])
+    .filter((row) => row.netAmount != null)
+    .map((row) => {
+      const code = row.assetCode?.trim().toUpperCase() || 'CZK';
+      return {
+        key: `${code}-${row.netAmount}`,
+        amount: row.netAmount ?? 0,
+        text: formatAssetAmount(row.netAmount, code, row.assetScale),
+      };
+    });
 
   const sortDirectionFor = (field: SortField): SortDirection => {
     return txSort?.field === field ? txSort.direction : 'asc';
@@ -918,28 +928,46 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
               sx={{
                 fontWeight: 600,
                 fontVariantNumeric: 'tabular-nums',
-                color:
-                  convertedNetAmount == null
-                    ? theme.palette.text.secondary
-                    : convertedNetAmount < 0
-                      ? theme.palette.error.main
-                      : convertedNetAmount > 0
-                        ? theme.palette.success.main
-                        : theme.palette.text.primary,
               }}
             >
               <Stack component="span" spacing={0.25}>
-                {formatTotalsByAsset('netAmount').length > 0 ? (
-                  formatTotalsByAsset('netAmount').map((part) => (
-                    <Box component="span" key={part}>
-                      {part}
+                {netTotalsByAsset.length > 0 ? (
+                  netTotalsByAsset.map((part) => (
+                    <Box
+                      component="span"
+                      key={part.key}
+                      sx={{
+                        color:
+                          part.amount < 0
+                            ? theme.palette.error.main
+                            : part.amount > 0
+                              ? theme.palette.success.main
+                              : theme.palette.text.primary,
+                      }}
+                    >
+                      {part.text}
                     </Box>
                   ))
                 ) : (
-                  <Box component="span">—</Box>
+                  <Box component="span" sx={{ color: theme.palette.text.secondary }}>
+                    —
+                  </Box>
                 )}
                 {formatConvertedTotal('netAmount') ? (
-                  <Typography component="span" variant="caption" color="text.secondary">
+                  <Typography
+                    component="span"
+                    variant="caption"
+                    sx={{
+                      color:
+                        convertedNetAmount == null
+                          ? theme.palette.text.secondary
+                          : convertedNetAmount < 0
+                            ? theme.palette.error.main
+                            : convertedNetAmount > 0
+                              ? theme.palette.success.main
+                              : theme.palette.text.primary,
+                    }}
+                  >
                     {formatConvertedTotal('netAmount')}
                   </Typography>
                 ) : null}

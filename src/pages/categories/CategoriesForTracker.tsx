@@ -86,7 +86,7 @@ import {
 } from './categoryBudgetUsage';
 import { holdingToWalletDto } from '@pages/home/holdingAdapter';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
-import { majorToMinorUnits } from '@utils/moneyMinorUnits';
+import { DEFAULT_FIAT_SCALE, majorToMinorUnitsForScale } from '@utils/moneyMinorUnits';
 import {
   asCategoryChildren,
   budgetsByCategoryIdFromFlat,
@@ -124,6 +124,10 @@ type BulkDraftNode = {
 type BulkPreviewRow = {
   name: string;
   level: number;
+};
+
+type WalletOption = WalletResponseDto & {
+  assetScale?: number;
 };
 
 function parseBulkCategoryText(
@@ -241,7 +245,7 @@ export type CategoriesForTrackerProps = {
   trackerId: string;
   trackerName: string;
   /** Volitelné pozice z rodiče (např. dashboard na Domě) pro vynechání extra `holdingFindAll`. */
-  walletsFromParent?: WalletResponseDto[];
+  walletsFromParent?: WalletOption[];
   /** V záložce na Domě — bez vlastního hlavního nadpisu „Kategorie“. */
   embedded?: boolean;
   /** Když false, dotaz na kategorie neběží (řetězení po peněženkách na Domě). */
@@ -629,9 +633,14 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     }
     const holdings = walletsData?.content ?? [];
     return holdings
-      .map((h) => holdingToWalletDto(h))
+      .map((h): WalletOption => ({ ...holdingToWalletDto(h), assetScale: h.assetScale }))
       .filter((w) => w.active !== false && w.id);
   }, [walletsFromParent, walletsData]);
+
+  const quickTxWallet = useMemo(
+    () => activeWallets.find((w) => w.id === quickTxWalletId),
+    [activeWallets, quickTxWalletId],
+  );
 
   const openCreateRoot = useCallback(() => {
     setCreateMode({ type: 'root' });
@@ -901,6 +910,13 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
       enqueueSnackbar('Zadej kladnou částku', { variant: 'warning' });
       return;
     }
+    const amountScale = quickTxWallet?.assetScale ?? DEFAULT_FIAT_SCALE;
+    const amountMinor = majorToMinorUnitsForScale(amount, amountScale);
+    if (amountMinor <= 0) {
+      const code = quickTxWallet?.currencyCode?.trim().toUpperCase() || 'měny';
+      enqueueSnackbar(`Částka je menší než nejmenší jednotka ${code}.`, { variant: 'warning' });
+      return;
+    }
     const txDateIso = toIsoFromDatetimeLocal(quickTxWhen);
     if (!txDateIso) {
       enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', { variant: 'warning' });
@@ -918,7 +934,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     const payload: CreateTransactionRequestDto = {
       categoryId: quickTxCategory.id,
       holdingId: quickTxWalletId,
-      amount: majorToMinorUnits(amount),
+      amount: amountMinor,
       transactionDate: txDateIso,
       transactionType:
         kind === CreateCategoryRequestDtoCategoryKind.EXPENSE
@@ -1329,6 +1345,11 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                 fullWidth
                 size="small"
                 inputMode="decimal"
+                helperText={
+                  quickTxWallet?.currencyCode?.trim().toUpperCase() === 'BTC'
+                    ? '1 satoshi zadej jako 0,00000001 BTC.'
+                    : undefined
+                }
               />
               <TextField
                 label="Datum a čas"
