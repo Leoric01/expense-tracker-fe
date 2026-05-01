@@ -54,12 +54,15 @@ import {
   formatDateTimeDdMmYyyyHhMm,
   toIsoFromDateTimeInput,
 } from '@utils/dateTimeCs';
+import { DEFAULT_FIAT_SCALE, majorToMinorUnitsForScale, minorUnitsToMajorForScale } from '@utils/moneyMinorUnits';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FC, Fragment, type ChangeEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { asCategoryChildren, toCategoryTree } from '@pages/categories/categoryTreeUtils';
 import { holdingLabel } from './holdingAdapter';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useSnackbar } from 'notistack';
+import { AmountTextFieldCs } from './AmountTextFieldCs';
+import { parseAmount } from './transactionFormUtils';
 
 /** Všechny podkategorie (ne kořeny) v pořadí stromu DFS s hloubkou pro odsazení v menu. */
 function buildSubcategoryMenuRows(tree: CategoryResponseDto[]): { id: string; label: string; depth: number }[] {
@@ -73,6 +76,24 @@ function buildSubcategoryMenuRows(tree: CategoryResponseDto[]): { id: string; la
     }
   };
   for (const r of tree) walk(r, 0);
+  return rows;
+}
+
+/** Všechny kategorie v pořadí stromu DFS; label drží celou cestu kvůli duplicitním názvům. */
+function buildCategoryMenuRows(
+  tree: CategoryResponseDto[],
+): { id: string; label: string; depth: number }[] {
+  const rows: { id: string; label: string; depth: number }[] = [];
+  const walk = (node: CategoryResponseDto, depth: number, path: string[]) => {
+    if (!node.id) return;
+    const name = node.name?.trim() || node.id;
+    const nextPath = [...path, name];
+    rows.push({ id: node.id, label: nextPath.join(' / '), depth });
+    for (const child of asCategoryChildren(node.children)) {
+      walk(child, depth + 1, nextPath);
+    }
+  };
+  for (const root of tree) walk(root, 0, []);
   return rows;
 }
 
@@ -130,6 +151,18 @@ const TYPE_COL_SX = {
   pr: 0.5,
 };
 
+const STATUS_COL_SX = {
+  width: 84,
+  minWidth: 84,
+  maxWidth: 84,
+  boxSizing: 'border-box' as const,
+  whiteSpace: 'nowrap' as const,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  pl: 0,
+  pr: 0.5,
+};
+
 const WALLET_COL_SX = {
   maxWidth: 214,
   overflow: 'hidden',
@@ -178,6 +211,19 @@ function statusLabel(s?: string): string {
       return 'Zrušeno';
     default:
       return s ?? '—';
+  }
+}
+
+function statusColor(s: string | undefined, theme: Theme): string {
+  switch (s) {
+    case TransactionPageItemResponseDtoStatus.COMPLETED:
+      return theme.palette.success.main;
+    case TransactionPageItemResponseDtoStatus.CANCELLED:
+      return theme.palette.error.main;
+    case TransactionPageItemResponseDtoStatus.PENDING:
+      return theme.palette.warning.main;
+    default:
+      return theme.palette.text.secondary;
   }
 }
 
@@ -427,6 +473,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const [editHoldingId, setEditHoldingId] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const [editCurrencyCode, setEditCurrencyCode] = useState('');
+  const [editAssetScale, setEditAssetScale] = useState<number | undefined>();
   const [editExchangeRate, setEditExchangeRate] = useState('');
   const [editFeeAmount, setEditFeeAmount] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
@@ -502,8 +549,10 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const openEditDialog = useCallback((row: TransactionRow) => {
     setEditingTx(row);
     setEditHoldingId(row.holdingId ?? '');
-    setEditAmount(row.amount != null ? String(row.amount) : '');
+    const amountMajor = minorUnitsToMajorForScale(row.amount, row.assetScale ?? DEFAULT_FIAT_SCALE);
+    setEditAmount(amountMajor == null || !Number.isFinite(amountMajor) ? '' : String(amountMajor));
     setEditCurrencyCode(row.assetCode ?? '');
+    setEditAssetScale(row.assetScale);
     setEditExchangeRate(row.exchangeRate != null ? String(row.exchangeRate) : '');
     setEditFeeAmount(row.feeAmount != null ? String(row.feeAmount) : '');
     setEditCategoryId(row.categoryId ?? '');
@@ -539,14 +588,21 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     };
 
     let amount: number | undefined;
+    let amountMinor: number | undefined;
     let exchangeRate: number | undefined;
     let feeAmount: number | undefined;
     try {
-      amount = parseOptionalNumber(editAmount, 'Částka');
+      amount = parseAmount(editAmount);
+      amountMinor =
+        amount != null ? majorToMinorUnitsForScale(amount, editAssetScale ?? DEFAULT_FIAT_SCALE) : undefined;
       exchangeRate = parseOptionalNumber(editExchangeRate, 'Kurz');
       feeAmount = parseOptionalNumber(editFeeAmount, 'Fee');
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Neplatná číselná hodnota.');
+      return;
+    }
+    if (amount != null && (amount <= 0 || amountMinor == null || amountMinor <= 0)) {
+      setEditError('Částka musí být kladná a alespoň jedna nejmenší jednotka vybrané měny.');
       return;
     }
 
@@ -555,7 +611,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     try {
       const payload: UpdateTransactionRequestDto = {
         ...(editHoldingId ? { holdingId: editHoldingId } : {}),
-        ...(amount != null ? { amount } : {}),
+        ...(amountMinor != null ? { amount: amountMinor } : {}),
         ...(editCurrencyCode.trim() ? { currencyCode: editCurrencyCode.trim().toUpperCase() } : {}),
         ...(exchangeRate != null ? { exchangeRate } : {}),
         ...(feeAmount != null ? { feeAmount } : {}),
@@ -580,6 +636,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     }
   }, [
     editAmount,
+    editAssetScale,
     editCategoryId,
     editCurrencyCode,
     editDateCs,
@@ -713,6 +770,10 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     () => buildSubcategoryMenuRows(categoryTree),
     [categoryTree],
   );
+  const allCategorySelectOptions = useMemo(
+    () => buildCategoryMenuRows(categoryTree),
+    [categoryTree],
+  );
 
   const categorySelectOptions = useMemo(
     () =>
@@ -726,7 +787,12 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     () =>
       holdings
         .filter((h): h is HoldingResponseDto & { id: string } => Boolean(h.id))
-        .map((h) => ({ id: h.id!, label: holdingLabel(h) })),
+        .map((h) => ({
+          id: h.id!,
+          label: holdingLabel(h),
+          assetCode: h.assetCode,
+          assetScale: h.assetScale,
+        })),
     [holdings],
   );
 
@@ -1083,6 +1149,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
                 Typ
               </TableSortLabel>
             </TableCell>
+            <TableCell sx={STATUS_COL_SX}>Stav</TableCell>
             <TableCell sx={WALLET_COL_SX}>
               <TableSortLabel
                 active={txSort?.field === 'holding'}
@@ -1095,7 +1162,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
             <TableCell sx={ROOT_CATEGORY_COL_SX}>Hlavní kategorie</TableCell>
             <TableCell>Kategorie</TableCell>
             <TableCell sx={DESCRIPTION_COL_SX}>Popis</TableCell>
-            <TableCell align="right" sx={{ width: 170, whiteSpace: 'nowrap' }}>
+            <TableCell align="right" sx={{ width: 165, whiteSpace: 'nowrap' }}>
               <TableSortLabel
                 active={txSort?.field === 'amount'}
                 direction={sortDirectionFor('amount')}
@@ -1109,7 +1176,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
         <TableBody>
           {recentTx.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7}>
+              <TableCell colSpan={8}>
                 <Typography color="text.secondary">
                   {isPending ? 'Načítání…' : 'Žádné záznamy pro zvolené filtry.'}
                 </Typography>
@@ -1143,6 +1210,16 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
                     >
                       {txTypeLabel(row.transactionType as string | undefined)}
                     </TableCell>
+                    <TableCell
+                      sx={{
+                        ...STATUS_COL_SX,
+                        fontWeight: 600,
+                        color: statusColor(row.status, theme),
+                      }}
+                      title={statusLabel(row.status)}
+                    >
+                      {statusLabel(row.status)}
+                    </TableCell>
                     <TableCell sx={WALLET_COL_SX} title={walletLabel}>
                       {walletLabel}
                     </TableCell>
@@ -1157,7 +1234,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
                     <TableCell
                       align="right"
                       sx={{
-                        width: 170,
+                        width: 165,
                         whiteSpace: 'nowrap',
                         fontWeight: 600,
                         color: amountColorForType(row.transactionType as string | undefined, theme),
@@ -1181,7 +1258,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={7} sx={{ py: 0, borderBottom: open ? undefined : 'none' }}>
+                    <TableCell colSpan={8} sx={{ py: 0, borderBottom: open ? undefined : 'none' }}>
                       <Collapse in={open} timeout="auto" unmountOnExit>
                         <TransactionDetailBlock
                           row={row}
@@ -1227,20 +1304,24 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
               options={holdingSelectOptions}
               getOptionLabel={(o) => o.label}
               value={holdingSelectOptions.find((o) => o.id === editHoldingId) ?? null}
-              onChange={(_, v) => setEditHoldingId(v?.id ?? '')}
+              onChange={(_, v) => {
+                setEditHoldingId(v?.id ?? '');
+                setEditAssetScale(v?.assetScale);
+                if (v?.assetCode) setEditCurrencyCode(v.assetCode);
+              }}
               isOptionEqualToValue={(a, b) => a.id === b.id}
               filterOptions={filterOptionsByQuery}
               noOptionsText="Žádná shoda"
               renderInput={(params) => <TextField {...params} label="Pozice" />}
             />
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
+              <AmountTextFieldCs
                 label="Částka"
-                value={editAmount}
-                onChange={(e) => setEditAmount(e.target.value)}
+                canonical={editAmount}
+                setCanonical={setEditAmount}
                 fullWidth
-                inputMode="decimal"
                 error={Boolean(editError)}
+                helperText="Částka v hlavních jednotkách vybrané měny"
               />
               <TextField
                 label="Měna"
@@ -1268,13 +1349,18 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
             </Stack>
             <Autocomplete
               size="small"
-              options={categorySelectOptions}
+              options={allCategorySelectOptions}
               getOptionLabel={(o) => o.label}
-              value={categorySelectOptions.find((o) => o.id === editCategoryId) ?? null}
+              value={allCategorySelectOptions.find((o) => o.id === editCategoryId) ?? null}
               onChange={(_, v) => setEditCategoryId(v?.id ?? '')}
               isOptionEqualToValue={(a, b) => a.id === b.id}
               filterOptions={filterOptionsByQuery}
               noOptionsText="Žádná shoda"
+              renderOption={(props, option) => (
+                <Box component="li" {...props} key={option.id} sx={{ pl: 2 + option.depth * 2 }}>
+                  {option.label}
+                </Box>
+              )}
               renderInput={(params) => <TextField {...params} label="Kategorie" />}
             />
             <TextField
