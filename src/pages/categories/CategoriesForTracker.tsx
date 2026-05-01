@@ -68,10 +68,10 @@ import { useSnackbar } from 'notistack';
 import * as React from 'react';
 import {
   FC,
-  FormEvent,
   Fragment,
   memo,
   type ReactNode,
+  type SubmitEvent,
   startTransition,
   useCallback,
   useMemo,
@@ -786,7 +786,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     [flat],
   );
 
-  const handleCreate = async (e: FormEvent) => {
+  const handleCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     const name = formName.trim();
     if (!name) {
@@ -825,7 +825,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     }
   };
 
-  const handleBulkCreate = async (e: FormEvent) => {
+  const handleBulkCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     const kind = bulkKind === CreateCategoryRequestDtoCategoryKind.INCOME ? 'INCOME' : 'EXPENSE';
     const parsed = parseBulkCategoryText(bulkText, kind, nextSortOrderForParent(undefined));
@@ -888,7 +888,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     [trackerId, enqueueSnackbar, invalidate],
   );
 
-  const handleUpdate = async (e: FormEvent) => {
+  const handleUpdate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!editState?.category?.id) return;
     const name = formName.trim();
@@ -956,7 +956,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     setDeleteId(id);
   }, []);
 
-  const handleQuickTxSubmit = async (e: FormEvent) => {
+  const handleQuickTxSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!quickTxCategory?.id) return;
     if (!quickTxWalletId) {

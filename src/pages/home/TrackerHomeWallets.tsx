@@ -88,7 +88,7 @@ import {
 } from '@utils/moneyMinorUnits';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { DragEvent, FC, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DragEvent, FC, type SubmitEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BalanceCorrectionDialog, type BalanceCorrectionConfirmPayload } from './BalanceCorrectionDialog';
 import { TransferBetweenWalletsDialog, type TransferConfirmPayload } from './TransferBetweenWalletsDialog';
 import { assetSelectLabel, inferAssetMeta } from './holdingAdapter';
@@ -583,7 +583,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
     setNewMarketKey('');
   };
 
-  const handleNewAssetSubmit = async (e: FormEvent) => {
+  const handleNewAssetSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     const code = newAssetCode.trim().toUpperCase();
     const nm = newAssetName.trim() || code;
@@ -672,7 +672,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
     }
   };
 
-  const handleCreate = async (e: FormEvent) => {
+  const handleCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!selectedInstitution?.id) {
       enqueueSnackbar('Vyber instituci', { variant: 'warning' });

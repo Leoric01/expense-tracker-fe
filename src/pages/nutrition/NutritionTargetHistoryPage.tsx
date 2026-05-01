@@ -39,7 +39,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/cs';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
+import { FC, type SubmitEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 function formatKcal(n: number | undefined) {
@@ -257,7 +257,7 @@ export const NutritionTargetHistoryPage: FC = () => {
     return Number.isFinite(n) ? n : undefined;
   };
 
-  const handleOverrideSubmit = (e: FormEvent) => {
+  const handleOverrideSubmit = (e: SubmitEvent) => {
     e.preventDefault();
     if (!goalPlanIdForOverride) {
       enqueueSnackbar('Chybí aktivní cílový plán', { variant: 'warning' });

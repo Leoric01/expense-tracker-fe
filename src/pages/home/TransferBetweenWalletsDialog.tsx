@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { WalletResponseDto } from '@api/model';
-import { FormEvent, memo, useEffect, useState } from 'react';
+import { type SubmitEvent, memo, useEffect, useState } from 'react';
 import { AmountTextFieldCs } from './AmountTextFieldCs';
 import { defaultDatetimeLocal, formatAmountDisplayCs, parseAmount, toIsoFromDatetimeLocal } from './transactionFormUtils';
 
@@ -58,7 +58,7 @@ export const TransferBetweenWalletsDialog = memo(function TransferBetweenWallets
 
   const amountDisplay = formatAmountDisplayCs(amountCanonical);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!transferCurrenciesOk) return;
     const amountMajor = parseAmount(amountDisplay);

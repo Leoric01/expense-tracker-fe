@@ -44,7 +44,7 @@ import {
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useCallback, useMemo, useState } from 'react';
+import { FC, type SubmitEvent, useCallback, useMemo, useState } from 'react';
 import { ACCOUNT_TYPE_OPTIONS } from './walletDisplay';
 
 const LIST_PARAMS = { page: 0, size: 500 } as const;
@@ -140,7 +140,7 @@ export const InstitutionAccountsManageDialog: FC<Props> = ({ trackerId, open, on
     await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
   }, [queryClient, trackerId]);
 
-  const handleAddInstitution = async (e: FormEvent) => {
+  const handleAddInstitution = async (e: SubmitEvent) => {
     e.preventDefault();
     const nm = newInstName.trim();
     if (!nm) {
@@ -164,7 +164,7 @@ export const InstitutionAccountsManageDialog: FC<Props> = ({ trackerId, open, on
     }
   };
 
-  const handleAddAccount = async (e: FormEvent, institutionId: string) => {
+  const handleAddAccount = async (e: SubmitEvent, institutionId: string) => {
     e.preventDefault();
     const nm = newAccName.trim();
     if (!nm) {

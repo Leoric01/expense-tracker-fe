@@ -34,7 +34,7 @@ import {
 import { DEFAULT_FIAT_SCALE, majorToMinorUnitsForScale, minorUnitsToMajorForScale } from '@utils/moneyMinorUnits';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useState } from 'react';
+import { FC, type SubmitEvent, useState } from 'react';
 import { defaultDatetimeLocal, toIsoFromDatetimeLocal } from './transactionFormUtils';
 
 const HOLDING_LIST_PARAMS = { page: 0, size: 200 } as const;
@@ -364,7 +364,7 @@ export const TransactionsV2Panel: FC<Props> = ({ trackerId }) => {
     }));
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e: SubmitEvent) => {
     e.preventDefault();
     setLastResult(null);
 

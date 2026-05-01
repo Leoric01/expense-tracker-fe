@@ -14,7 +14,7 @@ import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { Box, Button, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useState } from 'react';
+import { FC, type SubmitEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const EXAMPLE_JSON_BY_NAME = `{
@@ -68,7 +68,7 @@ export const BudgetPlanImportPanel: FC<Props> = ({ trackerId }) => {
   const [responseBody, setResponseBody] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     setParseError(null);
     let parsed: unknown;

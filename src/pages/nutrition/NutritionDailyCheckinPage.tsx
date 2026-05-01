@@ -33,7 +33,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/cs';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
+import { FC, type SubmitEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 function parseNum(s: string): number | undefined {
@@ -185,7 +185,7 @@ export const NutritionDailyCheckinPage: FC = () => {
       ? target.targetCaloriesKcal - enteredCalories
       : null;
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!trackerId) {
       return;

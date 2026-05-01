@@ -31,7 +31,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/cs';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
+import { FC, type SubmitEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { HabitScheduleMatrix } from './HabitScheduleMatrix';
 import { parseOptionalMoneyKc } from './habitMoneyParse';
@@ -182,7 +182,7 @@ export const HabitFormPage: FC = () => {
 
   const saving = createMutation.isPending || updateMutation.isPending;
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = (e: SubmitEvent) => {
     e.preventDefault();
     if (!trackerId) {
       return;

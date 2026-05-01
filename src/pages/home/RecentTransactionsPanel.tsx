@@ -1254,7 +1254,9 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
         open={summaryOpen}
         onClose={() => setSummaryOpen(false)}
         maxWidth={false}
-        PaperProps={{ sx: { width: 'fit-content', maxWidth: 'calc(100vw - 32px)' } }}
+        slotProps={{
+          paper: { sx: { width: 'fit-content', maxWidth: 'calc(100vw - 32px)' } },
+        }}
       >
         <DialogTitle
           sx={{

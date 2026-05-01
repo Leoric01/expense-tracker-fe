@@ -13,7 +13,7 @@ import {
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useState } from 'react';
+import { FC, type SubmitEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthPageLayout } from './auth/AuthPageLayout';
 
@@ -28,7 +28,7 @@ export const Register: FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (password !== confirm) {
       enqueueSnackbar('Hesla se neshodují', { variant: 'warning' });

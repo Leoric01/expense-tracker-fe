@@ -49,7 +49,7 @@ import {
 } from '@utils/dateTimeCs';
 import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useCallback, useEffect, useState } from 'react';
+import { FC, type SubmitEvent, useCallback, useEffect, useState } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
 import { CategoryBudgetPlanUsageLine } from './categoryBudgetUsage';
 import { CategoryRecurringBudgetTab } from './CategoryRecurringBudgetTab';
@@ -156,7 +156,7 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
     setEditValidTo(isoToDdMmYyyyInput(editing.validTo));
   }, [editing]);
 
-  const handleCreate = async (e: FormEvent) => {
+  const handleCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!category?.id) return;
     const name = createName.trim();
@@ -217,7 +217,7 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
     }
   };
 
-  const handleUpdate = async (e: FormEvent) => {
+  const handleUpdate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!editing?.id || !category?.id) return;
     const name = editName.trim();

@@ -42,7 +42,7 @@ import {
 } from '@utils/dateTimeCs';
 import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useCallback, useEffect, useState } from 'react';
+import { FC, type SubmitEvent, useCallback, useEffect, useState } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
 import { intervalFieldHelperCs, recurringIntervalDescriptionCs } from './categoryRecurringBudgetIntervalText';
 
@@ -135,7 +135,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
     return n;
   };
 
-  const handleCreate = async (e: FormEvent) => {
+  const handleCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!category?.id) return;
     const name = cName.trim();
@@ -203,7 +203,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
     }
   };
 
-  const handleUpdate = async (e: FormEvent) => {
+  const handleUpdate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!editing?.id || !category?.id) return;
     const name = eName.trim();
