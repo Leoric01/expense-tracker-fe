@@ -322,6 +322,20 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
                 </ListItemButton>
               )}
             </NavLink>
+            <NavLink to="/importy" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Importy" />
+                </ListItemButton>
+              )}
+            </NavLink>
+            <NavLink to="/exporty" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Exporty" />
+                </ListItemButton>
+              )}
+            </NavLink>
             <ListItemButton
               selected={pathname.startsWith('/transactions')}
               onClick={onMobileClose}

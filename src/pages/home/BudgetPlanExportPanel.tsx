@@ -1,9 +1,11 @@
 import { budgetPlanExportBulk } from '@api/budget-plan-controller/budget-plan-controller';
 import { categoryExportBulk } from '@api/category-controller/category-controller';
+import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { Box, Button, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useSnackbar } from 'notistack';
 import { FC, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 type Props = {
   trackerId: string;
@@ -74,6 +76,28 @@ export const BudgetPlanExportPanel: FC<Props> = ({ trackerId }) => {
           </Box>
         )}
       </Stack>
+    </Box>
+  );
+};
+
+export const FinanceExportyPage: FC = () => {
+  const { selectedExpenseTracker } = useSelectedExpenseTracker();
+
+  if (selectedExpenseTracker?.id) {
+    return <BudgetPlanExportPanel trackerId={selectedExpenseTracker.id} />;
+  }
+
+  return (
+    <Box>
+      <Typography variant="h4" gutterBottom>
+        Exporty
+      </Typography>
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        Vyber rozpočet (tracker), aby bylo možné exportovat rozpočty a kategorie do JSON.
+      </Typography>
+      <Button component={Link} to="/trackers" variant="contained">
+        Moje trackery
+      </Button>
     </Box>
   );
 };

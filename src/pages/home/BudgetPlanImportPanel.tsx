@@ -9,11 +9,13 @@ import type {
   BulkBudgetImportRequestDto,
   CreateCategoryBulkRequestDto,
 } from '@api/model';
+import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { Box, Button, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { FC, FormEvent, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 const EXAMPLE_JSON_BY_NAME = `{
   "items": [
@@ -188,6 +190,28 @@ export const BudgetPlanImportPanel: FC<Props> = ({ trackerId }) => {
           </Box>
         )}
       </Stack>
+    </Box>
+  );
+};
+
+export const FinanceImportyPage: FC = () => {
+  const { selectedExpenseTracker } = useSelectedExpenseTracker();
+
+  if (selectedExpenseTracker?.id) {
+    return <BudgetPlanImportPanel trackerId={selectedExpenseTracker.id} />;
+  }
+
+  return (
+    <Box>
+      <Typography variant="h4" gutterBottom>
+        Importy
+      </Typography>
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        Vyber rozpočet (tracker), aby bylo možné importovat plán a kategorie z JSON.
+      </Typography>
+      <Button component={Link} to="/trackers" variant="contained">
+        Moje trackery
+      </Button>
     </Box>
   );
 };

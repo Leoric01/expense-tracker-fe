@@ -28,6 +28,8 @@ import { HabitWeekOverviewPage } from '@pages/habits/HabitWeekOverviewPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
 import { FinanceModuleLayout } from '@pages/finance/FinanceModuleLayout';
+import { FinanceExportyPage } from '@pages/home/BudgetPlanExportPanel';
+import { FinanceImportyPage } from '@pages/home/BudgetPlanImportPanel';
 import { TransactionsPage } from '@pages/TransactionsPage';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
@@ -47,6 +49,8 @@ export const router = createBrowserRouter([
         element: <FinanceModuleLayout />,
         children: [
           { path: 'prehled', element: <Home /> },
+          { path: 'importy', element: <FinanceImportyPage /> },
+          { path: 'exporty', element: <FinanceExportyPage /> },
           { path: 'categories', element: <CategoriesPage /> },
           {
             path: 'transactions',
@@ -79,8 +83,6 @@ export const router = createBrowserRouter([
           { path: ':habitId', element: <HabitDetailPage /> },
         ],
       },
-      { path: 'importy', element: <Navigate to="/prehled?tab=importy" replace /> },
-      { path: 'exporty', element: <Navigate to="/prehled?tab=exporty" replace /> },
       { path: 'wallets', element: <Navigate to="/prehled" replace /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */
       { path: 'settings', element: <Profile /> },
