@@ -11,6 +11,7 @@ import type {
 } from '@api/model';
 import {
   TransactionFindAllPageableRateMode,
+  TransactionFindAllPageableStatus,
   TransactionFindAllPageableTransactionType,
   TransactionPageItemResponseDtoBalanceAdjustmentDirection,
   TransactionPageItemResponseDtoStatus,
@@ -277,6 +278,39 @@ function formatConvertedAmount(row: TransactionRow): string | null {
   return formatAssetAmount(row.convertedAmount, row.convertedInto, row.convertedAssetScale);
 }
 
+function formatConvertedAmounts(row: TransactionRow): string[] {
+  const convertedInto = row.convertedInto?.trim();
+  if (!convertedInto) return [];
+  if (row.transactionType === TransactionPageItemResponseDtoTransactionType.TRANSFER) {
+    const parts: string[] = [];
+    if (row.convertedSourceAmount != null) {
+      parts.push(formatAssetAmount(row.convertedSourceAmount, convertedInto, row.convertedAssetScale));
+    }
+    if (row.convertedTargetAmount != null) {
+      parts.push(formatAssetAmount(row.convertedTargetAmount, convertedInto, row.convertedAssetScale));
+    }
+    if (parts.length > 0) return parts;
+  }
+  const convertedAmount = formatConvertedAmount(row);
+  return convertedAmount ? [convertedAmount] : [];
+}
+
+function formatTransactionAmountLines(row: TransactionRow): string[] {
+  if (row.transactionType !== TransactionPageItemResponseDtoTransactionType.TRANSFER) {
+    return [formatAssetAmount(row.amount, row.assetCode, row.assetScale)];
+  }
+  const sourceAssetCode = row.sourceHoldingAssetCode ?? row.assetCode;
+  const sourceAssetScale = row.sourceHoldingAssetScale ?? row.assetScale;
+  const targetAssetCode = row.targetHoldingAssetCode ?? row.assetCode;
+  const targetAssetScale = row.targetHoldingAssetScale ?? row.assetScale;
+  return [
+    formatAssetAmount(row.amount, sourceAssetCode, sourceAssetScale),
+    ...(row.settledAmount != null
+      ? [formatAssetAmount(row.settledAmount, targetAssetCode, targetAssetScale)]
+      : []),
+  ];
+}
+
 function holdingCellText(row: TransactionRow): string {
   const t = row.transactionType as string | undefined;
   if (t === TransactionPageItemResponseDtoTransactionType.TRANSFER) {
@@ -325,7 +359,7 @@ function TransactionDetailBlock({
   const t = row.transactionType as string | undefined;
   const attachments = row.attachments ?? [];
   const canCancel = Boolean(row.id) && row.status !== TransactionPageItemResponseDtoStatus.CANCELLED;
-  const convertedAmountText = formatConvertedAmount(row);
+  const convertedAmountParts = formatConvertedAmounts(row);
 
   return (
     <Box sx={{ py: 1.5, px: 0.5 }}>
@@ -368,7 +402,18 @@ function TransactionDetailBlock({
           {kv('Stav', statusLabel(row.status))}
           {kv('Typ', txTypeLabel(t))}
           {kv('Datum transakce', formatDateTimeDdMmYyyyHhMm(row.transactionDate))}
-          {kv('Částka', formatAssetAmount(row.amount, row.assetCode, row.assetScale))}
+          {kv(
+            'Částka',
+            formatAssetAmount(
+              row.amount,
+              t === TransactionPageItemResponseDtoTransactionType.TRANSFER
+                ? (row.sourceHoldingAssetCode ?? row.assetCode)
+                : row.assetCode,
+              t === TransactionPageItemResponseDtoTransactionType.TRANSFER
+                ? (row.sourceHoldingAssetScale ?? row.assetScale)
+                : row.assetScale,
+            ),
+          )}
           {kv(
             'Vypořádaná částka',
             row.settledAmount != null
@@ -398,7 +443,16 @@ function TransactionDetailBlock({
               : '—',
           )}
           {kv('Kurz', row.exchangeRate != null ? String(row.exchangeRate) : '—')}
-          {convertedAmountText ? kv('Přepočteno', convertedAmountText) : null}
+          {convertedAmountParts.length > 0
+            ? kv(
+                'Přepočteno',
+                <Stack component="span" spacing={0.25} sx={{ display: 'inline-flex', flexDirection: 'column' }}>
+                  {convertedAmountParts.map((part, idx) => (
+                    <span key={`${part}-${idx}`}>{part}</span>
+                  ))}
+                </Stack>,
+              )
+            : null}
           {row.balanceAdjustmentDirection
             ? kv('Směr korekce', balanceDirectionLabel(row.balanceAdjustmentDirection))
             : null}
@@ -470,6 +524,7 @@ const TX_TYPE_ORDER = [
 ] as const;
 
 type TypeFilterValue = '' | TransactionFindAllPageableTransactionType;
+type StatusFilterValue = '' | TransactionFindAllPageableStatus;
 
 function nextSortState(current: TxSortState, field: SortField): TxSortState {
   if (!current || current.field !== field) return { field, direction: 'desc' };
@@ -524,6 +579,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const [subCategoryId, setSubCategoryId] = useState('');
   const [holdingId, setHoldingId] = useState('');
   const [transactionType, setTransactionType] = useState<TypeFilterValue>('');
+  const [status, setStatus] = useState<StatusFilterValue>('');
   const [dateFilterCleared, setDateFilterCleared] = useState(false);
   const [txSort, setTxSort] = useState<TxSortState>({ field: 'date', direction: 'desc' });
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -542,6 +598,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     subCategoryId,
     holdingId,
     transactionType,
+    status,
     dateFromCs,
     dateToCs,
     rowsPerPage,
@@ -564,6 +621,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     setSubCategoryId('');
     setHoldingId('');
     setTransactionType('');
+    setStatus('');
     setDateFilterCleared(true);
     setRowsPerPage(100);
     setPage(0);
@@ -589,13 +647,13 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     const isTransfer = row.transactionType === TransactionPageItemResponseDtoTransactionType.TRANSFER;
     const srcScale = isTransfer ? (row.sourceHoldingAssetScale ?? row.assetScale ?? DEFAULT_FIAT_SCALE) : (row.assetScale ?? DEFAULT_FIAT_SCALE);
     const tgtScale = isTransfer ? (row.targetHoldingAssetScale ?? row.assetScale ?? DEFAULT_FIAT_SCALE) : (row.assetScale ?? DEFAULT_FIAT_SCALE);
-    const amountMajor = minorUnitsToMajorForScale(row.amount, row.assetScale ?? DEFAULT_FIAT_SCALE);
+    const amountMajor = minorUnitsToMajorForScale(row.amount, srcScale);
     setEditAmount(amountMajor == null || !Number.isFinite(amountMajor) ? '' : String(amountMajor));
     const settledMajor = minorUnitsToMajorForScale(row.settledAmount, tgtScale);
     setEditSettledAmount(settledMajor != null && Number.isFinite(settledMajor) ? String(settledMajor) : '');
     const feeMajor = minorUnitsToMajorForScale(row.feeAmount, srcScale);
     setEditFeeAmount(feeMajor != null && Number.isFinite(feeMajor) ? String(feeMajor) : '');
-    setEditCurrencyCode(row.assetCode ?? '');
+    setEditCurrencyCode(isTransfer ? (row.sourceHoldingAssetCode ?? row.assetCode ?? '') : (row.assetCode ?? ''));
     setEditAssetScale(row.assetScale);
     setEditSourceAssetScale(srcScale);
     setEditTargetAssetScale(tgtScale);
@@ -769,6 +827,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     else if (categoryId) params.categoryId = categoryId;
     if (holdingId) params.holdingId = holdingId;
     if (transactionType) params.transactionType = transactionType;
+    if (status) params.status = status;
 
     if (!dateFilterCleared && dateRangeEnabled) {
       const range = dateRangeDdMmYyyyToIsoParams(dateFromCs.trim(), dateToCs.trim());
@@ -787,6 +846,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     subCategoryId,
     holdingId,
     transactionType,
+    status,
     dateFromCs,
     dateToCs,
     dateFilterCleared,
@@ -859,6 +919,16 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
         id: v,
         value: v,
         label: txTypeLabel(v),
+      })),
+    [],
+  );
+
+  const statusSelectOptions = useMemo(
+    () =>
+      Object.values(TransactionFindAllPageableStatus).map((v) => ({
+        id: v,
+        value: v,
+        label: statusLabel(v),
       })),
     [],
   );
@@ -1067,7 +1137,19 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
             placeholder="Popis, poznámka…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            sx={{ minWidth: 200, flex: '1 1 200px' }}
+            sx={{ minWidth: 170, flex: '1 1 170px' }}
+          />
+          <Autocomplete
+            size="small"
+            options={statusSelectOptions}
+            getOptionLabel={(o) => o.label}
+            value={status ? statusSelectOptions.find((o) => o.value === status) ?? null : null}
+            onChange={(_, v) => setStatus((v?.value ?? '') as StatusFilterValue)}
+            isOptionEqualToValue={(a, b) => a.value === b.value}
+            filterOptions={filterOptionsByQuery}
+            noOptionsText="Žádná shoda"
+            renderInput={(params) => <TextField {...params} label="Stav" />}
+            sx={filterSelectSx}
           />
           <Autocomplete
             size="small"
@@ -1308,7 +1390,8 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
               const walletLabel = holdingCellText(row);
               const rowKey = row.id ?? `p${page}-i${index}`;
               const open = expandedIds.has(rowKey);
-              const convertedAmountText = formatConvertedAmount(row);
+              const amountLines = formatTransactionAmountLines(row);
+              const convertedAmountParts = formatConvertedAmounts(row);
 
               return (
                 <Fragment key={rowKey}>
@@ -1362,17 +1445,20 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
                       }}
                     >
                       <Stack spacing={0.25} alignItems="flex-end">
-                        <Box component="span">
-                          {formatAssetAmount(row.amount, row.assetCode, row.assetScale)}
-                        </Box>
-                        {convertedAmountText ? (
+                        {amountLines.map((part, idx) => (
+                          <Box component="span" key={`${part}-${idx}`}>
+                            {idx > 0 ? '→ ' : ''}
+                            {part}
+                          </Box>
+                        ))}
+                        {convertedAmountParts.length > 0 ? (
                           <Typography
                             component="span"
                             variant="caption"
                             color="text.secondary"
                             sx={{ lineHeight: 1.1 }}
                           >
-                            {convertedAmountText}
+                            {convertedAmountParts.join(' → ')}
                           </Typography>
                         ) : null}
                       </Stack>

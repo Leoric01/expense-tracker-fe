@@ -13,7 +13,11 @@ import type {
   UseMutationResult,
 } from '@tanstack/react-query';
 
-import type { CreateAssetExchangeV2RequestDto, CreateWalletTransferV2RequestDto } from '../model';
+import type {
+  AssetExchangeRateQuoteRequestDto,
+  CreateAssetExchangeV2RequestDto,
+  CreateWalletTransferV2RequestDto,
+} from '../model';
 
 export type createWalletTransferResponse200 = {
   data: Blob;
@@ -200,4 +204,97 @@ export const useCreateAssetExchange = <TError = unknown, TContext = unknown>(
   TContext
 > => {
   return useMutation(getCreateAssetExchangeMutationOptions(options), queryClient);
+};
+export type assetExchangeRateQuoteResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type assetExchangeRateQuoteResponseSuccess = assetExchangeRateQuoteResponse200 & {
+  headers: Headers;
+};
+export type assetExchangeRateQuoteResponse = assetExchangeRateQuoteResponseSuccess;
+
+export const getAssetExchangeRateQuoteUrl = (trackerId: string) => {
+  return `/api/transaction-v2/${trackerId}/asset-exchange/rate`;
+};
+
+export const assetExchangeRateQuote = async (
+  trackerId: string,
+  assetExchangeRateQuoteRequestDto: AssetExchangeRateQuoteRequestDto,
+  options?: RequestInit,
+): Promise<assetExchangeRateQuoteResponse> => {
+  const res = await fetch(getAssetExchangeRateQuoteUrl(trackerId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assetExchangeRateQuoteRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: assetExchangeRateQuoteResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as assetExchangeRateQuoteResponse;
+};
+
+export const getAssetExchangeRateQuoteMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof assetExchangeRateQuote>>,
+    TError,
+    { trackerId: string; data: AssetExchangeRateQuoteRequestDto },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof assetExchangeRateQuote>>,
+  TError,
+  { trackerId: string; data: AssetExchangeRateQuoteRequestDto },
+  TContext
+> => {
+  const mutationKey = ['assetExchangeRateQuote'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof assetExchangeRateQuote>>,
+    { trackerId: string; data: AssetExchangeRateQuoteRequestDto }
+  > = (props) => {
+    const { trackerId, data } = props ?? {};
+
+    return assetExchangeRateQuote(trackerId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AssetExchangeRateQuoteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof assetExchangeRateQuote>>
+>;
+export type AssetExchangeRateQuoteMutationBody = AssetExchangeRateQuoteRequestDto;
+export type AssetExchangeRateQuoteMutationError = unknown;
+
+export const useAssetExchangeRateQuote = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof assetExchangeRateQuote>>,
+      TError,
+      { trackerId: string; data: AssetExchangeRateQuoteRequestDto },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof assetExchangeRateQuote>>,
+  TError,
+  { trackerId: string; data: AssetExchangeRateQuoteRequestDto },
+  TContext
+> => {
+  return useMutation(getAssetExchangeRateQuoteMutationOptions(options), queryClient);
 };

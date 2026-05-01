@@ -14,6 +14,8 @@ export * from './accountSummaryResponseDtoAccountType';
 export * from './accountUploadIconBody';
 export * from './accountUploadIconParams';
 export * from './adminPasswordResetDto';
+export * from './assetExchangeRateQuoteRequestDto';
+export * from './assetExchangeRateQuoteResponseDto';
 export * from './assetFindAllParams';
 export * from './assetResponseDto';
 export * from './assetResponseDtoAssetType';
