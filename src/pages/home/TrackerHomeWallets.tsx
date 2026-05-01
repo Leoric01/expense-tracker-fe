@@ -42,6 +42,7 @@ import {
   CreateAssetRequestDtoMarketDataSource,
   AssetResponseDtoMarketDataSource,
   CreateTransactionRequestDtoTransactionType,
+  TransactionFindAllPageableRateMode,
 } from '@api/model';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -74,6 +75,8 @@ import {
   Stack,
   TextField,
   Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material';
 import { PageHeading } from '@components/PageHeading';
@@ -362,6 +365,9 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const [rangeFrom, setRangeFrom] = useState(() => formatDateDdMmYyyyFromDate(firstDayOfMonth()));
   const [rangeTo, setRangeTo] = useState(() => formatDateDdMmYyyyFromDate(lastDayOfMonth()));
   const [selectedDisplayAssetId, setSelectedDisplayAssetId] = useState('');
+  const [transactionAmountRateMode, setTransactionAmountRateMode] = useState<TransactionFindAllPageableRateMode>(
+    TransactionFindAllPageableRateMode.TRANSACTION_DATE,
+  );
   const [displayCurrencySubmitting, setDisplayCurrencySubmitting] = useState(false);
   const [showAmounts, setShowAmounts] = useState(true);
   /** Po „Bez konverze“ nezobrazuj converted UI, dokud tracker + dashboard nepotvrdí vymazání (jinak drží starý response). */
@@ -1026,6 +1032,12 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       enqueueSnackbar('Display měna byla uložena', { variant: 'success' });
       await queryClient.refetchQueries({ queryKey: getExpenseTrackerFindByIdQueryKey(trackerId) });
       await queryClient.refetchQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+      if (mainTab === 1) {
+        await queryClient.refetchQueries({
+          queryKey: [`/api/transaction/${trackerId}`],
+          type: 'active',
+        });
+      }
       await queryClient.invalidateQueries({ queryKey: ['/api/expense-trackers/mine'] });
     } catch {
       enqueueSnackbar('Display měnu se nepodařilo uložit', { variant: 'error' });
@@ -1203,6 +1215,32 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
             ))}
           </Select>
         </FormControl>
+        <Tooltip title="Kurz pro porovnání částek v historii: v den transakce nebo dnešní kurz.">
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={transactionAmountRateMode}
+            onChange={(_, value: TransactionFindAllPageableRateMode | null) => {
+              if (!value) return;
+              setTransactionAmountRateMode(value);
+            }}
+            sx={{
+              alignSelf: { xs: 'stretch', sm: 'center' },
+              flexShrink: 0,
+              '& .MuiToggleButton-root': {
+                px: 0.75,
+                py: 0.25,
+                fontSize: '0.7rem',
+                lineHeight: 1.15,
+              },
+            }}
+          >
+            <ToggleButton value={TransactionFindAllPageableRateMode.TRANSACTION_DATE}>
+              Den
+            </ToggleButton>
+            <ToggleButton value={TransactionFindAllPageableRateMode.NOW}>Teď</ToggleButton>
+          </ToggleButtonGroup>
+        </Tooltip>
       </Stack>
       {rangeOrderInvalid && (
         <Typography color="error" variant="body2" sx={{ mb: 2 }}>
@@ -1595,6 +1633,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
           dateFromCs={rangeFrom}
           dateToCs={rangeTo}
           dateRangeEnabled={rangeParamsOk && !rangeOrderInvalid}
+          amountRateMode={transactionAmountRateMode}
         />
       )}
 

@@ -5,9 +5,10 @@
  * Swagger dokumentace pro ExpenseTracker backend
  * OpenAPI spec version: 1.0
  */
+import type { TransactionConvertedTotalsDto } from './transactionConvertedTotalsDto';
+import type { TransactionTotalsByAssetDto } from './transactionTotalsByAssetDto';
 
 export interface TransactionTotalsDto {
-  incomeAmount?: number;
-  expenseAmount?: number;
-  netAmount?: number;
+  byAsset?: TransactionTotalsByAssetDto[];
+  converted?: TransactionConvertedTotalsDto;
 }

@@ -40,4 +40,5 @@ export interface TransactionPageItemResponseDto {
   lastModifiedDate?: string;
   convertedAmount?: number;
   convertedInto?: string;
+  convertedAssetScale?: number;
 }

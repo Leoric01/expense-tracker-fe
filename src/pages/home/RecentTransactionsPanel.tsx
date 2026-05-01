@@ -45,9 +45,6 @@ import {
   TableRow,
   TableSortLabel,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
@@ -231,7 +228,7 @@ function formatAssetAmount(
 
 function formatConvertedAmount(row: TransactionRow): string | null {
   if (row.convertedAmount == null || !row.convertedInto?.trim()) return null;
-  return formatAssetAmount(row.convertedAmount, row.convertedInto, 2);
+  return formatAssetAmount(row.convertedAmount, row.convertedInto, row.convertedAssetScale);
 }
 
 function holdingCellText(row: TransactionRow): string {
@@ -410,6 +407,7 @@ type RecentTransactionsPanelProps = {
   dateFromCs: string;
   dateToCs: string;
   dateRangeEnabled: boolean;
+  amountRateMode: AmountRateMode;
 };
 
 export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
@@ -417,6 +415,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   dateFromCs,
   dateToCs,
   dateRangeEnabled,
+  amountRateMode,
 }) => {
   const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
@@ -446,9 +445,6 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const [transactionType, setTransactionType] = useState<TypeFilterValue>('');
   const [dateFilterCleared, setDateFilterCleared] = useState(false);
   const [txSort, setTxSort] = useState<TxSortState>({ field: 'date', direction: 'desc' });
-  const [amountRateMode, setAmountRateMode] = useState<AmountRateMode>(
-    TransactionFindAllPageableRateMode.TRANSACTION_DATE,
-  );
 
   useEffect(() => {
     setDateFilterCleared(false);
@@ -648,12 +644,10 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     const params: TransactionFindAllPageableParams = {
       page,
       size: rowsPerPage,
+      rateMode: amountRateMode,
     };
     if (txSort) {
       params.sort = [`${TX_SORT_FIELDS[txSort.field]},${txSort.direction}`];
-      if (txSort.field === 'amount') {
-        params.rateMode = amountRateMode;
-      }
     }
     const q = debouncedSearch.trim();
     if (q) params.search = q;
@@ -766,14 +760,38 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const totalElements = txPaged?.page?.totalElements ?? 0;
   const totals = txPaged?.totals;
 
-  const totalsCurrency = useMemo(() => {
-    const code = recentTx.find((r) => r.assetCode?.trim())?.assetCode;
-    return (code ?? 'CZK').toUpperCase();
+  const convertedScaleByCode = useMemo(() => {
+    const scales = new Map<string, number>();
+    for (const row of recentTx) {
+      const code = row.convertedInto?.trim().toUpperCase();
+      if (code && row.convertedAssetScale != null && Number.isFinite(row.convertedAssetScale)) {
+        scales.set(code, row.convertedAssetScale);
+      }
+    }
+    return scales;
   }, [recentTx]);
 
-  const totalsAssetScale = useMemo(() => {
-    return recentTx.find((r) => r.assetScale != null)?.assetScale ?? 2;
-  }, [recentTx]);
+  const formatTotalsByAsset = (
+    key: 'incomeAmount' | 'expenseAmount' | 'netAmount',
+  ): string[] => {
+    return (totals?.byAsset ?? [])
+      .filter((row) => row[key] != null)
+      .map((row) => {
+        const code = row.assetCode?.trim().toUpperCase() || 'CZK';
+        return formatAssetAmount(row[key], code, row.assetScale);
+      });
+  };
+
+  const formatConvertedTotal = (
+    key: 'incomeAmount' | 'expenseAmount' | 'netAmount',
+  ): string | null => {
+    const converted = totals?.converted;
+    if (converted?.[key] == null || !converted.convertedInto?.trim()) return null;
+    const code = converted.convertedInto.trim().toUpperCase();
+    return formatAssetAmount(converted[key], code, convertedScaleByCode.get(code));
+  };
+
+  const convertedNetAmount = totals?.converted?.netAmount;
 
   const sortDirectionFor = (field: SortField): SortDirection => {
     return txSort?.field === field ? txSort.direction : 'asc';
@@ -843,9 +861,22 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
                 color: theme.palette.error.main,
               }}
             >
-              {totals?.expenseAmount != null
-                ? formatAssetAmount(totals.expenseAmount, totalsCurrency, totalsAssetScale)
-                : '—'}
+              <Stack component="span" spacing={0.25}>
+                {formatTotalsByAsset('expenseAmount').length > 0 ? (
+                  formatTotalsByAsset('expenseAmount').map((part) => (
+                    <Box component="span" key={part}>
+                      {part}
+                    </Box>
+                  ))
+                ) : (
+                  <Box component="span">—</Box>
+                )}
+                {formatConvertedTotal('expenseAmount') ? (
+                  <Typography component="span" variant="caption" color="text.secondary">
+                    {formatConvertedTotal('expenseAmount')}
+                  </Typography>
+                ) : null}
+              </Stack>
             </Box>
           </Typography>
           <Typography variant="body2" component="span" sx={{ whiteSpace: 'nowrap' }}>
@@ -860,9 +891,22 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
                 color: theme.palette.success.main,
               }}
             >
-              {totals?.incomeAmount != null
-                ? formatAssetAmount(totals.incomeAmount, totalsCurrency, totalsAssetScale)
-                : '—'}
+              <Stack component="span" spacing={0.25}>
+                {formatTotalsByAsset('incomeAmount').length > 0 ? (
+                  formatTotalsByAsset('incomeAmount').map((part) => (
+                    <Box component="span" key={part}>
+                      {part}
+                    </Box>
+                  ))
+                ) : (
+                  <Box component="span">—</Box>
+                )}
+                {formatConvertedTotal('incomeAmount') ? (
+                  <Typography component="span" variant="caption" color="text.secondary">
+                    {formatConvertedTotal('incomeAmount')}
+                  </Typography>
+                ) : null}
+              </Stack>
             </Box>
           </Typography>
           <Typography variant="body2" component="span" sx={{ whiteSpace: 'nowrap' }}>
@@ -875,18 +919,31 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
                 fontWeight: 600,
                 fontVariantNumeric: 'tabular-nums',
                 color:
-                  totals?.netAmount == null
+                  convertedNetAmount == null
                     ? theme.palette.text.secondary
-                    : totals.netAmount < 0
+                    : convertedNetAmount < 0
                       ? theme.palette.error.main
-                      : totals.netAmount > 0
+                      : convertedNetAmount > 0
                         ? theme.palette.success.main
                         : theme.palette.text.primary,
               }}
             >
-              {totals?.netAmount != null
-                ? formatAssetAmount(totals.netAmount, totalsCurrency, totalsAssetScale)
-                : '—'}
+              <Stack component="span" spacing={0.25}>
+                {formatTotalsByAsset('netAmount').length > 0 ? (
+                  formatTotalsByAsset('netAmount').map((part) => (
+                    <Box component="span" key={part}>
+                      {part}
+                    </Box>
+                  ))
+                ) : (
+                  <Box component="span">—</Box>
+                )}
+                {formatConvertedTotal('netAmount') ? (
+                  <Typography component="span" variant="caption" color="text.secondary">
+                    {formatConvertedTotal('netAmount')}
+                  </Typography>
+                ) : null}
+              </Stack>
             </Box>
           </Typography>
         </Box>
@@ -1011,47 +1068,13 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
             <TableCell>Kategorie</TableCell>
             <TableCell sx={DESCRIPTION_COL_SX}>Popis</TableCell>
             <TableCell align="right" sx={{ width: 170, whiteSpace: 'nowrap' }}>
-              <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="flex-end">
-                {txSort?.field === 'amount' && (
-                  <Tooltip title="Kurz pro porovnání částek: v den transakce nebo dnešní kurz.">
-                    <Box onClick={(e) => e.stopPropagation()}>
-                      <ToggleButtonGroup
-                        exclusive
-                        size="small"
-                        value={amountRateMode}
-                        onChange={(_, value: AmountRateMode | null) => {
-                          if (!value) return;
-                          setAmountRateMode(value);
-                          setPage(0);
-                          setExpandedIds(new Set());
-                        }}
-                        sx={{
-                          '& .MuiToggleButton-root': {
-                            px: 0.55,
-                            py: 0.15,
-                            fontSize: '0.65rem',
-                            lineHeight: 1.1,
-                          },
-                        }}
-                      >
-                        <ToggleButton value={TransactionFindAllPageableRateMode.TRANSACTION_DATE}>
-                          Den
-                        </ToggleButton>
-                        <ToggleButton value={TransactionFindAllPageableRateMode.NOW}>
-                          Teď
-                        </ToggleButton>
-                      </ToggleButtonGroup>
-                    </Box>
-                  </Tooltip>
-                )}
-                <TableSortLabel
-                  active={txSort?.field === 'amount'}
-                  direction={sortDirectionFor('amount')}
-                  onClick={() => handleSortClick('amount')}
-                >
-                  Částka
-                </TableSortLabel>
-              </Stack>
+              <TableSortLabel
+                active={txSort?.field === 'amount'}
+                direction={sortDirectionFor('amount')}
+                onClick={() => handleSortClick('amount')}
+              >
+                Částka
+              </TableSortLabel>
             </TableCell>
           </TableRow>
         </TableHead>
