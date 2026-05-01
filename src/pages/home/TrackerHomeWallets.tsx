@@ -99,6 +99,7 @@ import { useSearchParams } from 'react-router-dom';
 import { BudgetPlanImportPanel } from './BudgetPlanImportPanel';
 import { BudgetPlanExportPanel } from './BudgetPlanExportPanel';
 import { RecentTransactionsPanel } from './RecentTransactionsPanel';
+import { TransactionsV2Panel } from './TransactionsV2Panel';
 import { BalanceCorrectionDialog, type BalanceCorrectionConfirmPayload } from './BalanceCorrectionDialog';
 import { TransferBetweenWalletsDialog, type TransferConfirmPayload } from './TransferBetweenWalletsDialog';
 import { assetSelectLabel, inferAssetMeta } from './holdingAdapter';
@@ -308,7 +309,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const tabParam = searchParams.get('tab');
   // V dashboardu zobrazuješ primárně Kategorie; Historie / Importy jsou volitelné záložky.
   // `?tab=categories` zbytečně neukládáme — viz useEffect níže.
-  const mainTab = tabParam === 'history' ? 1 : tabParam === 'importy' ? 2 : tabParam === 'exporty' ? 3 : 0;
+  const mainTab = tabParam === 'history' ? 1 : tabParam === 'importy' ? 2 : tabParam === 'exporty' ? 3 : tabParam === 'prevody' ? 4 : 0;
 
   useEffect(() => {
     if (tabParam === 'categories') {
@@ -1617,6 +1618,13 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         >
           Exporty
         </ButtonBase>
+        <ButtonBase
+          disableRipple
+          onClick={() => setSearchParams({ tab: 'prevody' })}
+          sx={sectionNavBtnSx(mainTab === 4)}
+        >
+          Převody V2
+        </ButtonBase>
       </Stack>
 
       {mainTab === 0 && (
@@ -1645,6 +1653,8 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       {mainTab === 2 && <BudgetPlanImportPanel trackerId={trackerId} />}
 
       {mainTab === 3 && <BudgetPlanExportPanel trackerId={trackerId} />}
+
+      {mainTab === 4 && <TransactionsV2Panel trackerId={trackerId} />}
 
       <TransferBetweenWalletsDialog
         open={Boolean(transferPair)}

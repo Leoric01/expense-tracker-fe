@@ -11,9 +11,6 @@ export interface CreateWalletTransferV2RequestDto {
   targetHoldingId?: string;
   amount?: number;
   settledAmount?: number;
-  feeAmount?: number;
-  currencyCode?: string;
-  exchangeRate?: number;
   transactionDate?: string;
   description?: string;
   note?: string;
