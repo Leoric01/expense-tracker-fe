@@ -216,6 +216,13 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
                 </ListItemButton>
               )}
             </NavLink>
+            <NavLink to="/transactions" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Transakce" />
+                </ListItemButton>
+              )}
+            </NavLink>
             <NavLink to="/trackers" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
               {({ isActive }) => (
                 <ListItemButton selected={isActive} onClick={onMobileClose}>

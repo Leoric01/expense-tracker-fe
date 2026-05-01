@@ -1,9 +1,8 @@
-import { categoryFindAllActive } from '@api/category-controller/category-controller';
+import { categoryFindAllActiveTree } from '@api/category-controller/category-controller';
 import type {
+  CategoryActiveTreeResponseDto,
   CategoryResponseDto,
-  HoldingResponseDto,
-  PagedModelCategoryResponseDto,
-  PagedModelHoldingResponseDto,
+  HoldingLiteResponseDto,
   TransactionFindAllPageableParams,
   TransactionPageItemResponseDto,
   TransactionPageResponseDto,
@@ -24,7 +23,7 @@ import {
   transactionUpdate,
   transactionUploadAttachment,
 } from '@api/transaction-controller/transaction-controller';
-import { holdingFindAll } from '@api/holding-controller/holding-controller';
+import { holdingFindAllLite } from '@api/holding-controller/holding-controller';
 import { useDebouncedValue } from '@hooks/useDebouncedValue';
 import {
   Autocomplete,
@@ -113,8 +112,6 @@ function filterOptionsByQuery<T extends { label: string; id?: string }>(
 }
 
 const DEFAULT_ROWS = 25;
-const CATEGORY_LIST_PARAMS = { page: 0, size: 500 } as const;
-const WALLET_LIST_PARAMS = { page: 0, size: 200 } as const;
 const TX_SORT_FIELDS = {
   date: 'transactionDate',
   type: 'transactionType',
@@ -858,29 +855,29 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const filterSelectSx = { minWidth: 140, maxWidth: 220 } as const;
 
   const { data: categoriesRes } = useQuery({
-    queryKey: ['categoryFindAllActive', trackerId, 'history-panel'] as const,
+    queryKey: ['categoryFindAllActiveTree', trackerId, 'history-panel'] as const,
     queryFn: async () => {
-      const res = await categoryFindAllActive(trackerId, CATEGORY_LIST_PARAMS);
+      const res = await categoryFindAllActiveTree(trackerId);
       if (res.status < 200 || res.status >= 300) throw new Error('categories');
-      return res.data as PagedModelCategoryResponseDto;
+      return res.data as unknown as CategoryActiveTreeResponseDto[];
     },
     enabled: Boolean(trackerId),
     staleTime: 60_000,
   });
 
   const { data: holdingsRes } = useQuery({
-    queryKey: ['holdingFindAll', trackerId, 'history-panel'] as const,
+    queryKey: ['holdingFindAllLite', trackerId, 'history-panel'] as const,
     queryFn: async () => {
-      const res = await holdingFindAll(trackerId, WALLET_LIST_PARAMS);
+      const res = await holdingFindAllLite(trackerId);
       if (res.status < 200 || res.status >= 300) throw new Error('holdings');
-      return res.data as PagedModelHoldingResponseDto;
+      return res.data as unknown as HoldingLiteResponseDto[];
     },
     enabled: Boolean(trackerId),
     staleTime: 60_000,
   });
 
-  const categories = categoriesRes?.content ?? [];
-  const holdings = holdingsRes?.content ?? [];
+  const categories = categoriesRes ?? [];
+  const holdings = holdingsRes ?? [];
 
   const categoryTree = useMemo(() => toCategoryTree(categories), [categories]);
   const subCategoryMenuRows = useMemo(
@@ -903,7 +900,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const holdingSelectOptions = useMemo(
     () =>
       holdings
-        .filter((h): h is HoldingResponseDto & { id: string } => Boolean(h.id))
+        .filter((h): h is HoldingLiteResponseDto & { id: string } => Boolean(h.id))
         .map((h) => ({
           id: h.id!,
           label: holdingLabel(h),

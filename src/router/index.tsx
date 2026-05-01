@@ -27,6 +27,7 @@ import { HabitsModuleLayout } from '@pages/habits/HabitsModuleLayout';
 import { HabitWeekOverviewPage } from '@pages/habits/HabitWeekOverviewPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
+import { TransactionsPage } from '@pages/TransactionsPage';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 export const router = createBrowserRouter([
@@ -68,7 +69,7 @@ export const router = createBrowserRouter([
       { path: 'importy', element: <Navigate to="/prehled?tab=importy" replace /> },
       { path: 'exporty', element: <Navigate to="/prehled?tab=exporty" replace /> },
       { path: 'wallets', element: <Navigate to="/prehled" replace /> },
-      { path: 'transactions', element: <Navigate to="/prehled" replace /> },
+      { path: 'transactions', element: <TransactionsPage /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */
       { path: 'settings', element: <Profile /> },
       { path: 'profile', element: <Navigate to="/settings" replace /> },

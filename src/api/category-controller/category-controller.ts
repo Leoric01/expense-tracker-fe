@@ -1223,3 +1223,146 @@ export function useCategoryFindAllActive<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export type categoryFindAllActiveTreeResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type categoryFindAllActiveTreeResponseSuccess = categoryFindAllActiveTreeResponse200 & {
+  headers: Headers;
+};
+export type categoryFindAllActiveTreeResponse = categoryFindAllActiveTreeResponseSuccess;
+
+export const getCategoryFindAllActiveTreeUrl = (trackerId: string) => {
+  return `/api/category/${trackerId}/active/tree`;
+};
+
+export const categoryFindAllActiveTree = async (
+  trackerId: string,
+  options?: RequestInit,
+): Promise<categoryFindAllActiveTreeResponse> => {
+  const res = await fetch(getCategoryFindAllActiveTreeUrl(trackerId), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: categoryFindAllActiveTreeResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as categoryFindAllActiveTreeResponse;
+};
+
+export const getCategoryFindAllActiveTreeQueryKey = (trackerId: string) => {
+  return [`/api/category/${trackerId}/active/tree`] as const;
+};
+
+export const getCategoryFindAllActiveTreeQueryOptions = <
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveTree>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveTree>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getCategoryFindAllActiveTreeQueryKey(trackerId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof categoryFindAllActiveTree>>> = ({
+    signal,
+  }) => categoryFindAllActiveTree(trackerId, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof categoryFindAllActiveTree>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type CategoryFindAllActiveTreeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof categoryFindAllActiveTree>>
+>;
+export type CategoryFindAllActiveTreeQueryError = unknown;
+
+export function useCategoryFindAllActiveTree<
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveTree>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveTree>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryFindAllActiveTree>>,
+          TError,
+          Awaited<ReturnType<typeof categoryFindAllActiveTree>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryFindAllActiveTree<
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveTree>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveTree>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryFindAllActiveTree>>,
+          TError,
+          Awaited<ReturnType<typeof categoryFindAllActiveTree>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryFindAllActiveTree<
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveTree>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveTree>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useCategoryFindAllActiveTree<
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveTree>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveTree>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getCategoryFindAllActiveTreeQueryOptions(trackerId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

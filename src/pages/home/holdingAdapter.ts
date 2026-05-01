@@ -29,7 +29,9 @@ export function assetSelectLabel(a: AssetResponseDto): string {
   return c || n || a.id || '—';
 }
 
-export function holdingLabel(h: HoldingResponseDto): string {
+type HoldingLabelInput = Pick<HoldingResponseDto, 'id' | 'institutionName' | 'accountName' | 'assetCode'>;
+
+export function holdingLabel(h: HoldingLabelInput): string {
   const code = (h.assetCode?.trim() || '').toUpperCase();
   const parts = [h.institutionName?.trim(), h.accountName?.trim(), code || undefined].filter(Boolean);
   if (parts.length > 0) return parts.join(' · ');
