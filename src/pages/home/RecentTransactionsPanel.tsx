@@ -54,6 +54,7 @@ import {
   formatDateTimeDdMmYyyyHhMm,
   toIsoFromDateTimeInput,
 } from '@utils/dateTimeCs';
+import { formatAssetAmount } from '@utils/formatAssetAmount';
 import { DEFAULT_FIAT_SCALE, majorToMinorUnitsForScale, minorUnitsToMajorForScale } from '@utils/moneyMinorUnits';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FC, Fragment, type ChangeEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
@@ -250,24 +251,6 @@ function amountColorForType(t: string | undefined, theme: Theme): string {
     default:
       return theme.palette.text.secondary;
   }
-}
-
-function formatAssetAmount(
-  amountMinor: number | undefined,
-  assetCode?: string,
-  assetScale?: number,
-): string {
-  if (amountMinor == null || !Number.isFinite(amountMinor)) return '—';
-  const code = (assetCode?.trim() || 'CZK').toUpperCase();
-  const scale = Number.isFinite(assetScale) && assetScale != null && assetScale >= 0
-    ? Math.min(Math.floor(assetScale), 20)
-    : 2;
-  const major = amountMinor / 10 ** scale;
-  const formatted = new Intl.NumberFormat('cs-CZ', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: scale,
-  }).format(major);
-  return `${formatted} ${code}`;
 }
 
 function formatExchangeRateLabel(

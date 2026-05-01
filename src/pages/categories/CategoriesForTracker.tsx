@@ -9,12 +9,18 @@ import {
   categoryCreate,
   categoryDeactivate,
   categoryFindAllActive,
+  categoryMovementSummary,
   categoryUpdate,
   getCategoryFindAllActiveQueryKey,
+  getCategoryMovementSummaryQueryKey,
 } from '@api/category-controller/category-controller';
 import type {
   BudgetPlanResponseDto,
   CategoryFindAllActiveParams,
+  CategoryMovementAssetTotalsDto,
+  CategoryMovementConvertedTotalsDto,
+  CategoryMovementSummaryParams,
+  CategoryMovementSummaryResponseDto,
   CategoryResponseDto,
   CreateTransactionRequestDto,
   PagedModelHoldingResponseDto,
@@ -79,13 +85,9 @@ import {
   useState,
 } from 'react';
 import { CategoryBudgetPlansDialog } from './CategoryBudgetPlansDialog';
-import {
-  budgetAmountToMonthlyEquivalentMinor,
-  CATEGORY_BUDGET_LIST_ROW_GRID_INNER,
-  CategoryBudgetPlanUsageLine,
-} from './categoryBudgetUsage';
+import { CATEGORY_BUDGET_LIST_ROW_GRID_INNER, CategoryBudgetPlanUsageLine } from './categoryBudgetUsage';
 import { holdingToWalletDto } from '@pages/home/holdingAdapter';
-import { formatWalletAmount } from '@pages/home/walletDisplay';
+import { formatAssetAmount } from '@utils/formatAssetAmount';
 import { DEFAULT_FIAT_SCALE, majorToMinorUnitsForScale } from '@utils/moneyMinorUnits';
 import {
   asCategoryChildren,
@@ -110,6 +112,74 @@ import { CreateCategoryRequestDtoCategoryKind, CreateTransactionRequestDtoTransa
 const LIST_BASE: Pick<CategoryFindAllActiveParams, 'page' | 'size'> = { page: 0, size: 200 };
 const BUDGET_LIST_PARAMS = { page: 0, size: 500 } as const;
 const BULK_MAX_LEVEL = 5;
+
+const DISPLAY_CURRENCY_SELECTION_CHANGED = 'display-currency-selection-changed';
+
+function readTrackerDisplayCurrencyCode(trackerId: string): string {
+  if (typeof window === 'undefined' || !trackerId) return '';
+  try {
+    return (localStorage.getItem(`tracker-${trackerId}-display-currency-selection-code`) ?? '')
+      .trim()
+      .toUpperCase();
+  } catch {
+    return '';
+  }
+}
+
+function convertedTotalsIsPresent(
+  ct: CategoryMovementConvertedTotalsDto | null | undefined,
+): ct is CategoryMovementConvertedTotalsDto {
+  if (ct == null) return false;
+  if (!(ct.targetAssetCode ?? '').trim()) return false;
+  return [
+    ct.expectedExpenseAmount,
+    ct.expectedIncomeAmount,
+    ct.expectedSavingAmount,
+    ct.actualExpenseAmount,
+    ct.actualIncomeAmount,
+    ct.actualSavingAmount,
+  ].some((v) => v != null && Number.isFinite(v));
+}
+
+function aggregateNativeMetric(
+  rows: CategoryMovementAssetTotalsDto[],
+  pick: (row: CategoryMovementAssetTotalsDto) => number | undefined,
+): { values: Map<string, number>; scales: Map<string, number> } {
+  const values = new Map<string, number>();
+  const scales = new Map<string, number>();
+  for (const r of rows) {
+    const code = (r.assetCode ?? 'CZK').toUpperCase();
+    const scale = r.assetScale ?? DEFAULT_FIAT_SCALE;
+    const add = pick(r) ?? 0;
+    values.set(code, (values.get(code) ?? 0) + add);
+    if (!scales.has(code)) scales.set(code, scale);
+  }
+  return { values, scales };
+}
+
+function formatNativeBuckets(values: Map<string, number>, scales: Map<string, number>): string {
+  if (values.size === 0) return '—';
+  const entries = [...values.entries()].sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 1) {
+    const [c, v] = entries[0];
+    return formatAssetAmount(v, c, scales.get(c) ?? DEFAULT_FIAT_SCALE);
+  }
+  return entries
+    .map(([c, v]) => formatAssetAmount(v, c, scales.get(c) ?? DEFAULT_FIAT_SCALE))
+    .join(', ');
+}
+
+function scaleNativeValues(values: Map<string, number>, factor: number): Map<string, number> {
+  return new Map([...values.entries()].map(([k, v]) => [k, Math.round(v * factor)]));
+}
+
+function savingsBucketsFromNative(rows: CategoryMovementAssetTotalsDto[], kind: 'expected' | 'actual'): Map<string, number> {
+  const pick =
+    kind === 'expected'
+      ? (r: CategoryMovementAssetTotalsDto) => r.expectedSavingAmount
+      : (r: CategoryMovementAssetTotalsDto) => r.actualSavingAmount;
+  return aggregateNativeMetric(rows, pick).values;
+}
 
 type CreateMode = { type: 'root' } | { type: 'child'; parentId: string };
 
@@ -285,6 +355,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   const queryClient = useQueryClient();
   const [budgetCategory, setBudgetCategory] = useState<CategoryResponseDto | null>(null);
   const [showOnlyCategoriesWithMovements, setShowOnlyCategoriesWithMovements] = useState(false);
+  const [summaryDisplayAssetCode, setSummaryDisplayAssetCode] = useState('');
 
   const categoryListParams = useMemo((): CategoryFindAllActiveParams => {
     const base: CategoryFindAllActiveParams = { ...LIST_BASE };
@@ -433,6 +504,19 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     };
   }, []);
 
+  React.useEffect(() => {
+    setSummaryDisplayAssetCode(readTrackerDisplayCurrencyCode(trackerId));
+  }, [trackerId]);
+
+  React.useEffect(() => {
+    const onDisplayCurrency = (event: Event) => {
+      const detail = (event as CustomEvent<{ trackerId?: string; assetCode?: string }>).detail;
+      if (!detail || detail.trackerId !== trackerId) return;
+      setSummaryDisplayAssetCode((detail.assetCode ?? '').trim().toUpperCase());
+    };
+    window.addEventListener(DISPLAY_CURRENCY_SELECTION_CHANGED, onDisplayCurrency);
+    return () => window.removeEventListener(DISPLAY_CURRENCY_SELECTION_CHANGED, onDisplayCurrency);
+  }, [trackerId]);
 
   const recurringBudgets = (recurringBudgetData?.content ?? []) as RecurringBudgetResponseDto[];
   const recurringByCategoryId = useMemo(() => {
@@ -447,162 +531,141 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     return m;
   }, [recurringBudgets]);
 
-  const rootExpenseCategoryIds = useMemo(() => {
-    // "top level" = kořeny stromu (hloubka 0).
-    // Požadavek: do součtu se počítají jen EXPENSE rodiče, děti ne.
-    return flat
-      .filter((n) => Boolean(n.id) && n.categoryKind === 'EXPENSE' && !n.parentId)
-      .map((n) => n.id as string);
-  }, [flat]);
+  const movementSummaryParams = useMemo((): CategoryMovementSummaryParams | null => {
+    if (!categoryActivePeriodIso?.from || !categoryActivePeriodIso?.to) return null;
+    const p: CategoryMovementSummaryParams = {
+      dateFrom: categoryActivePeriodIso.from,
+      dateTo: categoryActivePeriodIso.to,
+    };
+    const code = summaryDisplayAssetCode.trim();
+    if (code.length > 0) p.displayAssetCode = code;
+    return p;
+  }, [categoryActivePeriodIso, summaryDisplayAssetCode]);
 
-  const rootIncomeCategoryIds = useMemo(() => {
-    return flat
-      .filter((n) => Boolean(n.id) && n.categoryKind === 'INCOME' && !n.parentId)
-      .map((n) => n.id as string);
-  }, [flat]);
+  const movementSummaryQueryKey = useMemo(
+    () =>
+      movementSummaryParams != null
+        ? getCategoryMovementSummaryQueryKey(trackerId, movementSummaryParams)
+        : ([`/api/category/${trackerId}/summary`, 'disabled'] as const),
+    [trackerId, movementSummaryParams],
+  );
 
-  const toMonthlyMinor = useCallback(
-    (amountMinor: number, periodType: string | undefined, intervalValue?: number): number =>
-      budgetAmountToMonthlyEquivalentMinor(amountMinor, periodType, intervalValue ?? 1),
+  const { data: movementSummaryDto } = useQuery({
+    queryKey: movementSummaryQueryKey,
+    queryFn: async () => {
+      if (movementSummaryParams == null) throw new Error('category-movement-summary-disabled');
+      const res = await categoryMovementSummary(trackerId, movementSummaryParams);
+      if (res.status < 200 || res.status >= 300) throw new Error('category-movement-summary');
+      return res.data as CategoryMovementSummaryResponseDto;
+    },
+    enabled: Boolean(trackerId && categoriesQueryEnabled && movementSummaryParams),
+    staleTime: 15_000,
+  });
+
+  const {
+    predictedMonthlyExpenseText,
+    predictedMonthlyIncomeText,
+    actualMonthlyExpenseText,
+    actualMonthlyIncomeText,
+    predictedMonthlySavingsBuckets,
+    actualMonthlySavingsBuckets,
+    predictedMonthlySavingsScales,
+    actualMonthlySavingsScales,
+    predictedSavingsYearlyText,
+    actualSavingsYearlyText,
+  } = useMemo(() => {
+    const empty = new Map<string, number>();
+    const emptyScales = new Map<string, number>();
+    const fallback = {
+      predictedMonthlyExpenseText: '—',
+      predictedMonthlyIncomeText: '—',
+      actualMonthlyExpenseText: '—',
+      actualMonthlyIncomeText: '—',
+      predictedMonthlySavingsBuckets: empty,
+      actualMonthlySavingsBuckets: empty,
+      predictedMonthlySavingsScales: emptyScales,
+      actualMonthlySavingsScales: emptyScales,
+      predictedSavingsYearlyText: '—',
+      actualSavingsYearlyText: '—',
+    };
+    if (!movementSummaryDto) return fallback;
+
+    const ct = movementSummaryDto.convertedTotals;
+    if (convertedTotalsIsPresent(ct)) {
+      const code = (ct.targetAssetCode ?? 'CZK').toUpperCase();
+      const sc = ct.targetAssetScale ?? DEFAULT_FIAT_SCALE;
+      const predSav = ct.expectedSavingAmount;
+      const actSav = ct.actualSavingAmount;
+      const savingsScales = new Map([[code, sc]]);
+      return {
+        predictedMonthlyExpenseText: formatAssetAmount(ct.expectedExpenseAmount, code, sc),
+        predictedMonthlyIncomeText: formatAssetAmount(ct.expectedIncomeAmount, code, sc),
+        actualMonthlyExpenseText: formatAssetAmount(ct.actualExpenseAmount, code, sc),
+        actualMonthlyIncomeText: formatAssetAmount(ct.actualIncomeAmount, code, sc),
+        predictedMonthlySavingsBuckets:
+          predSav != null && Number.isFinite(predSav) ? new Map([[code, predSav]]) : new Map(),
+        actualMonthlySavingsBuckets:
+          actSav != null && Number.isFinite(actSav) ? new Map([[code, actSav]]) : new Map(),
+        predictedMonthlySavingsScales: savingsScales,
+        actualMonthlySavingsScales: savingsScales,
+        predictedSavingsYearlyText:
+          predSav != null && Number.isFinite(predSav)
+            ? formatAssetAmount(Math.round(predSav * 12), code, sc)
+            : '—',
+        actualSavingsYearlyText:
+          actSav != null && Number.isFinite(actSav) ? formatAssetAmount(Math.round(actSav * 12), code, sc) : '—',
+      };
+    }
+
+    const rows = movementSummaryDto.nativeByAsset ?? [];
+    const ee = aggregateNativeMetric(rows, (r) => r.expectedExpenseAmount);
+    const ei = aggregateNativeMetric(rows, (r) => r.expectedIncomeAmount);
+    const ae = aggregateNativeMetric(rows, (r) => r.actualExpenseAmount);
+    const ai = aggregateNativeMetric(rows, (r) => r.actualIncomeAmount);
+    const escales = aggregateNativeMetric(rows, (r) => r.expectedSavingAmount).scales;
+    const ascales = aggregateNativeMetric(rows, (r) => r.actualSavingAmount).scales;
+
+    return {
+      predictedMonthlyExpenseText: formatNativeBuckets(ee.values, ee.scales),
+      predictedMonthlyIncomeText: formatNativeBuckets(ei.values, ei.scales),
+      actualMonthlyExpenseText: formatNativeBuckets(ae.values, ae.scales),
+      actualMonthlyIncomeText: formatNativeBuckets(ai.values, ai.scales),
+      predictedMonthlySavingsBuckets: savingsBucketsFromNative(rows, 'expected'),
+      actualMonthlySavingsBuckets: savingsBucketsFromNative(rows, 'actual'),
+      predictedMonthlySavingsScales: escales,
+      actualMonthlySavingsScales: ascales,
+      predictedSavingsYearlyText: formatNativeBuckets(
+        scaleNativeValues(savingsBucketsFromNative(rows, 'expected'), 12),
+        escales,
+      ),
+      actualSavingsYearlyText: formatNativeBuckets(
+        scaleNativeValues(savingsBucketsFromNative(rows, 'actual'), 12),
+        ascales,
+      ),
+    };
+  }, [movementSummaryDto]);
+
+  const renderColoredSavingsAmounts = useCallback(
+    (buckets: Map<string, number>, scales: Map<string, number>): ReactNode => {
+      const entries = [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b));
+      if (entries.length === 0) return '—';
+      return entries.map(([cur, val], i) => (
+        <Fragment key={cur}>
+          {i > 0 ? ', ' : null}
+          <Box
+            component="span"
+            sx={{
+              color: val > 0 ? 'success.main' : val < 0 ? 'error.main' : 'text.secondary',
+              fontWeight: 600,
+            }}
+          >
+            {formatAssetAmount(val, cur, scales.get(cur) ?? DEFAULT_FIAT_SCALE)}
+          </Box>
+        </Fragment>
+      ));
+    },
     [],
   );
-
-  const predictedMonthlyExpenseBuckets = useMemo(() => {
-    const sums = new Map<string, number>();
-    const add = (currency: string | undefined, amountMinor: number) => {
-      const cur = (currency ?? 'CZK').toUpperCase();
-      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
-    };
-
-    for (const categoryId of rootExpenseCategoryIds) {
-      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
-        add(p.currencyCode, toMonthlyMinor(p.amount ?? 0, p.periodType, 1));
-      }
-    }
-    return sums;
-  }, [rootExpenseCategoryIds, budgetsByCategoryId, toMonthlyMinor]);
-
-  const formatCurrencyBuckets = useCallback((buckets: Map<string, number>): string => {
-    if (buckets.size === 0) return '—';
-    const entries = Array.from(buckets.entries());
-    if (entries.length === 1) {
-      const [currency, sum] = entries[0];
-      return formatWalletAmount(sum, currency);
-    }
-    return entries.map(([currency, sum]) => formatWalletAmount(sum, currency)).join(', ');
-  }, []);
-
-  const diffBuckets = useCallback((income: Map<string, number>, expense: Map<string, number>): Map<string, number> => {
-    const out = new Map<string, number>();
-    const keys = new Set([...income.keys(), ...expense.keys()]);
-    for (const k of keys) {
-      out.set(k, (income.get(k) ?? 0) - (expense.get(k) ?? 0));
-    }
-    return out;
-  }, []);
-
-  const scaleBuckets = useCallback((buckets: Map<string, number>, factor: number): Map<string, number> => {
-    return new Map([...buckets.entries()].map(([c, v]) => [c, Math.round(v * factor)]));
-  }, []);
-
-  const predictedMonthlyExpenseText = useMemo(() => {
-    return formatCurrencyBuckets(predictedMonthlyExpenseBuckets);
-  }, [predictedMonthlyExpenseBuckets, formatCurrencyBuckets]);
-
-  const predictedMonthlyIncomeBuckets = useMemo(() => {
-    const sums = new Map<string, number>();
-    const add = (currency: string | undefined, amountMinor: number) => {
-      const cur = (currency ?? 'CZK').toUpperCase();
-      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
-    };
-
-    for (const categoryId of rootIncomeCategoryIds) {
-      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
-        add(p.currencyCode, toMonthlyMinor(p.amount ?? 0, p.periodType, 1));
-      }
-    }
-
-    return sums;
-  }, [rootIncomeCategoryIds, budgetsByCategoryId, toMonthlyMinor]);
-
-  const predictedMonthlyIncomeText = useMemo(() => {
-    return formatCurrencyBuckets(predictedMonthlyIncomeBuckets);
-  }, [predictedMonthlyIncomeBuckets, formatCurrencyBuckets]);
-
-  const actualMonthlyExpenseBuckets = useMemo(() => {
-    const sums = new Map<string, number>();
-    const add = (currency: string | undefined, amountMinor: number) => {
-      const cur = (currency ?? 'CZK').toUpperCase();
-      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
-    };
-    for (const categoryId of rootExpenseCategoryIds) {
-      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
-        add(p.currencyCode, p.alreadySpent ?? 0);
-      }
-    }
-    return sums;
-  }, [rootExpenseCategoryIds, budgetsByCategoryId]);
-
-  const actualMonthlyIncomeBuckets = useMemo(() => {
-    const sums = new Map<string, number>();
-    const add = (currency: string | undefined, amountMinor: number) => {
-      const cur = (currency ?? 'CZK').toUpperCase();
-      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
-    };
-    for (const categoryId of rootIncomeCategoryIds) {
-      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
-        add(p.currencyCode, p.alreadySpent ?? 0);
-      }
-    }
-    return sums;
-  }, [rootIncomeCategoryIds, budgetsByCategoryId]);
-
-  const actualMonthlyExpenseText = useMemo(() => {
-    return formatCurrencyBuckets(actualMonthlyExpenseBuckets);
-  }, [actualMonthlyExpenseBuckets, formatCurrencyBuckets]);
-
-  const actualMonthlyIncomeText = useMemo(() => {
-    return formatCurrencyBuckets(actualMonthlyIncomeBuckets);
-  }, [actualMonthlyIncomeBuckets, formatCurrencyBuckets]);
-
-  const predictedMonthlySavingsBuckets = useMemo(
-    () => diffBuckets(predictedMonthlyIncomeBuckets, predictedMonthlyExpenseBuckets),
-    [diffBuckets, predictedMonthlyIncomeBuckets, predictedMonthlyExpenseBuckets],
-  );
-
-  const actualMonthlySavingsBuckets = useMemo(
-    () => diffBuckets(actualMonthlyIncomeBuckets, actualMonthlyExpenseBuckets),
-    [actualMonthlyIncomeBuckets, actualMonthlyExpenseBuckets, diffBuckets],
-  );
-
-  const predictedSavingsYearlyText = useMemo(
-    () => formatCurrencyBuckets(scaleBuckets(predictedMonthlySavingsBuckets, 12)),
-    [formatCurrencyBuckets, predictedMonthlySavingsBuckets, scaleBuckets],
-  );
-
-  const actualSavingsYearlyText = useMemo(
-    () => formatCurrencyBuckets(scaleBuckets(actualMonthlySavingsBuckets, 12)),
-    [actualMonthlySavingsBuckets, formatCurrencyBuckets, scaleBuckets],
-  );
-
-  const renderColoredSavingsAmounts = useCallback((buckets: Map<string, number>): ReactNode => {
-    const entries = [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b));
-    if (entries.length === 0) return '—';
-    return entries.map(([cur, val], i) => (
-      <Fragment key={cur}>
-        {i > 0 ? ', ' : null}
-        <Box
-          component="span"
-          sx={{
-            color: val > 0 ? 'success.main' : val < 0 ? 'error.main' : 'text.secondary',
-            fontWeight: 600,
-          }}
-        >
-          {formatWalletAmount(val, cur)}
-        </Box>
-      </Fragment>
-    ));
-  }, []);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -634,10 +697,12 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     queryClient.invalidateQueries({
       queryKey: [`/api/category/${trackerId}/active`],
     });
+    queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/summary`] });
   }, [queryClient, trackerId]);
 
   const invalidateBudgets = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
+    queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/summary`] });
     queryClient.invalidateQueries({ queryKey: [`/api/recurring-budget/${trackerId}/active`] });
   }, [queryClient, trackerId]);
 
@@ -1271,7 +1336,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {renderColoredSavingsAmounts(predictedMonthlySavingsBuckets)}
+                      {renderColoredSavingsAmounts(predictedMonthlySavingsBuckets, predictedMonthlySavingsScales)}
                     </Box>
                   </Box>
                 </Tooltip>
@@ -1299,7 +1364,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {renderColoredSavingsAmounts(actualMonthlySavingsBuckets)}
+                      {renderColoredSavingsAmounts(actualMonthlySavingsBuckets, actualMonthlySavingsScales)}
                     </Box>
                   </Box>
                 </Tooltip>

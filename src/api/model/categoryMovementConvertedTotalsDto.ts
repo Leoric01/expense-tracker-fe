@@ -7,8 +7,6 @@
  */
 
 export interface CategoryMovementConvertedTotalsDto {
-  sourceAssetCode?: string;
-  sourceAssetScale?: number;
   targetAssetCode?: string;
   targetAssetScale?: number;
   expectedExpenseAmount?: number;
