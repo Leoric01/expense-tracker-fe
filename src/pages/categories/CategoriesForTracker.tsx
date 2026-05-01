@@ -43,7 +43,6 @@ import {
   Button,
   Checkbox,
   Chip,
-  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -66,6 +65,7 @@ import { PageHeading } from '@components/PageHeading';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
+import * as React from 'react';
 import {
   FC,
   FormEvent,
@@ -252,6 +252,8 @@ export type CategoriesForTrackerProps = {
   categoriesQueryEnabled?: boolean;
   /** ISO rozmezí pro `categoryFindAllActive` (rozpočty aktivní v období) — stejné jako u peněženek nahoře. */
   categoryActivePeriodIso?: { from: string; to: string } | null;
+  /** Volitelný obsah vlevo v horním řádku se souhrnem. */
+  topSummaryLeft?: ReactNode;
 };
 
 function categoriesForTrackerPropsEqual(
@@ -264,6 +266,7 @@ function categoriesForTrackerPropsEqual(
     a.embedded === b.embedded &&
     a.categoriesQueryEnabled === b.categoriesQueryEnabled &&
     a.walletsFromParent === b.walletsFromParent &&
+    a.topSummaryLeft === b.topSummaryLeft &&
     (a.categoryActivePeriodIso?.from ?? '') === (b.categoryActivePeriodIso?.from ?? '') &&
     (a.categoryActivePeriodIso?.to ?? '') === (b.categoryActivePeriodIso?.to ?? '')
   );
@@ -276,6 +279,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   embedded,
   categoriesQueryEnabled = true,
   categoryActivePeriodIso = null,
+  topSummaryLeft,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
@@ -323,6 +327,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   const flat = paged?.content ?? [];
   const tree = useMemo(() => toCategoryTree(flat), [flat]);
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(() => new Set());
+  const expandAllTimerRef = useRef<number | null>(null);
 
   const budgetsByCategoryId = useMemo(() => budgetsByCategoryIdFromFlat(flat), [flat]);
 
@@ -380,14 +385,54 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
 
   const toggleExpandAllCategories = useCallback(() => {
     if (categoryIdsWithChildren.length === 0) return;
-    startTransition(() => {
-      if (allCategoriesExpanded) {
+    if (expandAllTimerRef.current != null) {
+      window.clearTimeout(expandAllTimerRef.current);
+      expandAllTimerRef.current = null;
+    }
+
+    if (allCategoriesExpanded) {
+      startTransition(() => {
         setExpandedCategoryIds(new Set());
+      });
+      return;
+    }
+
+    // Postupné rozbalení po dávkách sníží dlouhé blokující tasky na hlavním vlákně.
+    const ids = [...categoryIdsWithChildren];
+    const chunkSize = 120;
+    let cursor = 0;
+    setExpandedCategoryIds(new Set());
+
+    const runChunk = () => {
+      const end = Math.min(cursor + chunkSize, ids.length);
+      const nextChunk = ids.slice(cursor, end);
+      cursor = end;
+      startTransition(() => {
+        setExpandedCategoryIds((prev) => {
+          const next = new Set(prev);
+          for (const id of nextChunk) next.add(id);
+          return next;
+        });
+      });
+      if (cursor < ids.length) {
+        expandAllTimerRef.current = window.setTimeout(runChunk, 0);
       } else {
-        setExpandedCategoryIds(new Set(categoryIdsWithChildren));
+        expandAllTimerRef.current = null;
       }
-    });
+    };
+
+    runChunk();
   }, [categoryIdsWithChildren, allCategoriesExpanded]);
+
+  React.useEffect(() => {
+    return () => {
+      if (expandAllTimerRef.current != null) {
+        window.clearTimeout(expandAllTimerRef.current);
+        expandAllTimerRef.current = null;
+      }
+    };
+  }, []);
+
 
   const recurringBudgets = (recurringBudgetData?.content ?? []) as RecurringBudgetResponseDto[];
   const recurringByCategoryId = useMemo(() => {
@@ -713,6 +758,19 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     return walk(tree, 0);
   }, [tree]);
 
+  const createParentOptionIds = useMemo(
+    () => new Set(parentOptionsForCreate.map((o) => o.id)),
+    [parentOptionsForCreate],
+  );
+  const editParentOptionIds = useMemo(
+    () => new Set(parentOptionsForEdit.map((o) => o.id)),
+    [parentOptionsForEdit],
+  );
+  const createParentSelectValue =
+    createMode.type === 'root' && formParentId && !createParentOptionIds.has(formParentId) ? '' : formParentId;
+  const editParentSelectValue =
+    formParentId && !editParentOptionIds.has(formParentId) ? '' : formParentId;
+
   const nextSortOrderForParent = useCallback(
     (parentId?: string): number => {
       const parentKey = parentId ?? '';
@@ -977,11 +1035,11 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
         </Typography>
       )}
 
-      {!categoriesQueryEnabled || isLoading ? (
+      {isLoading ? (
         <>
           <Typography color="text.secondary">Načítám…</Typography>
         </>
-      ) : (
+      ) : !categoriesQueryEnabled ? null : (
         <>
           <Box
             sx={{
@@ -993,7 +1051,122 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
               flexWrap: 'wrap',
             }}
           >
-            <Stack spacing={0.5} sx={{ flex: '0 1 780px', minWidth: 0 }}>
+            {topSummaryLeft ? (
+              <Box sx={{ minWidth: 0, alignSelf: 'flex-start' }}>
+                {embedded ? (
+                  <Stack spacing={0.75} alignItems="flex-start" sx={{ minWidth: 0 }}>
+                    <Stack
+                      direction="row"
+                      alignItems="center"
+                      spacing={1.5}
+                      useFlexGap
+                      sx={{ flexWrap: 'wrap', rowGap: 0.75 }}
+                    >
+                      <PageHeading component="h1" sx={{ mt: 0.25, mb: 0 }}>
+                        Kategorie
+                      </PageHeading>
+                      {topSummaryLeft}
+                      <Tooltip
+                        title={
+                          showOnlyCategoriesWithMovements
+                            ? 'Zobrazit všechny kategorie'
+                            : 'Zobrazit jen kategorie s pohyby'
+                        }
+                      >
+                        <IconButton
+                          size="small"
+                          onClick={() => setShowOnlyCategoriesWithMovements((prev) => !prev)}
+                          aria-label={
+                            showOnlyCategoriesWithMovements
+                              ? 'Zobrazit všechny kategorie'
+                              : 'Zobrazit jen kategorie s pohyby'
+                          }
+                          aria-pressed={showOnlyCategoriesWithMovements}
+                          sx={{ color: 'primary.main' }}
+                        >
+                          {showOnlyCategoriesWithMovements ? (
+                            <VisibilityOffIcon fontSize="small" />
+                          ) : (
+                            <VisibilityIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                      {tree.length > 0 && categoryIdsWithChildren.length > 0 ? (
+                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                          <Tooltip title={allCategoriesExpanded ? 'Sbalit všechny podstromy' : 'Rozbalit všechny podstromy'}>
+                            <IconButton
+                              size="small"
+                              onClick={toggleExpandAllCategories}
+                              aria-expanded={allCategoriesExpanded}
+                              aria-label={allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                            >
+                              <ChevronRightIcon
+                                fontSize="small"
+                                sx={{
+                                  transition: (t) =>
+                                    t.transitions.create('transform', { duration: t.transitions.duration.shorter }),
+                                  transform: allCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                                }}
+                              />
+                            </IconButton>
+                          </Tooltip>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            component="button"
+                            type="button"
+                            onClick={toggleExpandAllCategories}
+                            sx={{
+                              cursor: 'pointer',
+                              border: 'none',
+                              background: 'none',
+                              font: 'inherit',
+                              p: 0,
+                              textDecoration: 'none',
+                              '&:hover': { textDecoration: 'underline' },
+                            }}
+                          >
+                            {allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                          </Typography>
+                        </Stack>
+                      ) : null}
+                      <Tooltip title="Z aktivních opakujících se šablon vytvoří nebo doplní konkrétní rozpočty (budget plány) pro aktuální období.">
+                        <span>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<SyncOutlinedIcon />}
+                            onClick={handleSyncRecurringBudgets}
+                            disabled={!trackerId || syncRecurringBudgetsSubmitting}
+                          >
+                            Rozpočty ze šablon
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Button variant="outlined" size="small" onClick={openBulkCreate}>
+                        Hromadně přidat
+                      </Button>
+                      <Button variant="contained" size="small" startIcon={<AddOutlinedIcon />} onClick={openCreateRoot}>
+                        Přidat kategorii
+                      </Button>
+                    </Stack>
+                  </Stack>
+                ) : (
+                  topSummaryLeft
+                )}
+              </Box>
+            ) : null}
+            <Stack
+              spacing={0.5}
+              sx={{
+                flex: '0 1 780px',
+                minWidth: 0,
+                ml: topSummaryLeft ? 0 : 'auto',
+                alignSelf: 'flex-start',
+              }}
+            >
               <Box
                 sx={{
                   display: 'grid',
@@ -1133,88 +1306,96 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
               </Box>
             </Stack>
           </Box>
-          <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-            <Box>
-              {tree.length > 0 && categoryIdsWithChildren.length > 0 ? (
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                  <Tooltip title={allCategoriesExpanded ? 'Sbalit všechny podstromy' : 'Rozbalit všechny podstromy'}>
-                    <IconButton
-                      size="small"
+          {!(embedded && topSummaryLeft) ? (
+            <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+              <Stack direction="row" alignItems="center" spacing={1.5} useFlexGap sx={{ minWidth: 0, flexWrap: 'wrap' }}>
+                {tree.length > 0 && categoryIdsWithChildren.length > 0 ? (
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <Tooltip title={allCategoriesExpanded ? 'Sbalit všechny podstromy' : 'Rozbalit všechny podstromy'}>
+                      <IconButton
+                        size="small"
+                        onClick={toggleExpandAllCategories}
+                        aria-expanded={allCategoriesExpanded}
+                        aria-label={allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                      >
+                        <ChevronRightIcon
+                          fontSize="small"
+                          sx={{
+                            transition: (t) =>
+                              t.transitions.create('transform', { duration: t.transitions.duration.shorter }),
+                            transform: allCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                          }}
+                        />
+                      </IconButton>
+                    </Tooltip>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      component="button"
+                      type="button"
                       onClick={toggleExpandAllCategories}
-                      aria-expanded={allCategoriesExpanded}
-                      aria-label={allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                      sx={{
+                        cursor: 'pointer',
+                        border: 'none',
+                        background: 'none',
+                        font: 'inherit',
+                        p: 0,
+                        textDecoration: 'none',
+                        '&:hover': { textDecoration: 'underline' },
+                      }}
                     >
-                      <ChevronRightIcon
-                        fontSize="small"
-                        sx={{
-                          transition: (t) =>
-                            t.transitions.create('transform', { duration: t.transitions.duration.shorter }),
-                          transform: allCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                        }}
-                      />
-                    </IconButton>
-                  </Tooltip>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    component="button"
-                    type="button"
-                    onClick={toggleExpandAllCategories}
-                    sx={{
-                      cursor: 'pointer',
-                      border: 'none',
-                      background: 'none',
-                      font: 'inherit',
-                      p: 0,
-                      textDecoration: 'none',
-                      '&:hover': { textDecoration: 'underline' },
-                    }}
-                  >
-                    {allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
-                  </Typography>
-                </Stack>
-              ) : null}
+                      {allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                    </Typography>
+                  </Stack>
+                ) : null}
+                <Button variant="outlined" onClick={openBulkCreate}>
+                  Hromadně přidat
+                </Button>
+                <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreateRoot}>
+                  Přidat kategorii
+                </Button>
+              </Stack>
+              <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="text"
+                  startIcon={showOnlyCategoriesWithMovements ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  onClick={() => setShowOnlyCategoriesWithMovements((prev) => !prev)}
+                >
+                  {showOnlyCategoriesWithMovements ? 'Zobrazit vše' : 'Zobrazit jen pohyby'}
+                </Button>
+                <Tooltip title="Z aktivních opakujících se šablon vytvoří nebo doplní konkrétní rozpočty (budget plány) pro aktuální období.">
+                  <span>
+                    <Button
+                      variant="outlined"
+                      startIcon={<SyncOutlinedIcon />}
+                      onClick={handleSyncRecurringBudgets}
+                      disabled={!trackerId || syncRecurringBudgetsSubmitting}
+                    >
+                      Rozpočty ze šablon
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Stack>
             </Box>
-            <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Button
-                variant="text"
-                startIcon={showOnlyCategoriesWithMovements ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                onClick={() => setShowOnlyCategoriesWithMovements((prev) => !prev)}
-              >
-                {showOnlyCategoriesWithMovements ? 'Zobrazit vše' : 'Zobrazit jen pohyby'}
-              </Button>
-              <Tooltip title="Z aktivních opakujících se šablon vytvoří nebo doplní konkrétní rozpočty (budget plány) pro aktuální období.">
-                <span>
-                  <Button
-                    variant="outlined"
-                    startIcon={<SyncOutlinedIcon />}
-                    onClick={handleSyncRecurringBudgets}
-                    disabled={!trackerId || syncRecurringBudgetsSubmitting}
-                  >
-                    Rozpočty ze šablon
-                  </Button>
-                </span>
-              </Tooltip>
-              <Button variant="outlined" onClick={openBulkCreate}>
-                Hromadně přidat
-              </Button>
-              <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreateRoot}>
-                Přidat kategorii
-              </Button>
-            </Stack>
-          </Box>
+          ) : null}
           <Paper variant="outlined" sx={{ p: 2 }}>
             {filteredTree.length === 0 ? (
               <Typography color="text.secondary">Zatím žádná kategorie — přidej první.</Typography>
             ) : (
               <Stack spacing={0}>
-                {filteredTree.map((node, idx) => (
+                {filteredTree.map((node, idx) => {
+                  const prevSibling = idx > 0 ? filteredTree[idx - 1] : undefined;
+                  const nextSibling = idx < filteredTree.length - 1 ? filteredTree[idx + 1] : undefined;
+                  return (
                   <CategoryTreeRows
                     key={node.id ?? node.name}
                     node={node}
                     depth={0}
                     siblingIndex={idx}
-                    siblings={filteredTree}
+                    prevSiblingId={prevSibling?.id}
+                    prevSiblingSortOrder={prevSibling?.sortOrder}
+                    nextSiblingId={nextSibling?.id}
+                    nextSiblingSortOrder={nextSibling?.sortOrder}
                     rowSubmitting={submitting}
                     onAddChild={openCreateChild}
                     onEdit={openEdit}
@@ -1227,7 +1408,8 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                     expandedCategoryIds={expandedCategoryIds}
                     onToggleCategoryExpand={toggleCategoryExpand}
                   />
-                ))}
+                  );
+                })}
               </Stack>
             )}
           </Paper>
@@ -1282,7 +1464,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                   <Select
                     labelId="create-parent"
                     label="Nadřazená (volitelné)"
-                    value={formParentId}
+                    value={createParentSelectValue}
                     onChange={(e) => setFormParentId(e.target.value as string)}
                   >
                     <MenuItem value="">
@@ -1507,7 +1689,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                 <Select
                   labelId="edit-parent"
                   label="Nadřazená"
-                  value={formParentId}
+                  value={editParentSelectValue}
                   onChange={(e) => setFormParentId(e.target.value as string)}
                 >
                   <MenuItem value="">
@@ -1595,7 +1777,10 @@ type RowProps = {
   node: CategoryResponseDto;
   depth: number;
   siblingIndex: number;
-  siblings: CategoryResponseDto[];
+  prevSiblingId?: string;
+  prevSiblingSortOrder?: number;
+  nextSiblingId?: string;
+  nextSiblingSortOrder?: number;
   rowSubmitting: boolean;
   onAddChild: (parentId: string) => void;
   onEdit: (c: CategoryResponseDto) => void;
@@ -1618,7 +1803,10 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
   node,
   depth,
   siblingIndex,
-  siblings,
+  prevSiblingId,
+  prevSiblingSortOrder,
+  nextSiblingId,
+  nextSiblingSortOrder,
   rowSubmitting,
   onAddChild,
   onEdit,
@@ -1642,11 +1830,9 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
 
   const budgetCount = id ? getBudgetCount(id) : 0;
   const oneOffPlans = id ? getOneOffBudgets(id) : [];
-  const prevSibling = siblingIndex > 0 ? siblings[siblingIndex - 1] : undefined;
-  const nextSibling = siblingIndex < siblings.length - 1 ? siblings[siblingIndex + 1] : undefined;
   const currentSort = node.sortOrder ?? siblingIndex;
-  const prevSort = prevSibling?.sortOrder ?? siblingIndex - 1;
-  const nextSort = nextSibling?.sortOrder ?? siblingIndex + 1;
+  const prevSort = prevSiblingSortOrder ?? siblingIndex - 1;
+  const nextSort = nextSiblingSortOrder ?? siblingIndex + 1;
 
   return (
     <Box>
@@ -1720,6 +1906,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                 aria-label="přidat transakci"
                 onClick={(e) => {
                   e.stopPropagation();
+                  (e.currentTarget as HTMLButtonElement).blur();
                   onQuickAddTransaction(node);
                 }}
               >
@@ -1795,11 +1982,11 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   <IconButton
                     size="small"
                     aria-label="posunout kategorii výš"
-                    disabled={!prevSibling?.id || rowSubmitting}
+                    disabled={!prevSiblingId || rowSubmitting}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!prevSibling?.id) return;
-                      onSwapSiblingOrder(id, prevSibling.id, currentSort, prevSort);
+                      if (!prevSiblingId) return;
+                      onSwapSiblingOrder(id, prevSiblingId, currentSort, prevSort);
                     }}
                   >
                     <ArrowUpwardIcon fontSize="small" />
@@ -1811,11 +1998,11 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   <IconButton
                     size="small"
                     aria-label="posunout kategorii níž"
-                    disabled={!nextSibling?.id || rowSubmitting}
+                    disabled={!nextSiblingId || rowSubmitting}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!nextSibling?.id) return;
-                      onSwapSiblingOrder(id, nextSibling.id, currentSort, nextSort);
+                      if (!nextSiblingId) return;
+                      onSwapSiblingOrder(id, nextSiblingId, currentSort, nextSort);
                     }}
                   >
                     <ArrowDownwardIcon fontSize="small" />
@@ -1828,6 +2015,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   aria-label="rozpočty kategorie"
                   onClick={(e) => {
                     e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
                     onManageBudgets(node);
                   }}
                   color={budgetCount > 0 ? 'primary' : 'default'}
@@ -1841,6 +2029,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   aria-label="přidat podkategorii"
                   onClick={(e) => {
                     e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
                     onAddChild(id);
                   }}
                 >
@@ -1853,6 +2042,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   aria-label="upravit"
                   onClick={(e) => {
                     e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
                     onEdit(node);
                   }}
                 >
@@ -1866,6 +2056,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   color="error"
                   onClick={(e) => {
                     e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
                     onDelete(id);
                   }}
                 >
@@ -1876,16 +2067,21 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
           )}
         </Stack>
       </Box>
-      {hasChildren && (
-        <Collapse in={expanded} timeout="auto" unmountOnExit>
-          <Box>
-            {children.map((ch, idx) => (
+      {hasChildren && expanded && (
+        <Box>
+          {children.map((ch, idx) => {
+            const prevSibling = idx > 0 ? children[idx - 1] : undefined;
+            const nextSibling = idx < children.length - 1 ? children[idx + 1] : undefined;
+            return (
               <CategoryTreeRows
                 key={ch.id ?? ch.name}
                 node={ch}
                 depth={depth + 1}
                 siblingIndex={idx}
-                siblings={children}
+                prevSiblingId={prevSibling?.id}
+                prevSiblingSortOrder={prevSibling?.sortOrder}
+                nextSiblingId={nextSibling?.id}
+                nextSiblingSortOrder={nextSibling?.sortOrder}
                 rowSubmitting={rowSubmitting}
                 onAddChild={onAddChild}
                 onEdit={onEdit}
@@ -1898,9 +2094,9 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                 expandedCategoryIds={expandedCategoryIds}
                 onToggleCategoryExpand={onToggleCategoryExpand}
               />
-            ))}
-          </Box>
-        </Collapse>
+            );
+          })}
+        </Box>
       )}
     </Box>
   );

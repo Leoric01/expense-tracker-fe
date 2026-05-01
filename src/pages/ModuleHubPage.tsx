@@ -18,7 +18,7 @@ type ModuleCardConfig = {
 
 const MODULES: ModuleCardConfig[] = [
   {
-    to: '/domu',
+    to: '/prehled',
     title: 'Finance',
     description: 'Rozpočet, účty, přehledy a trackery.',
     Icon: AccountBalanceOutlinedIcon,

@@ -40,7 +40,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/moduly" replace /> },
       { path: 'moduly', element: <ModuleHubPage /> },
-      { path: 'domu', element: <Home /> },
+      { path: 'prehled', element: <Home /> },
       { path: 'trackers', element: <ExpenseTrackers /> },
       { path: 'categories', element: <CategoriesPage /> },
       { path: 'nutrition/setup', element: <NutritionSetupPage /> },
@@ -65,10 +65,10 @@ export const router = createBrowserRouter([
           { path: ':habitId', element: <HabitDetailPage /> },
         ],
       },
-      { path: 'importy', element: <Navigate to="/domu?tab=importy" replace /> },
-      { path: 'exporty', element: <Navigate to="/domu?tab=exporty" replace /> },
-      { path: 'wallets', element: <Navigate to="/domu" replace /> },
-      { path: 'transactions', element: <Navigate to="/domu" replace /> },
+      { path: 'importy', element: <Navigate to="/prehled?tab=importy" replace /> },
+      { path: 'exporty', element: <Navigate to="/prehled?tab=exporty" replace /> },
+      { path: 'wallets', element: <Navigate to="/prehled" replace /> },
+      { path: 'transactions', element: <Navigate to="/prehled" replace /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */
       { path: 'settings', element: <Profile /> },
       { path: 'profile', element: <Navigate to="/settings" replace /> },

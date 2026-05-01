@@ -45,8 +45,6 @@ import {
   TransactionFindAllPageableRateMode,
 } from '@api/model';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -80,10 +78,9 @@ import {
   Typography,
 } from '@mui/material';
 import { PageHeading } from '@components/PageHeading';
-import { CategoriesForTracker } from '@pages/categories/CategoriesForTracker';
+import { MonthDateRangePicker } from '@components/MonthDateRangePicker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import {
-  calendarMonthRangeByMonthDelta,
   dateRangeDdMmYyyyToIsoParams,
   firstDayOfMonth,
   lastDayOfMonth,
@@ -307,15 +304,13 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const ignoreClickUntilRef = useRef(0);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  // V dashboardu zobrazuješ primárně Kategorie; Historie / Importy jsou volitelné záložky.
-  // `?tab=categories` zbytečně neukládáme — viz useEffect níže.
-  const mainTab = tabParam === 'history' ? 1 : tabParam === 'importy' ? 2 : tabParam === 'exporty' ? 3 : tabParam === 'prevody' ? 4 : 0;
-
-  useEffect(() => {
-    if (tabParam === 'categories') {
-      setSearchParams({});
-    }
-  }, [tabParam, setSearchParams]);
+  const mainTab =
+    tabParam === 'history' ||
+    tabParam === 'importy' ||
+    tabParam === 'exporty' ||
+    tabParam === 'prevody'
+      ? tabParam
+      : null;
 
   const sectionNavBtnSx = (active: boolean) => ({
     borderRadius: 1,
@@ -386,23 +381,10 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     bothDatesParsed && parsedFrom!.getTime() > parsedTo!.getTime();
   const rangeParamsOk = Boolean(dashboardParams);
 
-  const shiftMonthBy = useCallback(
-    (deltaMonths: -1 | 1) => {
-      const parsed = parseCsDateTime(rangeFrom.trim());
-      const anchor =
-        parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date();
-      const { from, to } = calendarMonthRangeByMonthDelta(anchor, deltaMonths);
-      setRangeFrom(formatDateDdMmYyyyFromDate(from));
-      setRangeTo(formatDateDdMmYyyyFromDate(to));
-    },
-    [rangeFrom],
-  );
-
   const {
     data: dashboardRes,
     isLoading,
     isError,
-    isFetched: dashboardFetched,
   } = useQuery({
     queryKey: dashboardParams
       ? getInstitutionDashboardQueryKey(trackerId, dashboardParams)
@@ -1047,7 +1029,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       }
       await queryClient.refetchQueries({ queryKey: getExpenseTrackerFindByIdQueryKey(trackerId) });
       await queryClient.refetchQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
-      if (mainTab === 1) {
+      if (mainTab === 'history') {
         await queryClient.refetchQueries({
           queryKey: [`/api/transaction/${trackerId}`],
           type: 'active',
@@ -1135,60 +1117,18 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         useFlexGap
         sx={{ mb: 2, width: '100%' }}
       >
-        <Stack
-          direction="row"
-          flexWrap="wrap"
-          spacing={2}
-          alignItems="center"
-          useFlexGap
-          sx={{ flex: { sm: '0 1 auto' }, minWidth: 0 }}
-        >
-          <Tooltip title="Předchozí měsíc">
-            <IconButton
-              size="small"
-              onClick={() => shiftMonthBy(-1)}
-              aria-label="Předchozí měsíc"
-              sx={{ alignSelf: 'center' }}
-            >
-              <ChevronLeftIcon />
-            </IconButton>
-          </Tooltip>
-          <TextField
-            label="Od"
-            value={rangeFrom}
-            onChange={(e) => setRangeFrom(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-          />
-          <TextField
-            label="Do"
-            value={rangeTo}
-            onChange={(e) => setRangeTo(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-          />
-          <Tooltip title="Další měsíc">
-            <IconButton
-              size="small"
-              onClick={() => shiftMonthBy(1)}
-              aria-label="Další měsíc"
-              sx={{ alignSelf: 'center' }}
-            >
-              <ChevronRightIcon />
-            </IconButton>
-          </Tooltip>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => {
-              setRangeFrom(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
-              setRangeTo(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
+        <Box sx={{ flex: { sm: '0 1 auto' }, minWidth: 0 }}>
+          <MonthDateRangePicker
+            from={rangeFrom}
+            to={rangeTo}
+            onChangeFrom={setRangeFrom}
+            onChangeTo={setRangeTo}
+            onChangeRange={({ from, to }) => {
+              setRangeFrom(from);
+              setRangeTo(to);
             }}
-            sx={{ alignSelf: { xs: 'stretch', sm: 'auto' }, width: { xs: '100%', sm: 'auto' } }}
-          >
-            Aktuální měsíc
-          </Button>
-        </Stack>
+          />
+        </Box>
         <Box
           sx={{
             display: { xs: 'none', sm: 'block' },
@@ -1601,55 +1541,35 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
       >
         <ButtonBase
           disableRipple
-          onClick={() => setSearchParams({})}
-          sx={sectionNavBtnSx(mainTab === 0)}
-        >
-          Kategorie
-        </ButtonBase>
-        <ButtonBase
-          disableRipple
           onClick={() => setSearchParams({ tab: 'history' })}
-          sx={sectionNavBtnSx(mainTab === 1)}
+          sx={sectionNavBtnSx(mainTab === 'history')}
         >
           Historie
         </ButtonBase>
         <ButtonBase
           disableRipple
           onClick={() => setSearchParams({ tab: 'importy' })}
-          sx={sectionNavBtnSx(mainTab === 2)}
+          sx={sectionNavBtnSx(mainTab === 'importy')}
         >
           Importy
         </ButtonBase>
         <ButtonBase
           disableRipple
           onClick={() => setSearchParams({ tab: 'exporty' })}
-          sx={sectionNavBtnSx(mainTab === 3)}
+          sx={sectionNavBtnSx(mainTab === 'exporty')}
         >
           Exporty
         </ButtonBase>
         <ButtonBase
           disableRipple
           onClick={() => setSearchParams({ tab: 'prevody' })}
-          sx={sectionNavBtnSx(mainTab === 4)}
+          sx={sectionNavBtnSx(mainTab === 'prevody')}
         >
           Převody V2
         </ButtonBase>
       </Stack>
 
-      {mainTab === 0 && (
-        <CategoriesForTracker
-          embedded
-          trackerId={trackerId}
-          trackerName={trackerName}
-          walletsFromParent={orderedHoldingsForCategories}
-          categoriesQueryEnabled={
-            dashboardFetched && rangeParamsOk && !rangeOrderInvalid
-          }
-          categoryActivePeriodIso={dashboardParams}
-        />
-      )}
-
-      {mainTab === 1 && (
+      {mainTab === 'history' && (
         <RecentTransactionsPanel
           trackerId={trackerId}
           dateFromCs={rangeFrom}
@@ -1659,11 +1579,11 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         />
       )}
 
-      {mainTab === 2 && <BudgetPlanImportPanel trackerId={trackerId} />}
+      {mainTab === 'importy' && <BudgetPlanImportPanel trackerId={trackerId} />}
 
-      {mainTab === 3 && <BudgetPlanExportPanel trackerId={trackerId} />}
+      {mainTab === 'exporty' && <BudgetPlanExportPanel trackerId={trackerId} />}
 
-      {mainTab === 4 && <TransactionsV2Panel trackerId={trackerId} />}
+      {mainTab === 'prevody' && <TransactionsV2Panel trackerId={trackerId} />}
 
       <TransferBetweenWalletsDialog
         open={Boolean(transferPair)}
