@@ -4,16 +4,16 @@ import type {
   HoldingResponseDto,
   PagedModelCategoryResponseDto,
   PagedModelHoldingResponseDto,
-  PagedModelTransactionResponseDto,
   TransactionFindAllPageableParams,
-  TransactionResponseDto,
+  TransactionPageItemResponseDto,
+  TransactionPageResponseDto,
   UpdateTransactionRequestDto,
 } from '@api/model';
 import {
   TransactionFindAllPageableTransactionType,
-  TransactionResponseDtoBalanceAdjustmentDirection,
-  TransactionResponseDtoStatus,
-  TransactionResponseDtoTransactionType,
+  TransactionPageItemResponseDtoBalanceAdjustmentDirection,
+  TransactionPageItemResponseDtoStatus,
+  TransactionPageItemResponseDtoTransactionType,
 } from '@api/model';
 import {
   getTransactionFindAllPageableQueryKey,
@@ -42,18 +42,15 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
 } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
 import { useTheme } from '@mui/material/styles';
-import { dateRangeDdMmYyyyToIsoParams, firstDayOfMonth, lastDayOfMonth } from '@utils/dashboardPeriod';
+import { dateRangeDdMmYyyyToIsoParams } from '@utils/dashboardPeriod';
 import {
-  calendarDayEndUtcIso,
-  calendarDayStartUtcIso,
-  formatDateDdMmYyyyFromDate,
   formatDateTimeDdMmYyyyHhMm,
-  parseCsDateTime,
   toIsoFromDateTimeInput,
 } from '@utils/dateTimeCs';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -93,10 +90,19 @@ function filterOptionsByQuery<T extends { label: string; id?: string }>(
 }
 
 const DEFAULT_ROWS = 25;
-const TX_SORT = ['transactionDate,desc'] as string[];
-
 const CATEGORY_LIST_PARAMS = { page: 0, size: 500 } as const;
 const WALLET_LIST_PARAMS = { page: 0, size: 200 } as const;
+const TX_SORT_FIELDS = {
+  date: 'transactionDate',
+  type: 'transactionType',
+  holding: 'holdingName',
+  amount: 'amount',
+} as const;
+
+type SortField = keyof typeof TX_SORT_FIELDS;
+type SortDirection = 'asc' | 'desc';
+type TxSortState = { field: SortField; direction: SortDirection } | null;
+type TransactionRow = TransactionPageItemResponseDto;
 
 /** Sloupec data; při nouzi tooltip v řádku. */
 const DATE_COL_SX = {
@@ -147,13 +153,13 @@ const DESCRIPTION_COL_SX = {
 
 function txTypeLabel(t?: string): string {
   switch (t) {
-    case TransactionResponseDtoTransactionType.TRANSFER:
+    case TransactionPageItemResponseDtoTransactionType.TRANSFER:
       return 'Převod';
-    case TransactionResponseDtoTransactionType.INCOME:
+    case TransactionPageItemResponseDtoTransactionType.INCOME:
       return 'Příjem';
-    case TransactionResponseDtoTransactionType.EXPENSE:
+    case TransactionPageItemResponseDtoTransactionType.EXPENSE:
       return 'Výdaj';
-    case TransactionResponseDtoTransactionType.BALANCE_ADJUSTMENT:
+    case TransactionPageItemResponseDtoTransactionType.BALANCE_ADJUSTMENT:
       return 'Korekce';
     default:
       return t ?? '—';
@@ -162,11 +168,11 @@ function txTypeLabel(t?: string): string {
 
 function statusLabel(s?: string): string {
   switch (s) {
-    case TransactionResponseDtoStatus.PENDING:
+    case TransactionPageItemResponseDtoStatus.PENDING:
       return 'Čeká';
-    case TransactionResponseDtoStatus.COMPLETED:
+    case TransactionPageItemResponseDtoStatus.COMPLETED:
       return 'Dokončeno';
-    case TransactionResponseDtoStatus.CANCELLED:
+    case TransactionPageItemResponseDtoStatus.CANCELLED:
       return 'Zrušeno';
     default:
       return s ?? '—';
@@ -175,9 +181,9 @@ function statusLabel(s?: string): string {
 
 function balanceDirectionLabel(d?: string): string {
   switch (d) {
-    case TransactionResponseDtoBalanceAdjustmentDirection.DEDUCTION:
+    case TransactionPageItemResponseDtoBalanceAdjustmentDirection.DEDUCTION:
       return 'Snížení zůstatku';
-    case TransactionResponseDtoBalanceAdjustmentDirection.ADDITION:
+    case TransactionPageItemResponseDtoBalanceAdjustmentDirection.ADDITION:
       return 'Navýšení zůstatku';
     default:
       return d ?? '—';
@@ -187,13 +193,13 @@ function balanceDirectionLabel(d?: string): string {
 /** Částka podle typu: příjem zeleně, výdaj červeně, převod neutrálně (na světlém pozadí text.primary), korekce oranžově. */
 function amountColorForType(t: string | undefined, theme: Theme): string {
   switch (t) {
-    case TransactionResponseDtoTransactionType.INCOME:
+    case TransactionPageItemResponseDtoTransactionType.INCOME:
       return theme.palette.success.main;
-    case TransactionResponseDtoTransactionType.EXPENSE:
+    case TransactionPageItemResponseDtoTransactionType.EXPENSE:
       return theme.palette.error.main;
-    case TransactionResponseDtoTransactionType.TRANSFER:
+    case TransactionPageItemResponseDtoTransactionType.TRANSFER:
       return theme.palette.mode === 'dark' ? '#ffffff' : theme.palette.text.primary;
-    case TransactionResponseDtoTransactionType.BALANCE_ADJUSTMENT:
+    case TransactionPageItemResponseDtoTransactionType.BALANCE_ADJUSTMENT:
       return theme.palette.warning.main;
     default:
       return theme.palette.text.secondary;
@@ -218,9 +224,9 @@ function formatAssetAmount(
   return `${formatted} ${code}`;
 }
 
-function holdingCellText(row: TransactionResponseDto): string {
+function holdingCellText(row: TransactionRow): string {
   const t = row.transactionType as string | undefined;
-  if (t === TransactionResponseDtoTransactionType.TRANSFER) {
+  if (t === TransactionPageItemResponseDtoTransactionType.TRANSFER) {
     const from = row.sourceHoldingName?.trim() || row.sourceHoldingId || '';
     const to = row.targetHoldingName?.trim() || row.targetHoldingId || '';
     if (from && to) return `${from} → ${to}`;
@@ -246,7 +252,7 @@ function TransactionDetailBlock({
   onCancel,
   onUploadAttachment,
 }: {
-  row: TransactionResponseDto;
+  row: TransactionRow;
   actionPending: boolean;
   onEdit: () => void;
   onCancel: () => void;
@@ -274,7 +280,7 @@ function TransactionDetailBlock({
 
   const t = row.transactionType as string | undefined;
   const attachments = row.attachments ?? [];
-  const canCancel = Boolean(row.id) && row.status !== TransactionResponseDtoStatus.CANCELLED;
+  const canCancel = Boolean(row.id) && row.status !== TransactionPageItemResponseDtoStatus.CANCELLED;
 
   return (
     <Box sx={{ py: 1.5, px: 0.5 }}>
@@ -314,7 +320,7 @@ function TransactionDetailBlock({
         {row.balanceAdjustmentDirection
           ? kv('Směr korekce', balanceDirectionLabel(row.balanceAdjustmentDirection))
           : null}
-        {t === TransactionResponseDtoTransactionType.TRANSFER ? (
+        {t === TransactionPageItemResponseDtoTransactionType.TRANSFER ? (
           <>
             {kv('Pozice zdroj', dash(row.sourceHoldingName || row.sourceHoldingId))}
             {kv('ID zdrojové pozice', dash(row.sourceHoldingId))}
@@ -381,14 +387,32 @@ const TX_TYPE_ORDER = [
 
 type TypeFilterValue = '' | TransactionFindAllPageableTransactionType;
 
-export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }) => {
+function nextSortState(current: TxSortState, field: SortField): TxSortState {
+  if (!current || current.field !== field) return { field, direction: 'desc' };
+  if (current.direction === 'desc') return { field, direction: 'asc' };
+  return null;
+}
+
+type RecentTransactionsPanelProps = {
+  trackerId: string;
+  dateFromCs: string;
+  dateToCs: string;
+  dateRangeEnabled: boolean;
+};
+
+export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
+  trackerId,
+  dateFromCs,
+  dateToCs,
+  dateRangeEnabled,
+}) => {
   const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
-  const [editingTx, setEditingTx] = useState<TransactionResponseDto | null>(null);
+  const [editingTx, setEditingTx] = useState<TransactionRow | null>(null);
   const [editHoldingId, setEditHoldingId] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const [editCurrencyCode, setEditCurrencyCode] = useState('');
@@ -408,13 +432,12 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
   const [subCategoryId, setSubCategoryId] = useState('');
   const [holdingId, setHoldingId] = useState('');
   const [transactionType, setTransactionType] = useState<TypeFilterValue>('');
-  const [dateFromCs, setDateFromCs] = useState(() => formatDateDdMmYyyyFromDate(firstDayOfMonth()));
-  const [dateToCs, setDateToCs] = useState(() => formatDateDdMmYyyyFromDate(lastDayOfMonth()));
+  const [dateFilterCleared, setDateFilterCleared] = useState(false);
+  const [txSort, setTxSort] = useState<TxSortState>({ field: 'date', direction: 'desc' });
 
   useEffect(() => {
-    setDateFromCs(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
-    setDateToCs(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
-  }, [trackerId]);
+    setDateFilterCleared(false);
+  }, [dateFromCs, dateToCs]);
 
   useEffect(() => {
     setPage(0);
@@ -429,6 +452,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     dateFromCs,
     dateToCs,
     rowsPerPage,
+    txSort,
   ]);
 
   const toggleRow = useCallback((rowKey: string) => {
@@ -446,8 +470,15 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     setSubCategoryId('');
     setHoldingId('');
     setTransactionType('');
-    setDateFromCs(formatDateDdMmYyyyFromDate(firstDayOfMonth()));
-    setDateToCs(formatDateDdMmYyyyFromDate(lastDayOfMonth()));
+    setDateFilterCleared(true);
+    setRowsPerPage(100);
+    setPage(0);
+  }, []);
+
+  const handleSortClick = useCallback((field: SortField) => {
+    setTxSort((current) => nextSortState(current, field));
+    setPage(0);
+    setExpandedIds(new Set());
   }, []);
 
   const invalidateTransactions = useCallback(async () => {
@@ -456,7 +487,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
   }, [queryClient, trackerId]);
 
-  const openEditDialog = useCallback((row: TransactionResponseDto) => {
+  const openEditDialog = useCallback((row: TransactionRow) => {
     setEditingTx(row);
     setEditHoldingId(row.holdingId ?? '');
     setEditAmount(row.amount != null ? String(row.amount) : '');
@@ -553,7 +584,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
   ]);
 
   const handleCancelTransaction = useCallback(
-    async (row: TransactionResponseDto) => {
+    async (row: TransactionRow) => {
       const transactionId = row.id;
       if (!transactionId || actionPending) return;
       if (!window.confirm('Opravdu zrušit tuto transakci?')) return;
@@ -576,7 +607,7 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
   );
 
   const handleUploadAttachment = useCallback(
-    async (row: TransactionResponseDto, file: File) => {
+    async (row: TransactionRow, file: File) => {
       const transactionId = row.id;
       if (!transactionId || actionPending) return;
       setActionPending(true);
@@ -601,8 +632,10 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     const params: TransactionFindAllPageableParams = {
       page,
       size: rowsPerPage,
-      sort: TX_SORT,
     };
+    if (txSort) {
+      params.sort = [`${TX_SORT_FIELDS[txSort.field]},${txSort.direction}`];
+    }
     const q = debouncedSearch.trim();
     if (q) params.search = q;
     if (subCategoryId) params.categoryId = subCategoryId;
@@ -610,22 +643,11 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     if (holdingId) params.holdingId = holdingId;
     if (transactionType) params.transactionType = transactionType;
 
-    const fromT = dateFromCs.trim();
-    const toT = dateToCs.trim();
-    if (fromT && toT) {
-      const range = dateRangeDdMmYyyyToIsoParams(fromT, toT);
+    if (!dateFilterCleared && dateRangeEnabled) {
+      const range = dateRangeDdMmYyyyToIsoParams(dateFromCs.trim(), dateToCs.trim());
       if (range) {
         params.dateFrom = range.from;
         params.dateTo = range.to;
-      }
-    } else {
-      const fromParsed = fromT ? parseCsDateTime(fromT) : null;
-      const toParsed = toT ? parseCsDateTime(toT) : null;
-      if (fromParsed) {
-        params.dateFrom = calendarDayStartUtcIso(fromParsed);
-      }
-      if (toParsed) {
-        params.dateTo = calendarDayEndUtcIso(toParsed);
       }
     }
 
@@ -640,6 +662,9 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     transactionType,
     dateFromCs,
     dateToCs,
+    dateFilterCleared,
+    dateRangeEnabled,
+    txSort,
   ]);
 
   const filterSelectSx = { minWidth: 140, maxWidth: 220 } as const;
@@ -711,13 +736,13 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
     queryFn: async ({ signal }) => {
       const res = await transactionFindAllPageable(trackerId, listParams, { signal });
       if (res.status < 200 || res.status >= 300) throw new Error('transactions');
-      return res.data as PagedModelTransactionResponseDto;
+      return res.data as TransactionPageResponseDto;
     },
     enabled: Boolean(trackerId),
     placeholderData: keepPreviousData,
   });
 
-  const recentTx = (txPaged?.content ?? []) as TransactionResponseDto[];
+  const recentTx = (txPaged?.content ?? []) as TransactionRow[];
   const totalElements = txPaged?.page?.totalElements ?? 0;
   const totals = txPaged?.totals;
 
@@ -729,6 +754,10 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
   const totalsAssetScale = useMemo(() => {
     return recentTx.find((r) => r.assetScale != null)?.assetScale ?? 2;
   }, [recentTx]);
+
+  const sortDirectionFor = (field: SortField): SortDirection => {
+    return txSort?.field === field ? txSort.direction : 'asc';
+  };
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
@@ -910,20 +939,6 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
             renderInput={(params) => <TextField {...params} label="Typ" />}
             sx={filterSelectSx}
           />
-          <TextField
-            size="small"
-            label="Od"
-            value={dateFromCs}
-            onChange={(e) => setDateFromCs(e.target.value)}
-            sx={{ width: 132 }}
-          />
-          <TextField
-            size="small"
-            label="Do"
-            value={dateToCs}
-            onChange={(e) => setDateToCs(e.target.value)}
-            sx={{ width: 132 }}
-          />
           <Button size="small" variant="outlined" onClick={clearFilters} sx={{ alignSelf: 'center' }}>
             Vymazat filtry
           </Button>
@@ -945,14 +960,44 @@ export const RecentTransactionsPanel: FC<{ trackerId: string }> = ({ trackerId }
       >
         <TableHead>
           <TableRow>
-            <TableCell sx={DATE_COL_SX}>Datum</TableCell>
-            <TableCell sx={TYPE_COL_SX}>Typ</TableCell>
-            <TableCell sx={WALLET_COL_SX}>Pozice</TableCell>
+            <TableCell sx={DATE_COL_SX}>
+              <TableSortLabel
+                active={txSort?.field === 'date'}
+                direction={sortDirectionFor('date')}
+                onClick={() => handleSortClick('date')}
+              >
+                Datum
+              </TableSortLabel>
+            </TableCell>
+            <TableCell sx={TYPE_COL_SX}>
+              <TableSortLabel
+                active={txSort?.field === 'type'}
+                direction={sortDirectionFor('type')}
+                onClick={() => handleSortClick('type')}
+              >
+                Typ
+              </TableSortLabel>
+            </TableCell>
+            <TableCell sx={WALLET_COL_SX}>
+              <TableSortLabel
+                active={txSort?.field === 'holding'}
+                direction={sortDirectionFor('holding')}
+                onClick={() => handleSortClick('holding')}
+              >
+                Pozice
+              </TableSortLabel>
+            </TableCell>
             <TableCell sx={ROOT_CATEGORY_COL_SX}>Hlavní kategorie</TableCell>
             <TableCell>Kategorie</TableCell>
             <TableCell sx={DESCRIPTION_COL_SX}>Popis</TableCell>
             <TableCell align="right" sx={{ width: 108, whiteSpace: 'nowrap' }}>
-              Částka
+              <TableSortLabel
+                active={txSort?.field === 'amount'}
+                direction={sortDirectionFor('amount')}
+                onClick={() => handleSortClick('amount')}
+              >
+                Částka
+              </TableSortLabel>
             </TableCell>
           </TableRow>
         </TableHead>

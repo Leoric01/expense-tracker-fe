@@ -1589,7 +1589,14 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
         />
       )}
 
-      {mainTab === 1 && <RecentTransactionsPanel trackerId={trackerId} />}
+      {mainTab === 1 && (
+        <RecentTransactionsPanel
+          trackerId={trackerId}
+          dateFromCs={rangeFrom}
+          dateToCs={rangeTo}
+          dateRangeEnabled={rangeParamsOk && !rangeOrderInvalid}
+        />
+      )}
 
       {mainTab === 2 && <BudgetPlanImportPanel trackerId={trackerId} />}
 

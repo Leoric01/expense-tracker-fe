@@ -5,6 +5,7 @@
  * Swagger dokumentace pro ExpenseTracker backend
  * OpenAPI spec version: 1.0
  */
+import type { TransactionFindAllPageableRateMode } from './transactionFindAllPageableRateMode';
 import type { TransactionFindAllPageableStatus } from './transactionFindAllPageableStatus';
 import type { TransactionFindAllPageableTransactionType } from './transactionFindAllPageableTransactionType';
 
@@ -16,6 +17,7 @@ export type TransactionFindAllPageableParams = {
   status?: TransactionFindAllPageableStatus;
   dateFrom?: string;
   dateTo?: string;
+  rateMode?: TransactionFindAllPageableRateMode;
   /**
    * Zero-based page index (0..N)
    * @minimum 0
