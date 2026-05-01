@@ -74,6 +74,10 @@ import { PageHeading } from '@components/PageHeading';
 import { MonthDateRangePicker } from '@components/MonthDateRangePicker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import {
+  BALANCE_AMOUNTS_VISIBILITY_EVENT,
+  readShowBalanceAmountsFromStorage,
+} from '@utils/balanceAmountsVisibility';
+import {
   dateRangeDdMmYyyyToIsoParams,
   firstDayOfMonth,
   lastDayOfMonth,
@@ -350,6 +354,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   const [rangeTo, setRangeTo] = useState(() => formatDateDdMmYyyyFromDate(lastDayOfMonth()));
   const [explicitDisplayAssetId, setExplicitDisplayAssetId] = useState('');
   const [explicitDisplayAssetCode, setExplicitDisplayAssetCode] = useState('');
+  const [showBalanceAmounts, setShowBalanceAmounts] = useState(true);
 
   const dashboardParams = useMemo(
     () => dateRangeDdMmYyyyToIsoParams(rangeFrom, rangeTo),
@@ -460,12 +465,14 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     if (!trackerId) {
       setExplicitDisplayAssetId('');
       setExplicitDisplayAssetCode('');
+      setShowBalanceAmounts(true);
       return;
     }
     const key = `tracker-${trackerId}-display-currency-selection`;
     const codeKey = `tracker-${trackerId}-display-currency-selection-code`;
     setExplicitDisplayAssetId(localStorage.getItem(key) ?? '');
     setExplicitDisplayAssetCode(localStorage.getItem(codeKey) ?? '');
+    setShowBalanceAmounts(readShowBalanceAmountsFromStorage(trackerId));
   }, [trackerId]);
 
   useEffect(() => {
@@ -479,6 +486,18 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     return () => {
       window.removeEventListener('display-currency-selection-changed', handleDisplaySelectionChanged);
     };
+  }, [trackerId]);
+
+  useEffect(() => {
+    const onVisibility = (event: Event) => {
+      const detail = (event as CustomEvent<{ trackerId?: string; visible?: boolean }>).detail;
+      if (!detail || detail.trackerId !== trackerId) return;
+      if (typeof detail.visible === 'boolean') {
+        setShowBalanceAmounts(detail.visible);
+      }
+    };
+    window.addEventListener(BALANCE_AMOUNTS_VISIBILITY_EVENT, onVisibility);
+    return () => window.removeEventListener(BALANCE_AMOUNTS_VISIBILITY_EVENT, onVisibility);
   }, [trackerId]);
 
   const globalWalletOrder = useMemo(
@@ -523,7 +542,9 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
   );
 
   const hasAnyHoldings = summaries.length > 0;
-  const amountMaskSx = undefined;
+  const amountMaskSx = showBalanceAmounts
+    ? undefined
+    : { filter: 'blur(7px)', userSelect: 'none' as const, WebkitUserSelect: 'none' as const };
 
   const replaceWidgetOrder = useMutation({
     mutationFn: async (nextGlobal: string[]) => {
@@ -927,33 +948,27 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId, trackerName }) => {
     <Box>
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
-        spacing={1}
-        alignItems={{ xs: 'stretch', sm: 'center' }}
-        justifyContent="space-between"
-        flexWrap="wrap"
-        sx={{ mb: 1 }}
-      >
-        <PageHeading component="h2">Moje pozice</PageHeading>
-      </Stack>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
         spacing={2}
         alignItems={{ xs: 'stretch', sm: 'center' }}
+        justifyContent="space-between"
         useFlexGap
-        sx={{ mb: 2, width: '100%' }}
+        sx={{ mb: 2, width: '100%', mt: 0.5 }}
       >
-        <Box sx={{ flex: { sm: '0 1 auto' }, minWidth: 0 }}>
-          <MonthDateRangePicker
-            from={rangeFrom}
-            to={rangeTo}
-            onChangeFrom={setRangeFrom}
-            onChangeTo={setRangeTo}
-            onChangeRange={({ from, to }) => {
-              setRangeFrom(from);
-              setRangeTo(to);
-            }}
-          />
-        </Box>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
+          <PageHeading component="h2">Moje pozice</PageHeading>
+          <Box sx={{ flex: { sm: '0 1 auto' }, minWidth: 0 }}>
+            <MonthDateRangePicker
+              from={rangeFrom}
+              to={rangeTo}
+              onChangeFrom={setRangeFrom}
+              onChangeTo={setRangeTo}
+              onChangeRange={({ from, to }) => {
+                setRangeFrom(from);
+                setRangeTo(to);
+              }}
+            />
+          </Box>
+        </Stack>
         <Stack
           direction={{ xs: 'column', sm: 'row' }}
           spacing={1}

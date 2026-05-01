@@ -12,7 +12,9 @@ import type {
 } from '@api/model';
 import { DisplayCurrencySelect } from '@components/DisplayCurrencySelect';
 import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
-import { Box, Stack, Typography } from '@mui/material';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import { Box, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import { dateRangeDdMmYyyyToIsoParams, firstDayOfMonth, lastDayOfMonth } from '@utils/dashboardPeriod';
 import { formatDateDdMmYyyyFromDate } from '@utils/dateTimeCs';
 import { formatAmount } from '@utils/formatAmount';
@@ -20,6 +22,11 @@ import { DEFAULT_FIAT_SCALE } from '@utils/moneyMinorUnits';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FC, useEffect, useMemo, useState } from 'react';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
+import {
+  BALANCE_AMOUNTS_VISIBILITY_EVENT,
+  readShowBalanceAmountsFromStorage,
+  showBalanceAmountsStorageKey,
+} from '@utils/balanceAmountsVisibility';
 
 const ASSET_LIST_PARAMS = { page: 0, size: 500 } as const;
 
@@ -30,6 +37,7 @@ export const HeaderFinanceSummary: FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [selectedDisplayAssetId, setSelectedDisplayAssetId] = useState('');
   const [selectedDisplayAssetCode, setSelectedDisplayAssetCode] = useState('');
+  const [showBalanceAmounts, setShowBalanceAmounts] = useState(true);
 
   const dashboardParams = useMemo(
     () =>
@@ -80,10 +88,12 @@ export const HeaderFinanceSummary: FC = () => {
 
   useEffect(() => {
     if (!trackerId) {
+      setShowBalanceAmounts(true);
       setSelectedDisplayAssetId('');
       setSelectedDisplayAssetCode('');
       return;
     }
+    setShowBalanceAmounts(readShowBalanceAmountsFromStorage(trackerId));
     const key = `tracker-${trackerId}-display-currency-selection`;
     const persisted = localStorage.getItem(key) ?? '';
     const persistedCode = localStorage.getItem(`tracker-${trackerId}-display-currency-selection-code`) ?? '';
@@ -94,6 +104,18 @@ export const HeaderFinanceSummary: FC = () => {
         detail: { trackerId, assetId: persisted, assetCode: persistedCode },
       }),
     );
+  }, [trackerId]);
+
+  useEffect(() => {
+    const onVisibility = (event: Event) => {
+      const detail = (event as CustomEvent<{ trackerId?: string; visible?: boolean }>).detail;
+      if (!detail || detail.trackerId !== trackerId) return;
+      if (typeof detail.visible === 'boolean') {
+        setShowBalanceAmounts(detail.visible);
+      }
+    };
+    window.addEventListener(BALANCE_AMOUNTS_VISIBILITY_EVENT, onVisibility);
+    return () => window.removeEventListener(BALANCE_AMOUNTS_VISIBILITY_EVENT, onVisibility);
   }, [trackerId]);
 
   useEffect(() => {
@@ -173,6 +195,17 @@ export const HeaderFinanceSummary: FC = () => {
     await syncDisplayCurrency(nextAssetId);
   };
 
+  const setBalanceAmountsVisible = (visible: boolean) => {
+    if (!trackerId) return;
+    localStorage.setItem(showBalanceAmountsStorageKey(trackerId), visible ? 'true' : 'false');
+    setShowBalanceAmounts(visible);
+    window.dispatchEvent(
+      new CustomEvent(BALANCE_AMOUNTS_VISIBILITY_EVENT, {
+        detail: { trackerId, visible },
+      }),
+    );
+  };
+
   if (!trackerId) return null;
 
   return (
@@ -186,14 +219,40 @@ export const HeaderFinanceSummary: FC = () => {
         }}
         sx={{ minWidth: { xs: '100%', sm: 220 }, bgcolor: 'background.paper', borderRadius: 1 }}
       />
-      <Typography variant="body2" component="p" sx={{ m: 0 }}>
-        <Box component="span" sx={{ color: 'text.secondary', mr: 0.5 }}>
-          Celkové prostředky:
-        </Box>
-        <Box component="span" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
-          {totalFundsText}
-        </Box>
-      </Typography>
+      <Stack direction="row" alignItems="center" spacing={0.25} flexWrap="wrap" sx={{ minWidth: 0 }}>
+        <Typography variant="body2" component="p" sx={{ m: 0 }}>
+          <Box component="span" sx={{ color: 'text.secondary', mr: 0.5 }}>
+            Celkové prostředky:
+          </Box>
+          <Box
+            component="span"
+            sx={{
+              fontWeight: 600,
+              fontVariantNumeric: 'tabular-nums',
+              color: 'text.primary',
+              ...(!showBalanceAmounts
+                ? { filter: 'blur(7px)', userSelect: 'none', WebkitUserSelect: 'none' }
+                : {}),
+            }}
+          >
+            {totalFundsText}
+          </Box>
+        </Typography>
+        <Tooltip title={showBalanceAmounts ? 'Skrýt částky' : 'Zobrazit částky'}>
+          <IconButton
+            size="small"
+            aria-label={showBalanceAmounts ? 'Skrýt částky' : 'Zobrazit částky'}
+            onClick={() => setBalanceAmountsVisible(!showBalanceAmounts)}
+            sx={{ color: 'text.secondary' }}
+          >
+            {showBalanceAmounts ? (
+              <VisibilityOutlinedIcon fontSize="small" />
+            ) : (
+              <VisibilityOffOutlinedIcon fontSize="small" />
+            )}
+          </IconButton>
+        </Tooltip>
+      </Stack>
     </Stack>
   );
 };
