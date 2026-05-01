@@ -10,6 +10,7 @@ import type {
   UpdateTransactionRequestDto,
 } from '@api/model';
 import {
+  TransactionFindAllPageableRateMode,
   TransactionFindAllPageableTransactionType,
   TransactionPageItemResponseDtoBalanceAdjustmentDirection,
   TransactionPageItemResponseDtoStatus,
@@ -44,6 +45,9 @@ import {
   TableRow,
   TableSortLabel,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
@@ -103,6 +107,7 @@ type SortField = keyof typeof TX_SORT_FIELDS;
 type SortDirection = 'asc' | 'desc';
 type TxSortState = { field: SortField; direction: SortDirection } | null;
 type TransactionRow = TransactionPageItemResponseDto;
+type AmountRateMode = TransactionFindAllPageableRateMode;
 
 /** Sloupec data; při nouzi tooltip v řádku. */
 const DATE_COL_SX = {
@@ -224,6 +229,11 @@ function formatAssetAmount(
   return `${formatted} ${code}`;
 }
 
+function formatConvertedAmount(row: TransactionRow): string | null {
+  if (row.convertedAmount == null || !row.convertedInto?.trim()) return null;
+  return formatAssetAmount(row.convertedAmount, row.convertedInto, 2);
+}
+
 function holdingCellText(row: TransactionRow): string {
   const t = row.transactionType as string | undefined;
   if (t === TransactionPageItemResponseDtoTransactionType.TRANSFER) {
@@ -281,6 +291,7 @@ function TransactionDetailBlock({
   const t = row.transactionType as string | undefined;
   const attachments = row.attachments ?? [];
   const canCancel = Boolean(row.id) && row.status !== TransactionPageItemResponseDtoStatus.CANCELLED;
+  const convertedAmountText = formatConvertedAmount(row);
 
   return (
     <Box sx={{ py: 1.5, px: 0.5 }}>
@@ -317,6 +328,7 @@ function TransactionDetailBlock({
         {kv('Typ', txTypeLabel(t))}
         {kv('Datum transakce', formatDateTimeDdMmYyyyHhMm(row.transactionDate))}
         {kv('Částka', formatAssetAmount(row.amount, row.assetCode, row.assetScale))}
+        {convertedAmountText ? kv('Přepočteno', convertedAmountText) : null}
         {row.balanceAdjustmentDirection
           ? kv('Směr korekce', balanceDirectionLabel(row.balanceAdjustmentDirection))
           : null}
@@ -434,6 +446,9 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
   const [transactionType, setTransactionType] = useState<TypeFilterValue>('');
   const [dateFilterCleared, setDateFilterCleared] = useState(false);
   const [txSort, setTxSort] = useState<TxSortState>({ field: 'date', direction: 'desc' });
+  const [amountRateMode, setAmountRateMode] = useState<AmountRateMode>(
+    TransactionFindAllPageableRateMode.TRANSACTION_DATE,
+  );
 
   useEffect(() => {
     setDateFilterCleared(false);
@@ -453,6 +468,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     dateToCs,
     rowsPerPage,
     txSort,
+    amountRateMode,
   ]);
 
   const toggleRow = useCallback((rowKey: string) => {
@@ -635,6 +651,9 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     };
     if (txSort) {
       params.sort = [`${TX_SORT_FIELDS[txSort.field]},${txSort.direction}`];
+      if (txSort.field === 'amount') {
+        params.rateMode = amountRateMode;
+      }
     }
     const q = debouncedSearch.trim();
     if (q) params.search = q;
@@ -665,6 +684,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     dateFilterCleared,
     dateRangeEnabled,
     txSort,
+    amountRateMode,
   ]);
 
   const filterSelectSx = { minWidth: 140, maxWidth: 220 } as const;
@@ -990,14 +1010,48 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
             <TableCell sx={ROOT_CATEGORY_COL_SX}>Hlavní kategorie</TableCell>
             <TableCell>Kategorie</TableCell>
             <TableCell sx={DESCRIPTION_COL_SX}>Popis</TableCell>
-            <TableCell align="right" sx={{ width: 108, whiteSpace: 'nowrap' }}>
-              <TableSortLabel
-                active={txSort?.field === 'amount'}
-                direction={sortDirectionFor('amount')}
-                onClick={() => handleSortClick('amount')}
-              >
-                Částka
-              </TableSortLabel>
+            <TableCell align="right" sx={{ width: 170, whiteSpace: 'nowrap' }}>
+              <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="flex-end">
+                {txSort?.field === 'amount' && (
+                  <Tooltip title="Kurz pro porovnání částek: v den transakce nebo dnešní kurz.">
+                    <Box onClick={(e) => e.stopPropagation()}>
+                      <ToggleButtonGroup
+                        exclusive
+                        size="small"
+                        value={amountRateMode}
+                        onChange={(_, value: AmountRateMode | null) => {
+                          if (!value) return;
+                          setAmountRateMode(value);
+                          setPage(0);
+                          setExpandedIds(new Set());
+                        }}
+                        sx={{
+                          '& .MuiToggleButton-root': {
+                            px: 0.55,
+                            py: 0.15,
+                            fontSize: '0.65rem',
+                            lineHeight: 1.1,
+                          },
+                        }}
+                      >
+                        <ToggleButton value={TransactionFindAllPageableRateMode.TRANSACTION_DATE}>
+                          Den
+                        </ToggleButton>
+                        <ToggleButton value={TransactionFindAllPageableRateMode.NOW}>
+                          Teď
+                        </ToggleButton>
+                      </ToggleButtonGroup>
+                    </Box>
+                  </Tooltip>
+                )}
+                <TableSortLabel
+                  active={txSort?.field === 'amount'}
+                  direction={sortDirectionFor('amount')}
+                  onClick={() => handleSortClick('amount')}
+                >
+                  Částka
+                </TableSortLabel>
+              </Stack>
             </TableCell>
           </TableRow>
         </TableHead>
@@ -1015,6 +1069,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
               const walletLabel = holdingCellText(row);
               const rowKey = row.id ?? `p${page}-i${index}`;
               const open = expandedIds.has(rowKey);
+              const convertedAmountText = formatConvertedAmount(row);
 
               return (
                 <Fragment key={rowKey}>
@@ -1051,13 +1106,27 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
                     <TableCell
                       align="right"
                       sx={{
-                        width: 108,
+                        width: 170,
                         whiteSpace: 'nowrap',
                         fontWeight: 600,
                         color: amountColorForType(row.transactionType as string | undefined, theme),
                       }}
                     >
-                      {formatAssetAmount(row.amount, row.assetCode, row.assetScale)}
+                      <Stack spacing={0.25} alignItems="flex-end">
+                        <Box component="span">
+                          {formatAssetAmount(row.amount, row.assetCode, row.assetScale)}
+                        </Box>
+                        {convertedAmountText ? (
+                          <Typography
+                            component="span"
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ lineHeight: 1.1 }}
+                          >
+                            {convertedAmountText}
+                          </Typography>
+                        ) : null}
+                      </Stack>
                     </TableCell>
                   </TableRow>
                   <TableRow>
