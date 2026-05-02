@@ -53,7 +53,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { FC, type SubmitEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
-import { intervalFieldHelperCs, recurringIntervalDescriptionCs } from './categoryRecurringBudgetIntervalText';
+import { recurringIntervalDescriptionCs } from './categoryRecurringBudgetIntervalText';
 
 type Props = {
   category: CategoryResponseDto | null;
@@ -64,6 +64,33 @@ type Props = {
 
 const PERIOD_OPTIONS = Object.values(CreateRecurringBudgetRequestDtoPeriodType);
 const ASSET_LIST_PARAMS = { page: 0, size: 500 } as const;
+
+const outlineDenseSx = {
+  '& .MuiOutlinedInput-root': { minHeight: 34 },
+  '& .MuiOutlinedInput-input': { py: 0.45, px: 1, fontSize: '0.8125rem' },
+} as const;
+
+const selectDenseSx = {
+  '& .MuiOutlinedInput-root': { minHeight: 34 },
+  '& .MuiSelect-select': { py: 0.45, px: 1, fontSize: '0.8125rem', display: 'flex', alignItems: 'center' },
+} as const;
+
+const recurringFormRootSx = {
+  display: 'grid',
+  gridTemplateColumns: { xs: '1fr', sm: '7fr 3fr' },
+  columnGap: 1,
+  rowGap: 0.25,
+  alignItems: 'flex-start',
+} as const;
+
+const recurringFooterSx = {
+  display: 'grid',
+  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr auto' },
+  columnGap: 0.75,
+  rowGap: 0.25,
+  alignItems: 'flex-start',
+  gridColumn: { xs: 1, sm: '1 / -1' },
+} as const;
 
 function isoToDdMmYyyyInput(iso?: string): string {
   if (!iso?.trim()) return '';
@@ -362,17 +389,14 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
     }
   };
 
-  const compactFieldProps = { size: 'small' as const, helperText: ' ' };
-
-  const formGridSx = {
-    display: 'grid',
-    gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
-    gap: 1,
-    alignItems: 'flex-start',
+  const compactFieldProps = {
+    size: 'small' as const,
+    helperText: ' ' as const,
+    FormHelperTextProps: { sx: { m: 0, minHeight: 0, display: 'none' } },
   };
 
   return (
-    <Stack spacing={1}>
+    <Stack spacing={0.5}>
       {plans.length === 0 ? (
         <Typography variant="caption" color="text.secondary">
           Zatím žádný opakující se limit.
@@ -387,8 +411,8 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
                 sx={{
                   display: 'flex',
                   alignItems: 'flex-start',
-                  gap: 0.75,
-                  py: 0.75,
+                  gap: 0.5,
+                  py: 0.5,
                   borderBottom: 1,
                   borderColor: 'divider',
                 }}
@@ -458,19 +482,24 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
 
       {editing && (
         <>
-          <Divider sx={{ my: 0.5 }} />
-          <Typography variant="caption" color="text.secondary" fontWeight={600}>
+          <Divider sx={{ my: 0.25 }} />
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            fontWeight={600}
+            sx={{ display: 'block', lineHeight: 1.2 }}
+          >
             Upravit opakující se limit
           </Typography>
           <Box component="form" onSubmit={handleUpdate} sx={{ mt: 0.25 }}>
-            <Box sx={formGridSx}>
+            <Box sx={recurringFormRootSx}>
               <TextField
                 label="Název"
                 value={eName}
                 onChange={(ev) => setEName(ev.target.value)}
                 required
                 fullWidth
-                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
+                sx={{ gridColumn: { xs: 1, sm: 1 }, ...outlineDenseSx }}
                 {...compactFieldProps}
               />
               <AmountTextFieldCs
@@ -481,9 +510,57 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
                 fullWidth
                 size="small"
                 helperText=" "
-                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
+                FormHelperTextProps={{ sx: { m: 0, minHeight: 0, display: 'none' } }}
+                sx={{ gridColumn: { xs: 1, sm: 2 }, ...outlineDenseSx }}
               />
-              <FormControl fullWidth size="small" required>
+              <Box
+                sx={{
+                  gridColumn: { xs: 1, sm: 1 },
+                  display: 'flex',
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  gap: 0.5,
+                  alignItems: 'flex-start',
+                  minWidth: 0,
+                  width: '100%',
+                }}
+              >
+                <FormControl
+                  fullWidth
+                  size="small"
+                  required
+                  sx={{ flex: { sm: '1 1 0%' }, minWidth: { sm: 0 }, ...selectDenseSx }}
+                >
+                  <InputLabel id="e-rec-period">Druh období</InputLabel>
+                  <Select
+                    labelId="e-rec-period"
+                    label="Druh období"
+                    value={ePeriod}
+                    onChange={(ev) => setEPeriod(ev.target.value as UpdateRecurringBudgetRequestDtoPeriodType)}
+                  >
+                    {PERIOD_OPTIONS.map((v) => (
+                      <MenuItem key={v} value={v}>
+                        {budgetPeriodLabelCs(v)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <TextField
+                  label="Interval"
+                  value={eInterval}
+                  onChange={(ev) => setEInterval(ev.target.value)}
+                  required
+                  type="number"
+                  inputProps={{ min: 1, step: 1 }}
+                  sx={{ width: { xs: '100%', sm: '6.25rem' }, flexShrink: 0, ...outlineDenseSx }}
+                  {...compactFieldProps}
+                />
+              </Box>
+              <FormControl
+                fullWidth
+                size="small"
+                required
+                sx={{ gridColumn: { xs: 1, sm: 2 }, minWidth: 0, ...selectDenseSx }}
+              >
                 <InputLabel id="e-rec-asset">Aktivum</InputLabel>
                 <Select
                   labelId="e-rec-asset"
@@ -498,60 +575,33 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
                   ))}
                 </Select>
               </FormControl>
-              <FormControl fullWidth size="small" sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}>
-                <InputLabel id="e-rec-period">Druh období</InputLabel>
-                <Select
-                  labelId="e-rec-period"
-                  label="Druh období"
-                  value={ePeriod}
-                  onChange={(ev) => setEPeriod(ev.target.value as UpdateRecurringBudgetRequestDtoPeriodType)}
-                >
-                  {PERIOD_OPTIONS.map((v) => (
-                    <MenuItem key={v} value={v}>
-                      {budgetPeriodLabelCs(v)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                label="Interval"
-                value={eInterval}
-                onChange={(ev) => setEInterval(ev.target.value)}
-                required
-                fullWidth
-                type="number"
-                inputProps={{ min: 1, step: 1 }}
-                helperText={intervalFieldHelperCs(ePeriod)}
-                size="small"
-              />
-              <TextField
-                label="Platnost od"
-                value={eStart}
-                onChange={(ev) => setEStart(ev.target.value)}
-                required
-                fullWidth
-                size="small"
-                helperText=" "
-                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
-              />
-              <TextField
-                label="Platnost do (volitelné)"
-                value={eEnd}
-                onChange={(ev) => setEEnd(ev.target.value)}
-                fullWidth
-                size="small"
-                helperText=" "
-                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
-                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
-              />
-              <Stack direction="row" spacing={0.75} sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}>
-                <Button type="submit" variant="contained" disabled={submitting} size="small">
-                  Uložit
-                </Button>
-                <Button type="button" size="small" disabled={submitting} onClick={() => setEditing(null)}>
-                  Zrušit
-                </Button>
-              </Stack>
+              <Box sx={recurringFooterSx}>
+                <TextField
+                  label="Platnost od"
+                  value={eStart}
+                  onChange={(ev) => setEStart(ev.target.value)}
+                  required
+                  fullWidth
+                  sx={outlineDenseSx}
+                  {...compactFieldProps}
+                />
+                <TextField
+                  label="Do (vol.)"
+                  value={eEnd}
+                  onChange={(ev) => setEEnd(ev.target.value)}
+                  fullWidth
+                  sx={outlineDenseSx}
+                  {...compactFieldProps}
+                />
+                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ pt: { xs: 0, sm: 0.25 } }}>
+                  <Button type="submit" variant="contained" disabled={submitting} size="small">
+                    Uložit
+                  </Button>
+                  <Button type="button" size="small" disabled={submitting} onClick={() => setEditing(null)}>
+                    Zrušit
+                  </Button>
+                </Stack>
+              </Box>
             </Box>
           </Box>
         </>
@@ -559,19 +609,16 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
 
       {!editing && (
         <>
-          <Divider sx={{ my: 0.5 }} />
-          <Typography variant="caption" color="text.secondary" fontWeight={600}>
-            Nový opakující se limit
-          </Typography>
+          <Divider sx={{ my: 0.25 }} />
           <Box component="form" onSubmit={handleCreate} sx={{ mt: 0.25 }}>
-            <Box sx={formGridSx}>
+            <Box sx={recurringFormRootSx}>
               <TextField
                 label="Název"
                 value={cName}
                 onChange={(ev) => setCName(ev.target.value)}
                 required
                 fullWidth
-                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
+                sx={{ gridColumn: { xs: 1, sm: 1 }, ...outlineDenseSx }}
                 {...compactFieldProps}
               />
               <AmountTextFieldCs
@@ -582,9 +629,57 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
                 fullWidth
                 size="small"
                 helperText=" "
-                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
+                FormHelperTextProps={{ sx: { m: 0, minHeight: 0, display: 'none' } }}
+                sx={{ gridColumn: { xs: 1, sm: 2 }, ...outlineDenseSx }}
               />
-              <FormControl fullWidth size="small" required>
+              <Box
+                sx={{
+                  gridColumn: { xs: 1, sm: 1 },
+                  display: 'flex',
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  gap: 0.5,
+                  alignItems: 'flex-start',
+                  minWidth: 0,
+                  width: '100%',
+                }}
+              >
+                <FormControl
+                  fullWidth
+                  size="small"
+                  required
+                  sx={{ flex: { sm: '1 1 0%' }, minWidth: { sm: 0 }, ...selectDenseSx }}
+                >
+                  <InputLabel id="c-rec-period">Druh období</InputLabel>
+                  <Select
+                    labelId="c-rec-period"
+                    label="Druh období"
+                    value={cPeriod}
+                    onChange={(ev) => setCPeriod(ev.target.value as CreateRecurringBudgetRequestDtoPeriodType)}
+                  >
+                    {PERIOD_OPTIONS.map((v) => (
+                      <MenuItem key={v} value={v}>
+                        {budgetPeriodLabelCs(v)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <TextField
+                  label="Interval"
+                  value={cInterval}
+                  onChange={(ev) => setCInterval(ev.target.value)}
+                  required
+                  type="number"
+                  inputProps={{ min: 1, step: 1 }}
+                  sx={{ width: { xs: '100%', sm: '6.25rem' }, flexShrink: 0, ...outlineDenseSx }}
+                  {...compactFieldProps}
+                />
+              </Box>
+              <FormControl
+                fullWidth
+                size="small"
+                required
+                sx={{ gridColumn: { xs: 1, sm: 2 }, minWidth: 0, ...selectDenseSx }}
+              >
                 <InputLabel id="c-rec-asset">Aktivum</InputLabel>
                 <Select
                   labelId="c-rec-asset"
@@ -599,61 +694,34 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
                   ))}
                 </Select>
               </FormControl>
-              <FormControl fullWidth size="small" sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}>
-                <InputLabel id="c-rec-period">Druh období</InputLabel>
-                <Select
-                  labelId="c-rec-period"
-                  label="Druh období"
-                  value={cPeriod}
-                  onChange={(ev) => setCPeriod(ev.target.value as CreateRecurringBudgetRequestDtoPeriodType)}
+              <Box sx={recurringFooterSx}>
+                <TextField
+                  label="Platnost od"
+                  value={cStart}
+                  onChange={(ev) => setCStart(ev.target.value)}
+                  required
+                  fullWidth
+                  sx={outlineDenseSx}
+                  {...compactFieldProps}
+                />
+                <TextField
+                  label="Do (vol.)"
+                  value={cEnd}
+                  onChange={(ev) => setCEnd(ev.target.value)}
+                  fullWidth
+                  sx={outlineDenseSx}
+                  {...compactFieldProps}
+                />
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={submitting || assetsSorted.length === 0}
+                  size="small"
+                  sx={{ alignSelf: 'center' }}
                 >
-                  {PERIOD_OPTIONS.map((v) => (
-                    <MenuItem key={v} value={v}>
-                      {budgetPeriodLabelCs(v)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                label="Interval"
-                value={cInterval}
-                onChange={(ev) => setCInterval(ev.target.value)}
-                required
-                fullWidth
-                type="number"
-                inputProps={{ min: 1, step: 1 }}
-                helperText={intervalFieldHelperCs(cPeriod)}
-                size="small"
-              />
-              <TextField
-                label="Platnost od"
-                value={cStart}
-                onChange={(ev) => setCStart(ev.target.value)}
-                required
-                fullWidth
-                size="small"
-                helperText=" "
-                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
-              />
-              <TextField
-                label="Platnost do (volitelné)"
-                value={cEnd}
-                onChange={(ev) => setCEnd(ev.target.value)}
-                fullWidth
-                size="small"
-                helperText=" "
-                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
-                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                disabled={submitting || assetsSorted.length === 0}
-                size="small"
-                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
-              >
-                Přidat opakující se limit
-              </Button>
+                  Přidat opakující se limit
+                </Button>
+              </Box>
             </Box>
           </Box>
         </>

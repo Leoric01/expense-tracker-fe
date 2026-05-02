@@ -1,9 +1,9 @@
 import type { BudgetPlanResponseDto } from '@api/model';
 import { Box, Chip, LinearProgress, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { formatDateDdMmYyyy } from '@utils/dateTimeCs';
-import { DEFAULT_FIAT_SCALE, minorUnitsToMajorForScale } from '@utils/moneyMinorUnits';
+import { formatAssetAmount } from '@utils/formatAssetAmount';
+import { DEFAULT_FIAT_SCALE } from '@utils/moneyMinorUnits';
 import { FC, Fragment } from 'react';
 import { budgetPeriodLabelCs, budgetPlanPeriodChipSx } from './categoryBudgetPeriodLabels';
 
@@ -124,19 +124,6 @@ export function budgetAmountToMonthlyEquivalentMinor(
   }
 }
 
-/** Čísla v liště bez desetin (celé jednotky); přesnost je v `title` / tooltipu. */
-function formatBudgetBarAmountPairCs(spentMinor: number, limitMinor: number, scale: number): string {
-  const sc = Number.isFinite(scale) && scale >= 0 ? Math.floor(scale) : DEFAULT_FIAT_SCALE;
-  const fmt = (minor: number) => {
-    const major = minorUnitsToMajorForScale(minor, sc) ?? 0;
-    return new Intl.NumberFormat('cs-CZ', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(Math.round(major));
-  };
-  return `${fmt(spentMinor)}/${fmt(limitMinor)}`;
-}
-
 function planAssetCode(plan: BudgetPlanResponseDto): string {
   return (plan.assetCode ?? 'CZK').trim().toUpperCase() || 'CZK';
 }
@@ -145,24 +132,26 @@ function planAssetScale(plan: BudgetPlanResponseDto): number {
   return plan.assetScale ?? DEFAULT_FIAT_SCALE;
 }
 
-/** Plnicí lišta s čísly uvnitř (bez měny); žádné svislé okraje navíc. */
+/** Plnicí lišta s čísly uvnitř — stejné formátování jako souhrn úspor (`formatAssetAmount`). */
 function BudgetUsageBarInlineAmounts(props: {
   fillPercent: number;
   overBudget: boolean;
   incomeOverBudget?: boolean;
   spentMinor: number;
   limitMinor: number;
+  assetCode: string;
   assetScale: number;
 }) {
-  const { fillPercent, overBudget, incomeOverBudget = false, spentMinor, limitMinor, assetScale } = props;
+  const { fillPercent, overBudget, incomeOverBudget = false, spentMinor, limitMinor, assetCode, assetScale } = props;
   const w = Math.min(100, Math.max(0, fillPercent));
-  const label = formatBudgetBarAmountPairCs(spentMinor, limitMinor, assetScale);
+  const code = assetCode.trim().toUpperCase() || 'CZK';
+  const label = `${formatAssetAmount(spentMinor, code, assetScale)} / ${formatAssetAmount(limitMinor, code, assetScale)}`;
   return (
     <Box
       sx={{
         position: 'relative',
         width: '100%',
-        height: 20,
+        height: 26,
         borderRadius: 999,
         overflow: 'hidden',
         bgcolor: (t) =>
@@ -199,13 +188,13 @@ function BudgetUsageBarInlineAmounts(props: {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1,
-          fontSize: '0.68rem',
-          fontWeight: 700,
-          lineHeight: 1,
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          lineHeight: 1.2,
           fontVariantNumeric: 'tabular-nums',
-          letterSpacing: 0.02,
+          letterSpacing: 0.01,
           whiteSpace: 'nowrap',
-          px: 0.75,
+          px: 0.5,
           minWidth: 0,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -239,8 +228,8 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
   const periodDdMm = formatBudgetDateRangeDdMmOnly(plan.validFrom, plan.validTo);
   const daysLeft = budgetDaysLeftInclusive(plan.validFrom, plan.validTo);
 
-  const spentVsLimit = `${formatWalletAmount(spent, currency, scale)} / ${formatWalletAmount(amount, currency, scale)}`;
-  const remainingText = `zbývá ${formatWalletAmount(remaining, currency, scale)}`;
+  const spentVsLimit = `${formatAssetAmount(spent, currency, scale)} / ${formatAssetAmount(amount, currency, scale)}`;
+  const remainingText = `zbývá ${formatAssetAmount(remaining, currency, scale)}`;
   const periodBadge = plan.periodType
     ? budgetPeriodLabelCs(plan.periodType).toLocaleUpperCase('cs-CZ')
     : '—';
@@ -250,7 +239,7 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
     perDay = '—';
   } else {
     const perDayMinor = Math.round(remaining / daysLeft);
-    perDay = `${formatWalletAmount(perDayMinor, currency, scale)}/den`;
+    perDay = `${formatAssetAmount(perDayMinor, currency, scale)}/den`;
   }
 
   const detailTitle = [`${spentVsLimit} ${periodBadge} · ${remainingText}`, periodDdMm || null, perDay]
@@ -258,7 +247,7 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
     .join(' · ');
 
   const monthlyLine = plan.periodType
-    ? `Přepočet na měsíc: ${formatWalletAmount(
+    ? `Přepočet na měsíc: ${formatAssetAmount(
         budgetAmountToMonthlyEquivalentMinor(amount, plan.periodType, 1),
         currency,
         scale,
@@ -269,9 +258,16 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
   return { spentVsLimit, remainingText, periodDdMm, periodBadge, perDay, title };
 }
 
-/** Sloupce řádku kategorie: trubice+částky | období | zbývá | platnost | /den (zarovnání napříč řádky). */
+/**
+ * Sloupce řádku kategorie: trubice (kód aktiva jen uvnitř) | období | zbývá | platnost | /den.
+ * Min. šířka prvního + posledního sloupce upravena o stejný offset jako šířka odstraněného kódu za trubicí.
+ */
+const BUDGET_ROW_REMOVED_ASSET_CODE_BAND_PX = 36;
+
 export const CATEGORY_BUDGET_LIST_ROW_GRID_INNER =
-  'minmax(0, 1fr) 96px 132px 110px 120px' as const;
+  `minmax(${141 - BUDGET_ROW_REMOVED_ASSET_CODE_BAND_PX}px, 1.66fr) 80px 118px 96px ${
+    96 + BUDGET_ROW_REMOVED_ASSET_CODE_BAND_PX
+  }px` as const;
 
 type UsageLineProps = {
   plan: BudgetPlanResponseDto;
@@ -314,37 +310,18 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
       const cur = planAssetCode(plan);
       return (
         <Fragment>
-          <Box
-            title={title}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.75,
-              minWidth: 0,
-              overflow: 'hidden',
-            }}
-          >
+          <Box title={title} sx={{ minWidth: 0, width: '100%', overflow: 'hidden' }}>
             <BudgetUsageBarInlineAmounts
               fillPercent={tubeFill}
               overBudget={overBudget}
               incomeOverBudget={incomeOverBudget}
               spentMinor={spent}
               limitMinor={amount}
+              assetCode={cur}
               assetScale={barScale}
             />
-            <Typography
-              {...captionBase}
-              sx={{
-                ...captionTypo,
-                flexShrink: 0,
-                fontWeight: 600,
-                letterSpacing: 0.3,
-              }}
-            >
-              {cur}
-            </Typography>
           </Box>
-          <Box sx={{ display: 'flex', justifyContent: 'center', minWidth: 0, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-start', minWidth: 0, alignItems: 'center' }}>
             <Chip
               size="small"
               variant="outlined"
@@ -416,44 +393,26 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
           minWidth: 0,
         }}
       >
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.75,
-            flex: '1 1 0%',
-            minWidth: 96,
-            maxWidth: '100%',
-          }}
-        >
+        <Box sx={{ flex: '1 1 0%', minWidth: 0, maxWidth: '100%' }}>
           <BudgetUsageBarInlineAmounts
             fillPercent={tubeFill}
             overBudget={overBudget}
             incomeOverBudget={incomeOverBudget}
             spentMinor={spent}
             limitMinor={amount}
+            assetCode={curStack}
             assetScale={barScale}
           />
-          <Typography
-            {...captionBase}
-            sx={{
-              ...captionTypo,
-              flexShrink: 0,
-              fontWeight: 600,
-              letterSpacing: 0.3,
-            }}
-          >
-            {curStack}
-          </Typography>
         </Box>
         <Stack
           direction="row"
           alignItems="center"
           spacing={0.5}
           sx={{
-            flex: '0 1 auto',
+            flex: '0 0 auto',
             minWidth: 0,
             overflow: 'hidden',
+            justifyContent: 'flex-start',
           }}
         >
           <Chip
@@ -488,7 +447,15 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
             {periodDdMm}
           </Typography>
         ) : null}
-        <Typography {...captionBase} sx={{ ...captionTypo, flexShrink: 0 }}>
+        <Typography
+          {...captionBase}
+          sx={{
+            ...captionTypo,
+            flexShrink: 0,
+            minWidth: 96 + BUDGET_ROW_REMOVED_ASSET_CODE_BAND_PX,
+            textAlign: 'right',
+          }}
+        >
           {perDay}
         </Typography>
       </Stack>
@@ -534,8 +501,8 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
             whiteSpace: 'nowrap',
           }}
         >
-          {formatWalletAmount(spent, planAssetCode(plan), barScale)} /{' '}
-          {formatWalletAmount(amount, planAssetCode(plan), barScale)}
+          {formatAssetAmount(spent, planAssetCode(plan), barScale)} /{' '}
+          {formatAssetAmount(amount, planAssetCode(plan), barScale)}
         </Typography>
       </Stack>
       {bar}

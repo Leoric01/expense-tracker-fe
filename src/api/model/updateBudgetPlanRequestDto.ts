@@ -10,7 +10,7 @@ import type { UpdateBudgetPlanRequestDtoPeriodType } from './updateBudgetPlanReq
 export interface UpdateBudgetPlanRequestDto {
   name?: string;
   amount?: number;
-  currencyCode?: string;
+  assetCode?: string;
   periodType?: UpdateBudgetPlanRequestDtoPeriodType;
   validFrom?: string;
   validTo?: string;

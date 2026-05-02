@@ -12,7 +12,7 @@ export interface CreateBudgetPlanRequestDto {
   name: string;
   amount: number;
   /** @minLength 1 */
-  currencyCode: string;
+  assetCode: string;
   periodType: CreateBudgetPlanRequestDtoPeriodType;
   validFrom: string;
   validTo?: string;

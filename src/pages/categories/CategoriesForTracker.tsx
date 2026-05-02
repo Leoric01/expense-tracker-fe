@@ -2168,7 +2168,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
           display: 'grid',
           alignItems: 'center',
           columnGap: 0.5,
-          gridTemplateColumns: `36px minmax(150px, 2fr) 36px ${CATEGORY_BUDGET_LIST_ROW_GRID_INNER} 72px 170px`,
+          gridTemplateColumns: `36px minmax(100px, 1.15fr) 36px ${CATEGORY_BUDGET_LIST_ROW_GRID_INNER} 72px 170px`,
           transition: (t) =>
             t.transitions.create('background-color', { duration: t.transitions.duration.shortest }),
           '&:hover': {

@@ -43,23 +43,3 @@ export function recurringIntervalDescriptionCs(
 
   return `každý ${n}. ${periodWord}`;
 }
-
-/** Text pod pole interval (krátká nápověda). */
-export function intervalFieldHelperCs(
-  periodType: RecurringBudgetResponseDtoPeriodType | string | undefined,
-): string {
-  switch (periodType) {
-    case 'DAILY':
-      return '1 = každý den, 2 = každý druhý den';
-    case 'WEEKLY':
-      return '1 = každý týden, 2 = každý druhý týden';
-    case 'MONTHLY':
-      return '1 = každý měsíc, 2 = každý druhý měsíc';
-    case 'QUARTERLY':
-      return '1 = každé čtvrtletí, 2 = každé druhé čtvrtletí';
-    case 'YEARLY':
-      return '1 = každý rok, 2 = každý druhý rok';
-    default:
-      return 'Kolik období přeskočit mezi běhy (min. 1).';
-  }
-}
