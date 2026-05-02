@@ -2,7 +2,10 @@ import {
   budgetPlanImportBulk,
   budgetPlanImportByCategoryIdBulk,
 } from '@api/budget-plan-controller/budget-plan-controller';
-import { categoryCreateBulk } from '@api/category-controller/category-controller';
+import {
+  categoryCreateBulk,
+  getCategoryFindAllActiveLightQueryKey,
+} from '@api/category-controller/category-controller';
 import type {
   BulkBudgetImportByCategoryIdRequestDto,
   BulkBudgetImportItemDto,
@@ -123,8 +126,7 @@ export const BudgetPlanImportPanel: FC<Props> = ({ trackerId }) => {
       setResponseBody(JSON.stringify(res.data ?? {}, null, 2));
       if (res.status >= 200 && res.status < 300) {
         enqueueSnackbar('Import dokončen', { variant: 'success' });
-        await queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active-light`] });
-        await queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
+        await queryClient.invalidateQueries({ queryKey: getCategoryFindAllActiveLightQueryKey(trackerId) });
       } else {
         enqueueSnackbar(apiErrorMessage(res.data, 'Import se nezdařil'), { variant: 'error' });
       }

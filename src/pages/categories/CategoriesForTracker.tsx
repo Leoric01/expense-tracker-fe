@@ -99,6 +99,7 @@ import {
   collectIdsInSubtree,
   collectIdsWithChildren,
   findNodeById,
+  hasActiveEmbeddedBudgetPlan,
   rootAncestorCategory,
   toCategoryTree,
 } from './categoryTreeUtils';
@@ -691,6 +692,8 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   const [quickTxCategory, setQuickTxCategory] = useState<CategoryResponseDto | null>(null);
   const [quickTxWalletId, setQuickTxWalletId] = useState('');
   const [quickTxAmountCanon, setQuickTxAmountCanon] = useState('');
+  const [quickTxFeeCanon, setQuickTxFeeCanon] = useState('');
+  const [quickTxExchangeRate, setQuickTxExchangeRate] = useState('');
   const [quickTxWhen, setQuickTxWhen] = useState(defaultDatetimeLocal());
   const [quickTxDescription, setQuickTxDescription] = useState('');
 
@@ -1019,9 +1022,12 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   };
 
   const handleQuickTxOpen = useCallback((category: CategoryResponseDto) => {
+    if (!hasActiveEmbeddedBudgetPlan(category)) return;
     setQuickTxCategory(category);
     setQuickTxWalletId('');
     setQuickTxAmountCanon('');
+    setQuickTxFeeCanon('');
+    setQuickTxExchangeRate('');
     setQuickTxWhen(defaultDatetimeLocal());
     setQuickTxDescription('');
   }, []);
@@ -1034,6 +1040,10 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   const handleQuickTxSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!quickTxCategory?.id) return;
+    if (!hasActiveEmbeddedBudgetPlan(quickTxCategory)) {
+      enqueueSnackbar('Transakci lze zadat jen u kategorie s aktivním rozpočtem.', { variant: 'warning' });
+      return;
+    }
     if (!quickTxWalletId) {
       enqueueSnackbar('Vyber pozici (účet + měnu)', { variant: 'warning' });
       return;
@@ -1050,6 +1060,43 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
       enqueueSnackbar(`Částka je menší než nejmenší jednotka ${code}.`, { variant: 'warning' });
       return;
     }
+
+    const feeRaw = quickTxFeeCanon.trim();
+    let feeMinor: number | undefined;
+    if (feeRaw !== '') {
+      const feeMajor = parseAmount(quickTxFeeCanon);
+      if (feeMajor == null || !Number.isFinite(feeMajor)) {
+        enqueueSnackbar('Poplatek musí být platné číslo (nebo pole nechat prázdné).', { variant: 'warning' });
+        return;
+      }
+      if (feeMajor < 0) {
+        enqueueSnackbar('Poplatek nesmí být záporný.', { variant: 'warning' });
+        return;
+      }
+      if (feeMajor > 0) {
+        feeMinor = majorToMinorUnitsForScale(feeMajor, amountScale);
+        if (feeMinor <= 0) {
+          enqueueSnackbar('Poplatek je menší než nejmenší jednotka měny pozice.', { variant: 'warning' });
+          return;
+        }
+      }
+    }
+
+    const rateTrim = quickTxExchangeRate.trim().replace(/\s/g, '').replace(',', '.');
+    let exchangeRate: number | undefined;
+    if (rateTrim !== '') {
+      const r = parseFloat(rateTrim);
+      if (!Number.isFinite(r)) {
+        enqueueSnackbar('Kurz musí být platné číslo (nebo pole nechat prázdné).', { variant: 'warning' });
+        return;
+      }
+      if (r <= 0) {
+        enqueueSnackbar('Kurz musí být kladné číslo.', { variant: 'warning' });
+        return;
+      }
+      exchangeRate = r;
+    }
+
     const txDateIso = toIsoFromDatetimeLocal(quickTxWhen);
     if (!txDateIso) {
       enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', { variant: 'warning' });
@@ -1074,6 +1121,8 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
           ? CreateTransactionRequestDtoTransactionType.EXPENSE
           : CreateTransactionRequestDtoTransactionType.INCOME,
       ...(quickTxDescription.trim() ? { description: quickTxDescription.trim() } : {}),
+      ...(feeMinor != null && feeMinor > 0 ? { feeAmount: feeMinor } : {}),
+      ...(exchangeRate != null ? { exchangeRate } : {}),
     };
 
     setSubmitting(true);
@@ -1571,16 +1620,16 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
         open={Boolean(quickTxCategory)}
         onClose={() => !submitting && setQuickTxCategory(null)}
         fullWidth
-        maxWidth="sm"
+        maxWidth="md"
       >
         <DialogTitle>Přidat transakci</DialogTitle>
         <Box component="form" onSubmit={handleQuickTxSubmit}>
           <DialogContent>
-            <Stack spacing={2}>
+            <Stack spacing={2.5}>
               <Typography variant="body2" color="text.secondary">
                 Kategorie: <strong>{quickTxCategory?.name ?? '—'}</strong>
               </Typography>
-              <FormControl fullWidth required size="small">
+              <FormControl fullWidth required>
                 <InputLabel id="quick-tx-wallet">Pozice</InputLabel>
                 <Select
                   labelId="quick-tx-wallet"
@@ -1595,19 +1644,37 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                   ))}
                 </Select>
               </FormControl>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} useFlexGap>
+                <TextField
+                  label="Částka"
+                  value={formatAmountDisplayCs(quickTxAmountCanon)}
+                  onChange={(e) => setQuickTxAmountCanon(canonicalAmountFromUserInput(e.target.value))}
+                  required
+                  fullWidth
+                  inputMode="decimal"
+                  helperText={
+                    quickTxWallet?.currencyCode?.trim().toUpperCase() === 'BTC'
+                      ? '1 satoshi zadej jako 0,00000001 BTC.'
+                      : 'Hlavní částka v měně vybrané pozice.'
+                  }
+                />
+                <TextField
+                  label="Poplatek (volitelné)"
+                  value={formatAmountDisplayCs(quickTxFeeCanon)}
+                  onChange={(e) => setQuickTxFeeCanon(canonicalAmountFromUserInput(e.target.value))}
+                  fullWidth
+                  inputMode="decimal"
+                  helperText="Ve stejné měně jako částka."
+                />
+              </Stack>
               <TextField
-                label="Částka"
-                value={formatAmountDisplayCs(quickTxAmountCanon)}
-                onChange={(e) => setQuickTxAmountCanon(canonicalAmountFromUserInput(e.target.value))}
-                required
+                label="Kurz (volitelné)"
+                value={quickTxExchangeRate}
+                onChange={(e) => setQuickTxExchangeRate(e.target.value)}
                 fullWidth
-                size="small"
+                placeholder="např. 24,55"
+                helperText="Použij jen pokud transakce zahrnuje přepočet měn podle zadaného kurzu."
                 inputMode="decimal"
-                helperText={
-                  quickTxWallet?.currencyCode?.trim().toUpperCase() === 'BTC'
-                    ? '1 satoshi zadej jako 0,00000001 BTC.'
-                    : undefined
-                }
               />
               <TextField
                 label="Datum a čas"
@@ -1617,14 +1684,14 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                 helperText="Formát dd.MM.yyyy HH:mm (24 h)"
                 required
                 fullWidth
-                size="small"
               />
               <TextField
                 label="Popis (volitelné)"
                 value={quickTxDescription}
                 onChange={(e) => setQuickTxDescription(e.target.value)}
                 fullWidth
-                size="small"
+                multiline
+                minRows={2}
               />
             </Stack>
           </DialogContent>
@@ -1906,6 +1973,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
 
   const budgetCount = id ? getBudgetCount(id) : 0;
   const oneOffPlans = id ? getOneOffBudgets(id) : [];
+  const canQuickAddTransaction = hasActiveEmbeddedBudgetPlan(node);
   const currentSort = node.sortOrder ?? siblingIndex;
   const prevSort = prevSiblingSortOrder ?? siblingIndex - 1;
   const nextSort = nextSiblingSortOrder ?? siblingIndex + 1;
@@ -1976,18 +2044,27 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
         </Typography>
         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
           {id ? (
-            <Tooltip title="Přidat transakci do této kategorie">
-              <IconButton
-                size="small"
-                aria-label="přidat transakci"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  (e.currentTarget as HTMLButtonElement).blur();
-                  onQuickAddTransaction(node);
-                }}
-              >
-                <PostAddIcon fontSize="small" />
-              </IconButton>
+            <Tooltip
+              title={
+                canQuickAddTransaction
+                  ? 'Přidat transakci do této kategorie'
+                  : 'Transakci lze zadat jen u kategorie s aktivním rozpočtem pro vybrané období.'
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  aria-label="přidat transakci"
+                  disabled={!canQuickAddTransaction}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
+                    onQuickAddTransaction(node);
+                  }}
+                >
+                  <PostAddIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
           ) : (
             <Box sx={{ width: 32 }} />

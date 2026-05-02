@@ -36,8 +36,8 @@ function categoryActiveRowToResponseDto(row: CategoryActiveRowResponse): Categor
 }
 
 /**
- * Odpověď z `GET .../category/{trackerId}/active-light` → stejný tvar jako flat `content` z `/active`
- * pro `toCategoryTree` a `budgetsByCategoryIdFromFlat`.
+ * `GET .../category/{trackerId}/active-light` → flat `CategoryResponseDto[]` pro `toCategoryTree`
+ * a `budgetsByCategoryIdFromFlat`.
  */
 export function categoryActiveLightPageToFlat(page: CategoryActivePageResponse | null | undefined): CategoryResponseDto[] {
   const rows = page?.categories ?? [];
@@ -180,7 +180,7 @@ export function rootAncestorCategory(
   return last;
 }
 
-/** Jedna položka z `GET .../category/.../active` nebo embed z `/active-light` — vnořený aktivní rozpočet. */
+/** `CategoryActiveBudgetPlanDto` vnořený u kategorie (mapování z active-light embedů). */
 export function activeBudgetPlanToBudgetPlanResponse(
   categoryId: string,
   categoryName: string | undefined,
@@ -205,7 +205,7 @@ export function activeBudgetPlanToBudgetPlanResponse(
 
 /**
  * Plány vnořené u kategorie — ve tvaru očekávaném UI (řádek + dialog).
- * Preferuje `budgetPlansForSelectedPeriod` (např. po `GET .../active?dateFrom&dateTo`), jinak jeden `activeBudgetPlan`.
+ * Preferuje `budgetPlansForSelectedPeriod` (active-light), jinak jeden `activeBudgetPlan`.
  */
 export function budgetPlansFromCategoryEmbedded(
   category: CategoryResponseDto | null | undefined,
@@ -218,6 +218,14 @@ export function budgetPlansFromCategoryEmbedded(
   const p = category.activeBudgetPlan;
   if (p == null) return [];
   return [activeBudgetPlanToBudgetPlanResponse(category.id, category.name, p)];
+}
+
+/** Kategorie má použitelný aktivní rozpočet (podle API / vnořených plánů). */
+export function hasActiveEmbeddedBudgetPlan(category: CategoryResponseDto | null | undefined): boolean {
+  for (const p of budgetPlansFromCategoryEmbedded(category)) {
+    if ((p.id ?? '').trim() && p.active !== false) return true;
+  }
+  return false;
 }
 
 /** Mapa categoryId → jednorázové plány jen z vnořených dat kategorií (bez samostatného GET budget-plan). */
