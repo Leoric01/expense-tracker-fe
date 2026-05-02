@@ -123,6 +123,7 @@ export const BudgetPlanImportPanel: FC<Props> = ({ trackerId }) => {
       setResponseBody(JSON.stringify(res.data ?? {}, null, 2));
       if (res.status >= 200 && res.status < 300) {
         enqueueSnackbar('Import dokončen', { variant: 'success' });
+        await queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active-light`] });
         await queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
       } else {
         enqueueSnackbar(apiErrorMessage(res.data, 'Import se nezdařil'), { variant: 'error' });

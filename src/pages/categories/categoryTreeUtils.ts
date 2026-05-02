@@ -1,4 +1,48 @@
-import type { BudgetPlanResponseDto, CategoryActiveBudgetPlanDto, CategoryResponseDto } from '@api/model';
+import type {
+  BudgetPlanResponseDto,
+  CategoryActiveBudgetPlanDto,
+  CategoryActiveBudgetPlanEmbed,
+  CategoryActivePageResponse,
+  CategoryActiveRowResponse,
+  CategoryResponseDto,
+} from '@api/model';
+
+function budgetPlanEmbedToActiveDto(embed: CategoryActiveBudgetPlanEmbed): CategoryActiveBudgetPlanDto {
+  return {
+    id: embed.id,
+    name: embed.name,
+    amount: embed.amount,
+    currencyCode: embed.currencyCode,
+    periodType: embed.periodType as CategoryActiveBudgetPlanDto['periodType'],
+    validFrom: embed.validFrom,
+    validTo: embed.validTo,
+    alreadySpent: embed.alreadySpent,
+    active: true,
+  };
+}
+
+function categoryActiveRowToResponseDto(row: CategoryActiveRowResponse): CategoryResponseDto {
+  const embeds = row.budgetPlansForPeriod ?? [];
+  const plans = embeds.map(budgetPlanEmbedToActiveDto);
+  return {
+    id: row.id,
+    name: row.name,
+    categoryKind: row.categoryKind as CategoryResponseDto['categoryKind'],
+    parentId: row.parentId,
+    sortOrder: row.sortOrder,
+    ...(plans.length > 0 ? { budgetPlansForSelectedPeriod: plans } : {}),
+    children: [],
+  };
+}
+
+/**
+ * Odpověď z `GET .../category/{trackerId}/active-light` → stejný tvar jako flat `content` z `/active`
+ * pro `toCategoryTree` a `budgetsByCategoryIdFromFlat`.
+ */
+export function categoryActiveLightPageToFlat(page: CategoryActivePageResponse | null | undefined): CategoryResponseDto[] {
+  const rows = page?.categories ?? [];
+  return rows.map(categoryActiveRowToResponseDto);
+}
 
 export function asCategoryChildren(ch: unknown): CategoryResponseDto[] {
   if (!Array.isArray(ch)) return [];
@@ -136,7 +180,7 @@ export function rootAncestorCategory(
   return last;
 }
 
-/** Jedna položka z `GET .../category/.../active` — vnořený aktivní rozpočet. */
+/** Jedna položka z `GET .../category/.../active` nebo embed z `/active-light` — vnořený aktivní rozpočet. */
 export function activeBudgetPlanToBudgetPlanResponse(
   categoryId: string,
   categoryName: string | undefined,

@@ -9,6 +9,7 @@
 export interface CategoryMovementAssetTotalsDto {
   assetCode?: string;
   assetScale?: number;
+  exchangeRate?: number;
   expectedExpenseAmount?: number;
   expectedIncomeAmount?: number;
   expectedSavingAmount?: number;

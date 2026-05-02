@@ -6,6 +6,7 @@ import {
 } from '@api/account-controller/account-controller';
 import {
   getInstitutionFindAllQueryKey,
+  getInstitutionHeaderBalancesQueryKey,
   institutionCreate,
   institutionFindAll,
 } from '@api/institution-controller/institution-controller';
@@ -137,6 +138,7 @@ export const InstitutionAccountsManageDialog: FC<Props> = ({ trackerId, open, on
     await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}`] });
     await queryClient.invalidateQueries({ queryKey: [`/api/account/${trackerId}`] });
     await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+    await queryClient.invalidateQueries({ queryKey: getInstitutionHeaderBalancesQueryKey(trackerId) });
     await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
   }, [queryClient, trackerId]);
 

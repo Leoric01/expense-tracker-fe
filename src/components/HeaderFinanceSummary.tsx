@@ -4,12 +4,10 @@ import {
 } from '@api/expense-tracker-controller/expense-tracker-controller';
 import {
   getInstitutionDashboardQueryKey,
-  institutionDashboard,
+  getInstitutionHeaderBalancesQueryKey,
+  institutionHeaderBalances,
 } from '@api/institution-controller/institution-controller';
-import type {
-  InstitutionDashboardResponseDto,
-  PagedModelAssetResponseDto,
-} from '@api/model';
+import type { FinanceHeaderBalancesResponse, PagedModelAssetResponseDto } from '@api/model';
 import { DisplayCurrencySelect } from '@components/DisplayCurrencySelect';
 import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
@@ -48,13 +46,13 @@ export const HeaderFinanceSummary: FC = () => {
     [],
   );
 
-  const { data: dashboard } = useQuery({
-    queryKey: getInstitutionDashboardQueryKey(trackerId, dashboardParams ?? undefined),
+  const { data: headerBalancesRes } = useQuery({
+    queryKey: getInstitutionHeaderBalancesQueryKey(trackerId, dashboardParams ?? undefined),
     queryFn: async () => {
-      if (!dashboardParams) throw new Error('dashboard');
-      const res = await institutionDashboard(trackerId, dashboardParams);
-      if (res.status < 200 || res.status >= 300) throw new Error('dashboard');
-      return res.data as InstitutionDashboardResponseDto;
+      if (!dashboardParams) throw new Error('header-balances');
+      const res = await institutionHeaderBalances(trackerId, dashboardParams);
+      if (res.status < 200 || res.status >= 300) throw new Error('header-balances');
+      return res.data as FinanceHeaderBalancesResponse;
     },
     enabled: Boolean(trackerId && dashboardParams),
     staleTime: 30_000,
@@ -72,8 +70,8 @@ export const HeaderFinanceSummary: FC = () => {
   });
 
   const displayAssets = useMemo(() => displayAssetsPaged?.content ?? [], [displayAssetsPaged]);
-  const displayAssetCode = dashboard?.displayAssetCode?.trim().toUpperCase() ?? '';
-  const displayAssetScale = dashboard?.displayAssetScale ?? DEFAULT_FIAT_SCALE;
+  const displayAssetCode = headerBalancesRes?.displayAssetCode?.trim().toUpperCase() ?? '';
+  const displayAssetScale = headerBalancesRes?.displayAssetScale ?? DEFAULT_FIAT_SCALE;
   const hasExplicitSelection = Boolean(selectedDisplayAssetId);
   const dashboardMatchesExplicitSelection =
     !selectedDisplayAssetCode ||
@@ -82,7 +80,7 @@ export const HeaderFinanceSummary: FC = () => {
   const hasDisplayCurrency = Boolean(
     hasExplicitSelection &&
       displayAssetCode &&
-      dashboard?.displayAssetScale != null &&
+      headerBalancesRes?.displayAssetScale != null &&
       dashboardMatchesExplicitSelection,
   );
 
@@ -134,29 +132,23 @@ export const HeaderFinanceSummary: FC = () => {
   }, [displayAssets, selectedDisplayAssetId, trackerId]);
 
   const totalFundsText = useMemo(() => {
-    if (!dashboard) return '—';
+    if (!headerBalancesRes) return '—';
     if (hasDisplayCurrency) {
-      if (dashboard.grandTotalConverted == null) return '—';
-      return formatAmount(dashboard.grandTotalConverted, displayAssetScale, displayAssetCode);
+      if (headerBalancesRes.grandTotalConverted == null) return '—';
+      return formatAmount(headerBalancesRes.grandTotalConverted, displayAssetScale, displayAssetCode);
     }
-    const byCurrency = new Map<string, { sum: number; scale: number }>();
-    for (const inst of dashboard.institutions ?? []) {
-      for (const acc of inst.accounts ?? []) {
-        for (const h of acc.holdings ?? []) {
-          const code = (h.assetCode?.trim() || 'CZK').toUpperCase();
-          const scale = h.assetScale ?? DEFAULT_FIAT_SCALE;
-          const prev = byCurrency.get(code);
-          const add = h.endBalance ?? 0;
-          if (!prev) byCurrency.set(code, { sum: add, scale });
-          else byCurrency.set(code, { sum: prev.sum + add, scale: prev.scale });
-        }
-      }
-    }
-    const parts = [...byCurrency.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([code, { sum, scale }]) => formatWalletAmount(sum, code, scale));
+    const rows = headerBalancesRes.nativeBalances ?? [];
+    if (rows.length === 0) return '—';
+    const parts = [...rows]
+      .map((r) => ({
+        code: (r.assetCode?.trim() || 'CZK').toUpperCase(),
+        scale: r.assetScale ?? DEFAULT_FIAT_SCALE,
+        sum: r.totalMinorUnits ?? 0,
+      }))
+      .sort((a, b) => a.code.localeCompare(b.code))
+      .map(({ sum, code, scale }) => formatWalletAmount(sum, code, scale));
     return parts.length > 0 ? parts.join(', ') : '—';
-  }, [dashboard, displayAssetCode, displayAssetScale, hasDisplayCurrency]);
+  }, [headerBalancesRes, displayAssetCode, displayAssetScale, hasDisplayCurrency]);
 
   const syncDisplayCurrency = async (nextAssetId: string) => {
     if (!trackerId) return;
@@ -168,6 +160,9 @@ export const HeaderFinanceSummary: FC = () => {
       if (res.status < 200 || res.status >= 300) return;
       await queryClient.invalidateQueries({
         queryKey: getInstitutionDashboardQueryKey(trackerId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: getInstitutionHeaderBalancesQueryKey(trackerId),
       });
       await queryClient.invalidateQueries({ queryKey: ['/api/expense-trackers/mine'] });
     } finally {

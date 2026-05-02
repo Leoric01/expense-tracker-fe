@@ -14,6 +14,7 @@ import { holdingCreate } from '@api/holding-controller/holding-controller';
 import {
   getInstitutionDashboardQueryKey,
   getInstitutionFindAllQueryKey,
+  getInstitutionHeaderBalancesQueryKey,
   institutionDashboard,
   institutionFindAll,
 } from '@api/institution-controller/institution-controller';
@@ -555,6 +556,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+      queryClient.invalidateQueries({ queryKey: getInstitutionHeaderBalancesQueryKey(trackerId) });
     },
   });
 
@@ -562,6 +564,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
     await queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
     await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
     await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+    await queryClient.invalidateQueries({ queryKey: getInstitutionHeaderBalancesQueryKey(trackerId) });
   }, [queryClient, trackerId]);
 
   const resetForm = () => {
@@ -721,12 +724,14 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
           const addRes = await widgetItemAdd('INSTITUTION', instIdForWidget);
           if (addRes.status >= 200 && addRes.status < 300) {
             await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+            await queryClient.invalidateQueries({ queryKey: getInstitutionHeaderBalancesQueryKey(trackerId) });
           }
         } catch {
           /* widget seznam je volitelný */
         }
       }
       await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+      await queryClient.invalidateQueries({ queryKey: getInstitutionHeaderBalancesQueryKey(trackerId) });
       await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
     } catch {
       enqueueSnackbar('Pozici se nepodařilo vytvořit', { variant: 'error' });

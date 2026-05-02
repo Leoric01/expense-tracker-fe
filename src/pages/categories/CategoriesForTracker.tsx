@@ -4,19 +4,21 @@ import {
 } from '@api/recurring-budget-controller/recurring-budget-controller';
 import { transactionCreate } from '@api/transaction-controller/transaction-controller';
 import { holdingFindAll } from '@api/holding-controller/holding-controller';
+import { getInstitutionHeaderBalancesQueryKey } from '@api/institution-controller/institution-controller';
 import {
   categoryCreateBulk,
   categoryCreate,
   categoryDeactivate,
-  categoryFindAllActive,
+  categoryFindAllActiveLight,
   categoryMovementSummary,
   categoryUpdate,
-  getCategoryFindAllActiveQueryKey,
+  getCategoryFindAllActiveLightQueryKey,
   getCategoryMovementSummaryQueryKey,
 } from '@api/category-controller/category-controller';
 import type {
   BudgetPlanResponseDto,
-  CategoryFindAllActiveParams,
+  CategoryActivePageResponse,
+  CategoryFindAllActiveLightParams,
   CategoryMovementAssetTotalsDto,
   CategoryMovementConvertedTotalsDto,
   CategoryMovementSummaryParams,
@@ -27,7 +29,6 @@ import type {
   WalletResponseDto,
   CreateCategoryBulkRequestDto,
   CreateCategoryRequestDto,
-  PagedModelCategoryResponseDto,
   PagedModelRecurringBudgetResponseDto,
   RecurringBudgetResponseDto,
   SyncRecurringBudgetResponseDto,
@@ -92,6 +93,7 @@ import { DEFAULT_FIAT_SCALE, majorToMinorUnitsForScale } from '@utils/moneyMinor
 import {
   asCategoryChildren,
   budgetsByCategoryIdFromFlat,
+  categoryActiveLightPageToFlat,
   categoryKindChipColor,
   categoryKindLabel,
   collectIdsInSubtree,
@@ -109,7 +111,7 @@ import {
 } from '@pages/home/transactionFormUtils';
 import { CreateCategoryRequestDtoCategoryKind, CreateTransactionRequestDtoTransactionType } from '@api/model';
 
-const LIST_BASE: Pick<CategoryFindAllActiveParams, 'page' | 'size'> = { page: 0, size: 200 };
+const LIST_BASE: Pick<CategoryFindAllActiveLightParams, 'page' | 'size'> = { page: 0, size: 200 };
 const BUDGET_LIST_PARAMS = { page: 0, size: 500 } as const;
 const BULK_MAX_LEVEL = 5;
 
@@ -320,7 +322,7 @@ export type CategoriesForTrackerProps = {
   embedded?: boolean;
   /** Když false, dotaz na kategorie neběží (řetězení po peněženkách na Domě). */
   categoriesQueryEnabled?: boolean;
-  /** ISO rozmezí pro `categoryFindAllActive` (rozpočty aktivní v období) — stejné jako u peněženek nahoře. */
+  /** ISO rozmezí pro `categoryFindAllActiveLight` (rozpočty aktivní v období) — stejné jako u peněženek nahoře. */
   categoryActivePeriodIso?: { from: string; to: string } | null;
   /** Volitelný obsah vlevo v horním řádku se souhrnem. */
   topSummaryLeft?: ReactNode;
@@ -355,10 +357,12 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   const queryClient = useQueryClient();
   const [budgetCategory, setBudgetCategory] = useState<CategoryResponseDto | null>(null);
   const [showOnlyCategoriesWithMovements, setShowOnlyCategoriesWithMovements] = useState(false);
-  const [summaryDisplayAssetCode, setSummaryDisplayAssetCode] = useState('');
+  const [summaryDisplayAssetCode, setSummaryDisplayAssetCode] = useState(() =>
+    readTrackerDisplayCurrencyCode(trackerId),
+  );
 
-  const categoryListParams = useMemo((): CategoryFindAllActiveParams => {
-    const base: CategoryFindAllActiveParams = { ...LIST_BASE };
+  const categoryListParams = useMemo((): CategoryFindAllActiveLightParams => {
+    const base: CategoryFindAllActiveLightParams = { ...LIST_BASE };
     if (categoryActivePeriodIso) {
       base.dateFrom = categoryActivePeriodIso.from;
       base.dateTo = categoryActivePeriodIso.to;
@@ -366,9 +370,13 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     return base;
   }, [categoryActivePeriodIso]);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: getCategoryFindAllActiveQueryKey(trackerId, categoryListParams),
-    queryFn: () => categoryFindAllActive(trackerId, categoryListParams),
+  const { data: categoryActiveLightRes, isLoading, isError } = useQuery({
+    queryKey: getCategoryFindAllActiveLightQueryKey(trackerId, categoryListParams),
+    queryFn: async () => {
+      const res = await categoryFindAllActiveLight(trackerId, categoryListParams);
+      if (res.status < 200 || res.status >= 300) throw new Error('category-active-light');
+      return res.data as CategoryActivePageResponse;
+    },
     enabled: Boolean(trackerId) && categoriesQueryEnabled,
   });
 
@@ -394,8 +402,10 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     staleTime: 30_000,
   });
 
-  const paged = data?.data as PagedModelCategoryResponseDto | undefined;
-  const flat = paged?.content ?? [];
+  const flat = useMemo(
+    () => categoryActiveLightPageToFlat(categoryActiveLightRes),
+    [categoryActiveLightRes],
+  );
   const tree = useMemo(() => toCategoryTree(flat), [flat]);
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(() => new Set());
   const expandAllTimerRef = useRef<number | null>(null);
@@ -695,13 +705,13 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({
-      queryKey: [`/api/category/${trackerId}/active`],
+      queryKey: getCategoryFindAllActiveLightQueryKey(trackerId),
     });
     queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/summary`] });
   }, [queryClient, trackerId]);
 
   const invalidateBudgets = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
+    queryClient.invalidateQueries({ queryKey: getCategoryFindAllActiveLightQueryKey(trackerId) });
     queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/summary`] });
     queryClient.invalidateQueries({ queryKey: [`/api/recurring-budget/${trackerId}/active`] });
   }, [queryClient, trackerId]);
@@ -1078,6 +1088,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
       await queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
       await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
       await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+      await queryClient.invalidateQueries({ queryKey: getInstitutionHeaderBalancesQueryKey(trackerId) });
       await invalidateBudgets();
     } catch {
       enqueueSnackbar('Transakci se nepodařilo uložit', { variant: 'error' });

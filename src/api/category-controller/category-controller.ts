@@ -23,6 +23,7 @@ import type {
 
 import type {
   CategoryDeactivateParams,
+  CategoryFindAllActiveLightParams,
   CategoryFindAllActiveParams,
   CategoryFindAllParams,
   CategoryMovementSummaryParams,
@@ -1527,6 +1528,174 @@ export function useCategoryFindAllActiveTree<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getCategoryFindAllActiveTreeQueryOptions(trackerId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export type categoryFindAllActiveLightResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type categoryFindAllActiveLightResponseSuccess = categoryFindAllActiveLightResponse200 & {
+  headers: Headers;
+};
+export type categoryFindAllActiveLightResponse = categoryFindAllActiveLightResponseSuccess;
+
+export const getCategoryFindAllActiveLightUrl = (
+  trackerId: string,
+  params?: CategoryFindAllActiveLightParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/category/${trackerId}/active-light?${stringifiedParams}`
+    : `/api/category/${trackerId}/active-light`;
+};
+
+export const categoryFindAllActiveLight = async (
+  trackerId: string,
+  params?: CategoryFindAllActiveLightParams,
+  options?: RequestInit,
+): Promise<categoryFindAllActiveLightResponse> => {
+  const res = await fetch(getCategoryFindAllActiveLightUrl(trackerId, params), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: categoryFindAllActiveLightResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as categoryFindAllActiveLightResponse;
+};
+
+export const getCategoryFindAllActiveLightQueryKey = (
+  trackerId: string,
+  params?: CategoryFindAllActiveLightParams,
+) => {
+  return [`/api/category/${trackerId}/active-light`, ...(params ? [params] : [])] as const;
+};
+
+export const getCategoryFindAllActiveLightQueryOptions = <
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveLight>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: CategoryFindAllActiveLightParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveLight>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getCategoryFindAllActiveLightQueryKey(trackerId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof categoryFindAllActiveLight>>> = ({
+    signal,
+  }) => categoryFindAllActiveLight(trackerId, params, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof categoryFindAllActiveLight>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type CategoryFindAllActiveLightQueryResult = NonNullable<
+  Awaited<ReturnType<typeof categoryFindAllActiveLight>>
+>;
+export type CategoryFindAllActiveLightQueryError = unknown;
+
+export function useCategoryFindAllActiveLight<
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveLight>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params: undefined | CategoryFindAllActiveLightParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveLight>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryFindAllActiveLight>>,
+          TError,
+          Awaited<ReturnType<typeof categoryFindAllActiveLight>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryFindAllActiveLight<
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveLight>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: CategoryFindAllActiveLightParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveLight>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof categoryFindAllActiveLight>>,
+          TError,
+          Awaited<ReturnType<typeof categoryFindAllActiveLight>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCategoryFindAllActiveLight<
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveLight>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: CategoryFindAllActiveLightParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveLight>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useCategoryFindAllActiveLight<
+  TData = Awaited<ReturnType<typeof categoryFindAllActiveLight>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: CategoryFindAllActiveLightParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof categoryFindAllActiveLight>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getCategoryFindAllActiveLightQueryOptions(trackerId, params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

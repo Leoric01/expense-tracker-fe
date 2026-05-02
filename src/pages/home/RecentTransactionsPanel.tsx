@@ -24,6 +24,7 @@ import {
   transactionUploadAttachment,
 } from '@api/transaction-controller/transaction-controller';
 import { holdingFindAllLite } from '@api/holding-controller/holding-controller';
+import { getInstitutionHeaderBalancesQueryKey } from '@api/institution-controller/institution-controller';
 import { useDebouncedValue } from '@hooks/useDebouncedValue';
 import {
   Autocomplete,
@@ -651,6 +652,7 @@ export const RecentTransactionsPanel: FC<RecentTransactionsPanelProps> = ({
     await queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
     await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
     await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+    await queryClient.invalidateQueries({ queryKey: getInstitutionHeaderBalancesQueryKey(trackerId) });
   }, [queryClient, trackerId]);
 
   const openEditDialog = useCallback((row: TransactionRow) => {
