@@ -27,6 +27,11 @@ import { HabitsModuleLayout } from '@pages/habits/HabitsModuleLayout';
 import { HabitWeekOverviewPage } from '@pages/habits/HabitWeekOverviewPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
+import { FinanceModuleLayout } from '@pages/finance/FinanceModuleLayout';
+import { FinanceExportyPage } from '@pages/home/BudgetPlanExportPanel';
+import { FinanceImportyPage } from '@pages/home/BudgetPlanImportPanel';
+import { TransactionsPage } from '@pages/TransactionsPage';
+import { TransactionsTransfersPage } from '@pages/TransactionsTransfersPage';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 export const router = createBrowserRouter([
@@ -40,9 +45,24 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/moduly" replace /> },
       { path: 'moduly', element: <ModuleHubPage /> },
-      { path: 'domu', element: <Home /> },
       { path: 'trackers', element: <ExpenseTrackers /> },
-      { path: 'categories', element: <CategoriesPage /> },
+      {
+        element: <FinanceModuleLayout />,
+        children: [
+          { path: 'prehled', element: <Home /> },
+          { path: 'importy', element: <FinanceImportyPage /> },
+          { path: 'exporty', element: <FinanceExportyPage /> },
+          { path: 'categories', element: <CategoriesPage /> },
+          {
+            path: 'transactions',
+            children: [
+              { index: true, element: <Navigate to="history" replace /> },
+              { path: 'history', element: <TransactionsPage /> },
+              { path: 'prevody', element: <TransactionsTransfersPage /> },
+            ],
+          },
+        ],
+      },
       { path: 'nutrition/setup', element: <NutritionSetupPage /> },
       { path: 'nutrition/goal-plan/new', element: <NutritionGoalPlanCreatePage /> },
       { path: 'nutrition/goal-plan/:goalPlanId', element: <NutritionGoalPlanSummaryPage /> },
@@ -65,9 +85,7 @@ export const router = createBrowserRouter([
           { path: ':habitId', element: <HabitDetailPage /> },
         ],
       },
-      { path: 'importy', element: <Navigate to="/domu?tab=importy" replace /> },
-      { path: 'wallets', element: <Navigate to="/domu" replace /> },
-      { path: 'transactions', element: <Navigate to="/domu" replace /> },
+      { path: 'wallets', element: <Navigate to="/prehled" replace /> },
       /** SPA route — must not be `/profile` (conflicts with API `GET /profile` + Vite proxy). */
       { path: 'settings', element: <Profile /> },
       { path: 'profile', element: <Navigate to="/settings" replace /> },

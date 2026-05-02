@@ -31,7 +31,15 @@ export const LayoutWrapper: FC = () => {
           onMenuToggle={handleMenuToggle}
           showMenuToggle={!isDesktop}
         />
-        <Box padding={{ xs: 3, md: 6 }} sx={{ backgroundColor: '#114b3f', minHeight: 'calc(100vh - 64px)' }}>
+        <Box
+          sx={{
+            px: { xs: 2, md: 6 },
+            pt: { xs: 1.5, md: 2 },
+            pb: { xs: 2, md: 4 },
+            backgroundColor: '#114b3f',
+            minHeight: 'calc(100vh - 64px)',
+          }}
+        >
           <Outlet />
         </Box>
       </Box>

@@ -49,7 +49,7 @@ async function fetchNutritionTargetCurrent(
   trackerId: string,
 ): Promise<NutritionTargetResponseDto | null> {
   const res = await nutritionTargetFindCurrent(trackerId);
-  if (res.status === 404) {
+  if ((res.status as number) === 404) {
     return null;
   }
   if (res.status !== 200) {
@@ -342,7 +342,11 @@ export const NutritionWeeklyCheckinPage: FC = () => {
                     tickFormatter={(v) => `${v}`}
                   />
                   <RechartsTooltip
-                    formatter={(value: number) => [`${Number(value).toFixed(1)} kg`, 'Prům. váha']}
+                    formatter={(value) => {
+                      const n = typeof value === 'number' ? value : Number(value);
+                      const label = Number.isFinite(n) ? `${n.toFixed(1)} kg` : '—';
+                      return [label, 'Prům. váha'];
+                    }}
                     labelFormatter={(_, payload) =>
                       payload?.[0]?.payload?.weekIndex != null
                         ? `Týden ${payload[0].payload.weekIndex}`

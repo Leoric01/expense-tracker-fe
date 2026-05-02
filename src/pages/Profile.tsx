@@ -20,7 +20,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useEffect, useState } from 'react';
+import { FC, type SubmitEvent, useEffect, useState } from 'react';
 
 type ProfileData = {
   id?: string;
@@ -63,7 +63,7 @@ export const Profile: FC = () => {
     void loadProfile();
   }, []);
 
-  const handleSaveProfile = async (event: FormEvent) => {
+  const handleSaveProfile = async (event: SubmitEvent) => {
     event.preventDefault();
     setSubmitting(true);
     try {
@@ -78,7 +78,7 @@ export const Profile: FC = () => {
     }
   };
 
-  const handleChangePassword = async (event: FormEvent) => {
+  const handleChangePassword = async (event: SubmitEvent) => {
     event.preventDefault();
     if (newPassword !== newConfirmationPassword) {
       enqueueSnackbar('Nová hesla se neshodují', { variant: 'warning' });

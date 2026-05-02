@@ -27,7 +27,7 @@ import {
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useEffect, useState } from 'react';
+import { FC, type SubmitEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 const ACTIVITY_OPTIONS: { value: number; label: string }[] = [
@@ -141,7 +141,7 @@ export const NutritionSetupPage: FC = () => {
     },
   });
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e: SubmitEvent) => {
     e.preventDefault();
     if (!trackerId) {
       return;

@@ -51,7 +51,7 @@ import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
 import { DISPLAY_CURRENCY_POPULAR_CODES } from '@utils/displayCurrencyPopularCodes';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
+import { FC, type SubmitEvent, useEffect, useMemo, useState } from 'react';
 import { buildMineParams } from './buildListParams';
 import { trackersTablePaperSx } from './trackersTableSurfaceSx';
 import { formatDateDdMmYyyy } from './formatDateDdMmYyyy';
@@ -171,7 +171,7 @@ export const MineTrackersTab: FC = () => {
     setEditOpen(true);
   };
 
-  const handleCreate = async (e: FormEvent) => {
+  const handleCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     const payload: CreateExpenseTrackerRequestDto = {
       name: createName.trim(),
@@ -207,7 +207,7 @@ export const MineTrackersTab: FC = () => {
     }
   };
 
-  const handleUpdate = async (e: FormEvent) => {
+  const handleUpdate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!editId) return;
     const body: UpdateExpenseTrackerRequestDto = {
@@ -261,7 +261,7 @@ export const MineTrackersTab: FC = () => {
     }
   };
 
-  const handleInvite = async (e: FormEvent) => {
+  const handleInvite = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!inviteTrackerId || !inviteEmail.trim()) return;
     setSubmitting(true);

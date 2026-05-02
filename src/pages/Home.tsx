@@ -10,9 +10,7 @@ export const Home: FC = () => {
   const { selectedExpenseTracker } = useSelectedExpenseTracker();
 
   if (selectedExpenseTracker?.id) {
-    return (
-      <TrackerHomeWallets trackerId={selectedExpenseTracker.id} trackerName={selectedExpenseTracker.name} />
-    );
+    return <TrackerHomeWallets trackerId={selectedExpenseTracker.id} />;
   }
 
   return (

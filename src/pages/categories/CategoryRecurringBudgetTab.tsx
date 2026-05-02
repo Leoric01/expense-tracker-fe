@@ -42,7 +42,7 @@ import {
 } from '@utils/dateTimeCs';
 import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useCallback, useEffect, useState } from 'react';
+import { FC, type SubmitEvent, useCallback, useEffect, useState } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
 import { intervalFieldHelperCs, recurringIntervalDescriptionCs } from './categoryRecurringBudgetIntervalText';
 
@@ -82,7 +82,9 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
   const [cName, setCName] = useState('');
   const [cAmount, setCAmount] = useState('');
   const [cCurrency, setCCurrency] = useState('CZK');
-  const [cPeriod, setCPeriod] = useState(CreateRecurringBudgetRequestDtoPeriodType.MONTHLY);
+  const [cPeriod, setCPeriod] = useState<CreateRecurringBudgetRequestDtoPeriodType>(
+    CreateRecurringBudgetRequestDtoPeriodType.MONTHLY,
+  );
   const [cInterval, setCInterval] = useState('1');
   const [cStart, setCStart] = useState('');
   const [cEnd, setCEnd] = useState('');
@@ -90,7 +92,9 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
   const [eName, setEName] = useState('');
   const [eAmount, setEAmount] = useState('');
   const [eCurrency, setECurrency] = useState('CZK');
-  const [ePeriod, setEPeriod] = useState(UpdateRecurringBudgetRequestDtoPeriodType.MONTHLY);
+  const [ePeriod, setEPeriod] = useState<UpdateRecurringBudgetRequestDtoPeriodType>(
+    UpdateRecurringBudgetRequestDtoPeriodType.MONTHLY,
+  );
   const [eInterval, setEInterval] = useState('1');
   const [eStart, setEStart] = useState('');
   const [eEnd, setEEnd] = useState('');
@@ -131,7 +135,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
     return n;
   };
 
-  const handleCreate = async (e: FormEvent) => {
+  const handleCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!category?.id) return;
     const name = cName.trim();
@@ -199,7 +203,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
     }
   };
 
-  const handleUpdate = async (e: FormEvent) => {
+  const handleUpdate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!editing?.id || !category?.id) return;
     const name = eName.trim();

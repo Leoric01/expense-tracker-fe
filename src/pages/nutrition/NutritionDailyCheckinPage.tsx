@@ -33,7 +33,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/cs';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useEffect, useMemo, useState } from 'react';
+import { FC, type SubmitEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 function parseNum(s: string): number | undefined {
@@ -101,7 +101,7 @@ export const NutritionDailyCheckinPage: FC = () => {
     enabled: !!trackerId,
     queryFn: async (): Promise<NutritionTargetResponseDto | null> => {
       const res = await nutritionTargetFindCurrent(trackerId!);
-      if (res.status === 404) {
+      if ((res.status as number) === 404) {
         return null;
       }
       if (res.status !== 200) {
@@ -116,7 +116,7 @@ export const NutritionDailyCheckinPage: FC = () => {
     enabled: !!trackerId,
     queryFn: async (): Promise<DailyNutritionLogResponseDto | null> => {
       const res = await dailyNutritionLogFindByDate(trackerId!, logDateStr);
-      if (res.status === 404) {
+      if ((res.status as number) === 404) {
         return null;
       }
       if (res.status !== 200) {
@@ -131,7 +131,7 @@ export const NutritionDailyCheckinPage: FC = () => {
     enabled: !!trackerId,
     queryFn: async (): Promise<DailyBodyMeasurementLogResponseDto | null> => {
       const res = await dailyBodyMeasurementLogFindByDate(trackerId!, logDateStr);
-      if (res.status === 404) {
+      if ((res.status as number) === 404) {
         return null;
       }
       if (res.status !== 200) {
@@ -185,7 +185,7 @@ export const NutritionDailyCheckinPage: FC = () => {
       ? target.targetCaloriesKcal - enteredCalories
       : null;
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!trackerId) {
       return;

@@ -6,6 +6,7 @@ import {
 } from '@api/account-controller/account-controller';
 import {
   getInstitutionFindAllQueryKey,
+  getInstitutionHeaderBalancesQueryKey,
   institutionCreate,
   institutionFindAll,
 } from '@api/institution-controller/institution-controller';
@@ -44,7 +45,7 @@ import {
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useCallback, useMemo, useState } from 'react';
+import { FC, type SubmitEvent, useCallback, useMemo, useState } from 'react';
 import { ACCOUNT_TYPE_OPTIONS } from './walletDisplay';
 
 const LIST_PARAMS = { page: 0, size: 500 } as const;
@@ -78,12 +79,16 @@ export const InstitutionAccountsManageDialog: FC<Props> = ({ trackerId, open, on
   const queryClient = useQueryClient();
 
   const [newInstName, setNewInstName] = useState('');
-  const [newInstType, setNewInstType] = useState(CreateInstitutionRequestDtoInstitutionType.PERSONAL);
+  const [newInstType, setNewInstType] = useState<CreateInstitutionRequestDtoInstitutionType>(
+    CreateInstitutionRequestDtoInstitutionType.PERSONAL,
+  );
   const [instSubmitting, setInstSubmitting] = useState(false);
 
   const [expandedAddAccountInstId, setExpandedAddAccountInstId] = useState<string | null>(null);
   const [newAccName, setNewAccName] = useState('');
-  const [newAccType, setNewAccType] = useState(CreateAccountRequestDtoAccountType.CASH);
+  const [newAccType, setNewAccType] = useState<CreateAccountRequestDtoAccountType>(
+    CreateAccountRequestDtoAccountType.CASH,
+  );
   const [accSubmitting, setAccSubmitting] = useState(false);
 
   const { data: instPaged } = useQuery({
@@ -133,10 +138,11 @@ export const InstitutionAccountsManageDialog: FC<Props> = ({ trackerId, open, on
     await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}`] });
     await queryClient.invalidateQueries({ queryKey: [`/api/account/${trackerId}`] });
     await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+    await queryClient.invalidateQueries({ queryKey: getInstitutionHeaderBalancesQueryKey(trackerId) });
     await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
   }, [queryClient, trackerId]);
 
-  const handleAddInstitution = async (e: FormEvent) => {
+  const handleAddInstitution = async (e: SubmitEvent) => {
     e.preventDefault();
     const nm = newInstName.trim();
     if (!nm) {
@@ -160,7 +166,7 @@ export const InstitutionAccountsManageDialog: FC<Props> = ({ trackerId, open, on
     }
   };
 
-  const handleAddAccount = async (e: FormEvent, institutionId: string) => {
+  const handleAddAccount = async (e: SubmitEvent, institutionId: string) => {
     e.preventDefault();
     const nm = newAccName.trim();
     if (!nm) {

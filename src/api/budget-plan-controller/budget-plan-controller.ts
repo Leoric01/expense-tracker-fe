@@ -24,7 +24,8 @@ import type {
 import type {
   BudgetPlanFindAllActiveParams,
   BudgetPlanFindAllParams,
-  BulkBudgetImportItemDto,
+  BulkBudgetImportByCategoryIdRequestDto,
+  BulkBudgetImportRequestDto,
   CreateBudgetPlanRequestDto,
   UpdateBudgetPlanRequestDto,
 } from '../model';
@@ -272,53 +273,56 @@ export const useBudgetPlanCreate = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getBudgetPlanCreateMutationOptions(options), queryClient);
 };
-export type bulkImportResponse200 = {
+export type budgetPlanImportBulkResponse200 = {
   data: Blob;
   status: 200;
 };
 
-export type bulkImportResponseSuccess = bulkImportResponse200 & {
+export type budgetPlanImportBulkResponseSuccess = budgetPlanImportBulkResponse200 & {
   headers: Headers;
 };
-export type bulkImportResponse = bulkImportResponseSuccess;
+export type budgetPlanImportBulkResponse = budgetPlanImportBulkResponseSuccess;
 
-export const getBulkImportUrl = (trackerId: string) => {
+export const getBudgetPlanImportBulkUrl = (trackerId: string) => {
   return `/api/budget-plan/${trackerId}/import`;
 };
 
-export const bulkImport = async (
+export const budgetPlanImportBulk = async (
   trackerId: string,
-  bulkBudgetImportItemDto: BulkBudgetImportItemDto[],
+  bulkBudgetImportRequestDto: BulkBudgetImportRequestDto,
   options?: RequestInit,
-): Promise<bulkImportResponse> => {
-  const res = await fetch(getBulkImportUrl(trackerId), {
+): Promise<budgetPlanImportBulkResponse> => {
+  const res = await fetch(getBudgetPlanImportBulkUrl(trackerId), {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(bulkBudgetImportItemDto),
+    body: JSON.stringify(bulkBudgetImportRequestDto),
   });
 
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
 
-  const data: bulkImportResponse['data'] = body ? JSON.parse(body) : {};
-  return { data, status: res.status, headers: res.headers } as bulkImportResponse;
+  const data: budgetPlanImportBulkResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as budgetPlanImportBulkResponse;
 };
 
-export const getBulkImportMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+export const getBudgetPlanImportBulkMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof bulkImport>>,
+    Awaited<ReturnType<typeof budgetPlanImportBulk>>,
     TError,
-    { trackerId: string; data: BulkBudgetImportItemDto[] },
+    { trackerId: string; data: BulkBudgetImportRequestDto },
     TContext
   >;
   fetch?: RequestInit;
 }): UseMutationOptions<
-  Awaited<ReturnType<typeof bulkImport>>,
+  Awaited<ReturnType<typeof budgetPlanImportBulk>>,
   TError,
-  { trackerId: string; data: BulkBudgetImportItemDto[] },
+  { trackerId: string; data: BulkBudgetImportRequestDto },
   TContext
 > => {
-  const mutationKey = ['bulkImport'];
+  const mutationKey = ['budgetPlanImportBulk'];
   const { mutation: mutationOptions, fetch: fetchOptions } = options
     ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
@@ -326,39 +330,140 @@ export const getBulkImportMutationOptions = <TError = unknown, TContext = unknow
     : { mutation: { mutationKey }, fetch: undefined };
 
   const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof bulkImport>>,
-    { trackerId: string; data: BulkBudgetImportItemDto[] }
+    Awaited<ReturnType<typeof budgetPlanImportBulk>>,
+    { trackerId: string; data: BulkBudgetImportRequestDto }
   > = (props) => {
     const { trackerId, data } = props ?? {};
 
-    return bulkImport(trackerId, data, fetchOptions);
+    return budgetPlanImportBulk(trackerId, data, fetchOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type BulkImportMutationResult = NonNullable<Awaited<ReturnType<typeof bulkImport>>>;
-export type BulkImportMutationBody = BulkBudgetImportItemDto[];
-export type BulkImportMutationError = unknown;
+export type BudgetPlanImportBulkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof budgetPlanImportBulk>>
+>;
+export type BudgetPlanImportBulkMutationBody = BulkBudgetImportRequestDto;
+export type BudgetPlanImportBulkMutationError = unknown;
 
-export const useBulkImport = <TError = unknown, TContext = unknown>(
+export const useBudgetPlanImportBulk = <TError = unknown, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof bulkImport>>,
+      Awaited<ReturnType<typeof budgetPlanImportBulk>>,
       TError,
-      { trackerId: string; data: BulkBudgetImportItemDto[] },
+      { trackerId: string; data: BulkBudgetImportRequestDto },
       TContext
     >;
     fetch?: RequestInit;
   },
   queryClient?: QueryClient,
 ): UseMutationResult<
-  Awaited<ReturnType<typeof bulkImport>>,
+  Awaited<ReturnType<typeof budgetPlanImportBulk>>,
   TError,
-  { trackerId: string; data: BulkBudgetImportItemDto[] },
+  { trackerId: string; data: BulkBudgetImportRequestDto },
   TContext
 > => {
-  return useMutation(getBulkImportMutationOptions(options), queryClient);
+  return useMutation(getBudgetPlanImportBulkMutationOptions(options), queryClient);
+};
+export type budgetPlanImportByCategoryIdBulkResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type budgetPlanImportByCategoryIdBulkResponseSuccess =
+  budgetPlanImportByCategoryIdBulkResponse200 & {
+    headers: Headers;
+  };
+export type budgetPlanImportByCategoryIdBulkResponse =
+  budgetPlanImportByCategoryIdBulkResponseSuccess;
+
+export const getBudgetPlanImportByCategoryIdBulkUrl = (trackerId: string) => {
+  return `/api/budget-plan/${trackerId}/import/by-category-id`;
+};
+
+export const budgetPlanImportByCategoryIdBulk = async (
+  trackerId: string,
+  bulkBudgetImportByCategoryIdRequestDto: BulkBudgetImportByCategoryIdRequestDto,
+  options?: RequestInit,
+): Promise<budgetPlanImportByCategoryIdBulkResponse> => {
+  const res = await fetch(getBudgetPlanImportByCategoryIdBulkUrl(trackerId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkBudgetImportByCategoryIdRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: budgetPlanImportByCategoryIdBulkResponse['data'] = body ? JSON.parse(body) : {};
+  return {
+    data,
+    status: res.status,
+    headers: res.headers,
+  } as budgetPlanImportByCategoryIdBulkResponse;
+};
+
+export const getBudgetPlanImportByCategoryIdBulkMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof budgetPlanImportByCategoryIdBulk>>,
+    TError,
+    { trackerId: string; data: BulkBudgetImportByCategoryIdRequestDto },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof budgetPlanImportByCategoryIdBulk>>,
+  TError,
+  { trackerId: string; data: BulkBudgetImportByCategoryIdRequestDto },
+  TContext
+> => {
+  const mutationKey = ['budgetPlanImportByCategoryIdBulk'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof budgetPlanImportByCategoryIdBulk>>,
+    { trackerId: string; data: BulkBudgetImportByCategoryIdRequestDto }
+  > = (props) => {
+    const { trackerId, data } = props ?? {};
+
+    return budgetPlanImportByCategoryIdBulk(trackerId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BudgetPlanImportByCategoryIdBulkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof budgetPlanImportByCategoryIdBulk>>
+>;
+export type BudgetPlanImportByCategoryIdBulkMutationBody = BulkBudgetImportByCategoryIdRequestDto;
+export type BudgetPlanImportByCategoryIdBulkMutationError = unknown;
+
+export const useBudgetPlanImportByCategoryIdBulk = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof budgetPlanImportByCategoryIdBulk>>,
+      TError,
+      { trackerId: string; data: BulkBudgetImportByCategoryIdRequestDto },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof budgetPlanImportByCategoryIdBulk>>,
+  TError,
+  { trackerId: string; data: BulkBudgetImportByCategoryIdRequestDto },
+  TContext
+> => {
+  return useMutation(getBudgetPlanImportByCategoryIdBulkMutationOptions(options), queryClient);
 };
 export type budgetPlanFindByIdResponse200 = {
   data: Blob;
@@ -685,6 +790,148 @@ export const useBudgetPlanUpdate = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getBudgetPlanUpdateMutationOptions(options), queryClient);
 };
+export type budgetPlanExportBulkResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type budgetPlanExportBulkResponseSuccess = budgetPlanExportBulkResponse200 & {
+  headers: Headers;
+};
+export type budgetPlanExportBulkResponse = budgetPlanExportBulkResponseSuccess;
+
+export const getBudgetPlanExportBulkUrl = (trackerId: string) => {
+  return `/api/budget-plan/${trackerId}/export`;
+};
+
+export const budgetPlanExportBulk = async (
+  trackerId: string,
+  options?: RequestInit,
+): Promise<budgetPlanExportBulkResponse> => {
+  const res = await fetch(getBudgetPlanExportBulkUrl(trackerId), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: budgetPlanExportBulkResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as budgetPlanExportBulkResponse;
+};
+
+export const getBudgetPlanExportBulkQueryKey = (trackerId: string) => {
+  return [`/api/budget-plan/${trackerId}/export`] as const;
+};
+
+export const getBudgetPlanExportBulkQueryOptions = <
+  TData = Awaited<ReturnType<typeof budgetPlanExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof budgetPlanExportBulk>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getBudgetPlanExportBulkQueryKey(trackerId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof budgetPlanExportBulk>>> = ({ signal }) =>
+    budgetPlanExportBulk(trackerId, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof budgetPlanExportBulk>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type BudgetPlanExportBulkQueryResult = NonNullable<
+  Awaited<ReturnType<typeof budgetPlanExportBulk>>
+>;
+export type BudgetPlanExportBulkQueryError = unknown;
+
+export function useBudgetPlanExportBulk<
+  TData = Awaited<ReturnType<typeof budgetPlanExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof budgetPlanExportBulk>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof budgetPlanExportBulk>>,
+          TError,
+          Awaited<ReturnType<typeof budgetPlanExportBulk>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useBudgetPlanExportBulk<
+  TData = Awaited<ReturnType<typeof budgetPlanExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof budgetPlanExportBulk>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof budgetPlanExportBulk>>,
+          TError,
+          Awaited<ReturnType<typeof budgetPlanExportBulk>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useBudgetPlanExportBulk<
+  TData = Awaited<ReturnType<typeof budgetPlanExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof budgetPlanExportBulk>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useBudgetPlanExportBulk<
+  TData = Awaited<ReturnType<typeof budgetPlanExportBulk>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof budgetPlanExportBulk>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getBudgetPlanExportBulkQueryOptions(trackerId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
 export type budgetPlanFindAllActiveResponse200 = {
   data: Blob;
   status: 200;

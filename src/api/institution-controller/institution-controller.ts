@@ -25,6 +25,7 @@ import type {
   CreateInstitutionRequestDto,
   InstitutionDashboardParams,
   InstitutionFindAllParams,
+  InstitutionHeaderBalancesParams,
   InstitutionUploadIconBody,
   InstitutionUploadIconParams,
   UpdateInstitutionRequestDto,
@@ -842,6 +843,174 @@ export const useInstitutionUpdate = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getInstitutionUpdateMutationOptions(options), queryClient);
 };
+export type institutionHeaderBalancesResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type institutionHeaderBalancesResponseSuccess = institutionHeaderBalancesResponse200 & {
+  headers: Headers;
+};
+export type institutionHeaderBalancesResponse = institutionHeaderBalancesResponseSuccess;
+
+export const getInstitutionHeaderBalancesUrl = (
+  trackerId: string,
+  params?: InstitutionHeaderBalancesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/institution/${trackerId}/header-balances?${stringifiedParams}`
+    : `/api/institution/${trackerId}/header-balances`;
+};
+
+export const institutionHeaderBalances = async (
+  trackerId: string,
+  params?: InstitutionHeaderBalancesParams,
+  options?: RequestInit,
+): Promise<institutionHeaderBalancesResponse> => {
+  const res = await fetch(getInstitutionHeaderBalancesUrl(trackerId, params), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: institutionHeaderBalancesResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as institutionHeaderBalancesResponse;
+};
+
+export const getInstitutionHeaderBalancesQueryKey = (
+  trackerId: string,
+  params?: InstitutionHeaderBalancesParams,
+) => {
+  return [`/api/institution/${trackerId}/header-balances`, ...(params ? [params] : [])] as const;
+};
+
+export const getInstitutionHeaderBalancesQueryOptions = <
+  TData = Awaited<ReturnType<typeof institutionHeaderBalances>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: InstitutionHeaderBalancesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof institutionHeaderBalances>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getInstitutionHeaderBalancesQueryKey(trackerId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof institutionHeaderBalances>>> = ({
+    signal,
+  }) => institutionHeaderBalances(trackerId, params, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof institutionHeaderBalances>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type InstitutionHeaderBalancesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof institutionHeaderBalances>>
+>;
+export type InstitutionHeaderBalancesQueryError = unknown;
+
+export function useInstitutionHeaderBalances<
+  TData = Awaited<ReturnType<typeof institutionHeaderBalances>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params: undefined | InstitutionHeaderBalancesParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof institutionHeaderBalances>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof institutionHeaderBalances>>,
+          TError,
+          Awaited<ReturnType<typeof institutionHeaderBalances>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useInstitutionHeaderBalances<
+  TData = Awaited<ReturnType<typeof institutionHeaderBalances>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: InstitutionHeaderBalancesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof institutionHeaderBalances>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof institutionHeaderBalances>>,
+          TError,
+          Awaited<ReturnType<typeof institutionHeaderBalances>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useInstitutionHeaderBalances<
+  TData = Awaited<ReturnType<typeof institutionHeaderBalances>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: InstitutionHeaderBalancesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof institutionHeaderBalances>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useInstitutionHeaderBalances<
+  TData = Awaited<ReturnType<typeof institutionHeaderBalances>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  params?: InstitutionHeaderBalancesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof institutionHeaderBalances>>, TError, TData>
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getInstitutionHeaderBalancesQueryOptions(trackerId, params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
 export type institutionDashboardResponse200 = {
   data: Blob;
   status: 200;

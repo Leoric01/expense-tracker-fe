@@ -1,4 +1,48 @@
-import type { BudgetPlanResponseDto, CategoryActiveBudgetPlanDto, CategoryResponseDto } from '@api/model';
+import type {
+  BudgetPlanResponseDto,
+  CategoryActiveBudgetPlanDto,
+  CategoryActiveBudgetPlanEmbed,
+  CategoryActivePageResponse,
+  CategoryActiveRowResponse,
+  CategoryResponseDto,
+} from '@api/model';
+
+function budgetPlanEmbedToActiveDto(embed: CategoryActiveBudgetPlanEmbed): CategoryActiveBudgetPlanDto {
+  return {
+    id: embed.id,
+    name: embed.name,
+    amount: embed.amount,
+    currencyCode: embed.currencyCode,
+    periodType: embed.periodType as CategoryActiveBudgetPlanDto['periodType'],
+    validFrom: embed.validFrom,
+    validTo: embed.validTo,
+    alreadySpent: embed.alreadySpent,
+    active: true,
+  };
+}
+
+function categoryActiveRowToResponseDto(row: CategoryActiveRowResponse): CategoryResponseDto {
+  const embeds = row.budgetPlansForPeriod ?? [];
+  const plans = embeds.map(budgetPlanEmbedToActiveDto);
+  return {
+    id: row.id,
+    name: row.name,
+    categoryKind: row.categoryKind as CategoryResponseDto['categoryKind'],
+    parentId: row.parentId,
+    sortOrder: row.sortOrder,
+    ...(plans.length > 0 ? { budgetPlansForSelectedPeriod: plans } : {}),
+    children: [],
+  };
+}
+
+/**
+ * `GET .../category/{trackerId}/active-light` → flat `CategoryResponseDto[]` pro `toCategoryTree`
+ * a `budgetsByCategoryIdFromFlat`.
+ */
+export function categoryActiveLightPageToFlat(page: CategoryActivePageResponse | null | undefined): CategoryResponseDto[] {
+  const rows = page?.categories ?? [];
+  return rows.map(categoryActiveRowToResponseDto);
+}
 
 export function asCategoryChildren(ch: unknown): CategoryResponseDto[] {
   if (!Array.isArray(ch)) return [];
@@ -136,7 +180,7 @@ export function rootAncestorCategory(
   return last;
 }
 
-/** Jedna položka z `GET .../category/.../active` — vnořený aktivní rozpočet. */
+/** `CategoryActiveBudgetPlanDto` vnořený u kategorie (mapování z active-light embedů). */
 export function activeBudgetPlanToBudgetPlanResponse(
   categoryId: string,
   categoryName: string | undefined,
@@ -161,7 +205,7 @@ export function activeBudgetPlanToBudgetPlanResponse(
 
 /**
  * Plány vnořené u kategorie — ve tvaru očekávaném UI (řádek + dialog).
- * Preferuje `budgetPlansForSelectedPeriod` (např. po `GET .../active?dateFrom&dateTo`), jinak jeden `activeBudgetPlan`.
+ * Preferuje `budgetPlansForSelectedPeriod` (active-light), jinak jeden `activeBudgetPlan`.
  */
 export function budgetPlansFromCategoryEmbedded(
   category: CategoryResponseDto | null | undefined,
@@ -174,6 +218,14 @@ export function budgetPlansFromCategoryEmbedded(
   const p = category.activeBudgetPlan;
   if (p == null) return [];
   return [activeBudgetPlanToBudgetPlanResponse(category.id, category.name, p)];
+}
+
+/** Kategorie má použitelný aktivní rozpočet (podle API / vnořených plánů). */
+export function hasActiveEmbeddedBudgetPlan(category: CategoryResponseDto | null | undefined): boolean {
+  for (const p of budgetPlansFromCategoryEmbedded(category)) {
+    if ((p.id ?? '').trim() && p.active !== false) return true;
+  }
+  return false;
 }
 
 /** Mapa categoryId → jednorázové plány jen z vnořených dat kategorií (bez samostatného GET budget-plan). */

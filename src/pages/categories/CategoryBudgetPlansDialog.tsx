@@ -49,7 +49,7 @@ import {
 } from '@utils/dateTimeCs';
 import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useCallback, useEffect, useState } from 'react';
+import { FC, type SubmitEvent, useCallback, useEffect, useState } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
 import { CategoryBudgetPlanUsageLine } from './categoryBudgetUsage';
 import { CategoryRecurringBudgetTab } from './CategoryRecurringBudgetTab';
@@ -104,14 +104,18 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
   const [createName, setCreateName] = useState('');
   const [createAmountCanon, setCreateAmountCanon] = useState('');
   const [createCurrency, setCreateCurrency] = useState('CZK');
-  const [createPeriod, setCreatePeriod] = useState(CreateBudgetPlanRequestDtoPeriodType.MONTHLY);
+  const [createPeriod, setCreatePeriod] = useState<CreateBudgetPlanRequestDtoPeriodType>(
+    CreateBudgetPlanRequestDtoPeriodType.MONTHLY,
+  );
   const [createValidFrom, setCreateValidFrom] = useState('');
   const [createValidTo, setCreateValidTo] = useState('');
 
   const [editName, setEditName] = useState('');
   const [editAmountCanon, setEditAmountCanon] = useState('');
   const [editCurrency, setEditCurrency] = useState('CZK');
-  const [editPeriod, setEditPeriod] = useState(UpdateBudgetPlanRequestDtoPeriodType.MONTHLY);
+  const [editPeriod, setEditPeriod] = useState<UpdateBudgetPlanRequestDtoPeriodType>(
+    UpdateBudgetPlanRequestDtoPeriodType.MONTHLY,
+  );
   const [editValidFrom, setEditValidFrom] = useState('');
   const [editValidTo, setEditValidTo] = useState('');
 
@@ -152,7 +156,7 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
     setEditValidTo(isoToDdMmYyyyInput(editing.validTo));
   }, [editing]);
 
-  const handleCreate = async (e: FormEvent) => {
+  const handleCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!category?.id) return;
     const name = createName.trim();
@@ -213,7 +217,7 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
     }
   };
 
-  const handleUpdate = async (e: FormEvent) => {
+  const handleUpdate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!editing?.id || !category?.id) return;
     const name = editName.trim();

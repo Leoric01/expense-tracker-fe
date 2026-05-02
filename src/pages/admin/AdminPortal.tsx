@@ -17,7 +17,7 @@ import {
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useState } from 'react';
+import { FC, type SubmitEvent, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 export const AdminPortal: FC = () => {
@@ -28,7 +28,7 @@ export const AdminPortal: FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleResetPassword = async (e: FormEvent) => {
+  const handleResetPassword = async (e: SubmitEvent) => {
     e.preventDefault();
     const em = email.trim();
     if (!em || newPassword.length < 8) {

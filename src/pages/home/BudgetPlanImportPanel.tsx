@@ -1,17 +1,59 @@
-import { bulkImport } from '@api/budget-plan-controller/budget-plan-controller';
-import type { BulkBudgetImportItemDto } from '@api/model';
+import {
+  budgetPlanImportBulk,
+  budgetPlanImportByCategoryIdBulk,
+} from '@api/budget-plan-controller/budget-plan-controller';
+import {
+  categoryCreateBulk,
+  getCategoryFindAllActiveLightQueryKey,
+} from '@api/category-controller/category-controller';
+import type {
+  BulkBudgetImportByCategoryIdRequestDto,
+  BulkBudgetImportItemDto,
+  BulkBudgetImportRequestDto,
+  CreateCategoryBulkRequestDto,
+} from '@api/model';
+import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
-import { Box, Button, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useState } from 'react';
+import { FC, type SubmitEvent, useState } from 'react';
+import { Link } from 'react-router-dom';
 
-const EXAMPLE_JSON = `[
+const EXAMPLE_JSON_BY_NAME = `{
+  "items": [
+    {
+      "budgetPlanName": "Ukazka",
+      "period": "2026-04",
+      "amount": 10000,
+      "currency": "CZK",
+      "categoryName": "Bydleni"
+    }
+  ]
+}`;
+
+const EXAMPLE_JSON_BY_ID = `{
+  "items": [
+    {
+      "budgetPlanName": "Ukazka",
+      "period": "2026-04",
+      "amount": 10000,
+      "currency": "CZK",
+      "categoryId": "sem-vloz-id-kategorie"
+    }
+  ]
+}`;
+
+const EXAMPLE_JSON_CATEGORY = `[
   {
-    "budgetPlanName": "Ukázka",
-    "period": "2026-04",
-    "amount": 10000,
-    "currency": "CZK"
+    "name": "Bydleni",
+    "categoryKind": "EXPENSE",
+    "sortOrder": 10
+  },
+  {
+    "name": "Prijmy",
+    "categoryKind": "INCOME",
+    "sortOrder": 20
   }
 ]`;
 
@@ -22,13 +64,14 @@ type Props = {
 export const BudgetPlanImportPanel: FC<Props> = ({ trackerId }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
-  const [jsonText, setJsonText] = useState(EXAMPLE_JSON);
+  const [importMode, setImportMode] = useState<'by-name' | 'by-id' | 'category'>('by-name');
+  const [jsonText, setJsonText] = useState(EXAMPLE_JSON_BY_NAME);
   const [submitting, setSubmitting] = useState(false);
   const [lastStatus, setLastStatus] = useState<number | null>(null);
   const [responseBody, setResponseBody] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     setParseError(null);
     let parsed: unknown;
@@ -38,20 +81,52 @@ export const BudgetPlanImportPanel: FC<Props> = ({ trackerId }) => {
       setParseError('Neplatný JSON.');
       return;
     }
-    if (!Array.isArray(parsed)) {
-      setParseError('Očekává se JSON pole (pole položek k importu).');
-      return;
-    }
     setSubmitting(true);
     setLastStatus(null);
     setResponseBody('');
     try {
-      const res = await bulkImport(trackerId, parsed as BulkBudgetImportItemDto[]);
+      const parseItemsObject = (value: unknown): unknown[] | null => {
+        if (Array.isArray(value)) return value;
+        if (
+          value &&
+          typeof value === 'object' &&
+          'items' in value &&
+          Array.isArray((value as { items?: unknown }).items)
+        ) {
+          return (value as { items: unknown[] }).items;
+        }
+        return null;
+      };
+
+      let res;
+      if (importMode === 'category') {
+        const categoryItems = parseItemsObject(parsed);
+        if (!categoryItems) {
+          setParseError('Pro import kategorii se očekává JSON pole (nebo objekt s `items`).');
+          return;
+        }
+        res = await categoryCreateBulk(trackerId, categoryItems as CreateCategoryBulkRequestDto[]);
+      } else {
+        const budgetItems = parseItemsObject(parsed);
+        if (!budgetItems) {
+          setParseError('Očekává se JSON pole položek nebo objekt s položkou `items`.');
+          return;
+        }
+        if (importMode === 'by-id') {
+          res = await budgetPlanImportByCategoryIdBulk(trackerId, {
+            items: budgetItems as BulkBudgetImportByCategoryIdRequestDto['items'],
+          });
+        } else {
+          res = await budgetPlanImportBulk(trackerId, {
+            items: budgetItems as BulkBudgetImportItemDto[],
+          });
+        }
+      }
       setLastStatus(res.status);
       setResponseBody(JSON.stringify(res.data ?? {}, null, 2));
       if (res.status >= 200 && res.status < 300) {
         enqueueSnackbar('Import dokončen', { variant: 'success' });
-        await queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
+        await queryClient.invalidateQueries({ queryKey: getCategoryFindAllActiveLightQueryKey(trackerId) });
       } else {
         enqueueSnackbar(apiErrorMessage(res.data, 'Import se nezdařil'), { variant: 'error' });
       }
@@ -65,16 +140,30 @@ export const BudgetPlanImportPanel: FC<Props> = ({ trackerId }) => {
 
   return (
     <Box component="form" onSubmit={handleSubmit} noValidate>
-      <Typography variant="body2" color="text.secondary" component="div" sx={{ mb: 2 }}>
-        Odesílá se na{' '}
-        <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
-          POST /api/budget-plan/{'{trackerId}'}/import
-        </Box>{' '}
-        jako JSON pole. Tvar položek odpovídá API (např. budgetPlanName, period, amount, currency).
-      </Typography>
       <Stack spacing={2}>
+        <ToggleButtonGroup
+          exclusive
+          value={importMode}
+          onChange={(_, value: 'by-name' | 'by-id' | 'category' | null) => {
+            if (!value) return;
+            setImportMode(value);
+            setParseError(null);
+            setJsonText(
+              value === 'by-id'
+                ? EXAMPLE_JSON_BY_ID
+                : value === 'category'
+                  ? EXAMPLE_JSON_CATEGORY
+                  : EXAMPLE_JSON_BY_NAME,
+            );
+          }}
+          size="small"
+        >
+          <ToggleButton value="by-name">Import rozpočtů</ToggleButton>
+          <ToggleButton value="by-id">Import rozpočtů s categoryId</ToggleButton>
+          <ToggleButton value="category">Import kategorii</ToggleButton>
+        </ToggleButtonGroup>
         <TextField
-          label="JSON (pole položek)"
+          label="JSON"
           value={jsonText}
           onChange={(e) => setJsonText(e.target.value)}
           multiline
@@ -104,6 +193,28 @@ export const BudgetPlanImportPanel: FC<Props> = ({ trackerId }) => {
           </Box>
         )}
       </Stack>
+    </Box>
+  );
+};
+
+export const FinanceImportyPage: FC = () => {
+  const { selectedExpenseTracker } = useSelectedExpenseTracker();
+
+  if (selectedExpenseTracker?.id) {
+    return <BudgetPlanImportPanel trackerId={selectedExpenseTracker.id} />;
+  }
+
+  return (
+    <Box>
+      <Typography variant="h4" gutterBottom>
+        Importy
+      </Typography>
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        Vyber rozpočet (tracker), aby bylo možné importovat plán a kategorie z JSON.
+      </Typography>
+      <Button component={Link} to="/trackers" variant="contained">
+        Moje trackery
+      </Button>
     </Box>
   );
 };

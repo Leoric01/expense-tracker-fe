@@ -14,4 +14,8 @@ export interface BulkBudgetImportItemDto {
   amount: number;
   /** @minLength 1 */
   currency: string;
+  /** @minLength 1 */
+  categoryName: string;
+  intervalValue?: number;
+  recurring?: boolean;
 }

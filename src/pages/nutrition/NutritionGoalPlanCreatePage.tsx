@@ -33,7 +33,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import 'dayjs/locale/cs';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, FormEvent, useEffect, useState } from 'react';
+import { FC, type SubmitEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   GOAL_TYPE_LABELS,
@@ -93,7 +93,7 @@ export const NutritionGoalPlanCreatePage: FC = () => {
     setTargetWeeklyWeightChangeKg(Number(e.target.value));
   };
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!trackerId) {
       return;

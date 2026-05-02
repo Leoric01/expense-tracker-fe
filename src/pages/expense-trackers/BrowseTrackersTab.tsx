@@ -151,7 +151,7 @@ export const BrowseTrackersTab: FC = () => {
                 <TableRow key={row.id ?? row.name}>
                   <TableCell>{row.name ?? '—'}</TableCell>
                   <TableCell>{row.ownerFullName ?? '—'}</TableCell>
-                  <TableCell>{row.defaultCurrencyCode ?? '—'}</TableCell>
+                  <TableCell>{row.preferredDisplayAssetCode ?? '—'}</TableCell>
                   <TableCell>{formatDateDdMmYyyy(row.createdDate)}</TableCell>
                   <TableCell align="right">
                     {row.id && (

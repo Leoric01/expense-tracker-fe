@@ -6,11 +6,11 @@
  * OpenAPI spec version: 1.0
  */
 import type { PageMetaDto } from './pageMetaDto';
-import type { TransactionResponseDto } from './transactionResponseDto';
+import type { TransactionPageItemResponseDto } from './transactionPageItemResponseDto';
 import type { TransactionTotalsDto } from './transactionTotalsDto';
 
 export interface TransactionPageResponseDto {
-  content?: TransactionResponseDto[];
+  content?: TransactionPageItemResponseDto[];
   page?: PageMetaDto;
   totals?: TransactionTotalsDto;
 }

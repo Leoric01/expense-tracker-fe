@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { WalletResponseDto } from '@api/model';
-import { FormEvent, memo, useEffect, useState } from 'react';
+import { type SubmitEvent, memo, useEffect, useState } from 'react';
 import { AmountTextFieldCs } from './AmountTextFieldCs';
 import { DEFAULT_FIAT_SCALE } from '@utils/moneyMinorUnits';
 import { formatWalletAmount } from './walletDisplay';
@@ -59,7 +59,7 @@ export const BalanceCorrectionDialog = memo(function BalanceCorrectionDialog({
 
   const amountDisplay = formatAmountDisplayCs(amountCanonical);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     const bal = parseAmount(amountDisplay);
     if (bal == null) {

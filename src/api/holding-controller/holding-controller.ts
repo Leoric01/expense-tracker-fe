@@ -654,3 +654,137 @@ export function useHoldingSummary<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export type holdingFindAllLiteResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type holdingFindAllLiteResponseSuccess = holdingFindAllLiteResponse200 & {
+  headers: Headers;
+};
+export type holdingFindAllLiteResponse = holdingFindAllLiteResponseSuccess;
+
+export const getHoldingFindAllLiteUrl = (trackerId: string) => {
+  return `/api/holding/${trackerId}/lite`;
+};
+
+export const holdingFindAllLite = async (
+  trackerId: string,
+  options?: RequestInit,
+): Promise<holdingFindAllLiteResponse> => {
+  const res = await fetch(getHoldingFindAllLiteUrl(trackerId), {
+    ...options,
+    method: 'GET',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: holdingFindAllLiteResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as holdingFindAllLiteResponse;
+};
+
+export const getHoldingFindAllLiteQueryKey = (trackerId: string) => {
+  return [`/api/holding/${trackerId}/lite`] as const;
+};
+
+export const getHoldingFindAllLiteQueryOptions = <
+  TData = Awaited<ReturnType<typeof holdingFindAllLite>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof holdingFindAllLite>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getHoldingFindAllLiteQueryKey(trackerId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof holdingFindAllLite>>> = ({ signal }) =>
+    holdingFindAllLite(trackerId, { signal, ...fetchOptions });
+
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof holdingFindAllLite>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type HoldingFindAllLiteQueryResult = NonNullable<
+  Awaited<ReturnType<typeof holdingFindAllLite>>
+>;
+export type HoldingFindAllLiteQueryError = unknown;
+
+export function useHoldingFindAllLite<
+  TData = Awaited<ReturnType<typeof holdingFindAllLite>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof holdingFindAllLite>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof holdingFindAllLite>>,
+          TError,
+          Awaited<ReturnType<typeof holdingFindAllLite>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useHoldingFindAllLite<
+  TData = Awaited<ReturnType<typeof holdingFindAllLite>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof holdingFindAllLite>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof holdingFindAllLite>>,
+          TError,
+          Awaited<ReturnType<typeof holdingFindAllLite>>
+        >,
+        'initialData'
+      >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useHoldingFindAllLite<
+  TData = Awaited<ReturnType<typeof holdingFindAllLite>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof holdingFindAllLite>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useHoldingFindAllLite<
+  TData = Awaited<ReturnType<typeof holdingFindAllLite>>,
+  TError = unknown,
+>(
+  trackerId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof holdingFindAllLite>>, TError, TData>>;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getHoldingFindAllLiteQueryOptions(trackerId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

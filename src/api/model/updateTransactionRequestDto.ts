@@ -7,6 +7,14 @@
  */
 
 export interface UpdateTransactionRequestDto {
+  holdingId?: string;
+  sourceHoldingId?: string;
+  targetHoldingId?: string;
+  amount?: number;
+  currencyCode?: string;
+  exchangeRate?: number;
+  feeAmount?: number;
+  settledAmount?: number;
   categoryId?: string;
   transactionDate?: string;
   description?: string;

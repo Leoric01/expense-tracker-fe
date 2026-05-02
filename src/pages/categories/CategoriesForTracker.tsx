@@ -4,24 +4,31 @@ import {
 } from '@api/recurring-budget-controller/recurring-budget-controller';
 import { transactionCreate } from '@api/transaction-controller/transaction-controller';
 import { holdingFindAll } from '@api/holding-controller/holding-controller';
+import { getInstitutionHeaderBalancesQueryKey } from '@api/institution-controller/institution-controller';
 import {
   categoryCreateBulk,
   categoryCreate,
   categoryDeactivate,
-  categoryFindAllActive,
+  categoryFindAllActiveLight,
+  categoryMovementSummary,
   categoryUpdate,
-  getCategoryFindAllActiveQueryKey,
+  getCategoryFindAllActiveLightQueryKey,
+  getCategoryMovementSummaryQueryKey,
 } from '@api/category-controller/category-controller';
 import type {
   BudgetPlanResponseDto,
-  CategoryFindAllActiveParams,
+  CategoryActivePageResponse,
+  CategoryFindAllActiveLightParams,
+  CategoryMovementAssetTotalsDto,
+  CategoryMovementConvertedTotalsDto,
+  CategoryMovementSummaryParams,
+  CategoryMovementSummaryResponseDto,
   CategoryResponseDto,
   CreateTransactionRequestDto,
   PagedModelHoldingResponseDto,
   WalletResponseDto,
   CreateCategoryBulkRequestDto,
   CreateCategoryRequestDto,
-  PagedModelCategoryResponseDto,
   PagedModelRecurringBudgetResponseDto,
   RecurringBudgetResponseDto,
   SyncRecurringBudgetResponseDto,
@@ -43,7 +50,6 @@ import {
   Button,
   Checkbox,
   Chip,
-  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -66,12 +72,13 @@ import { PageHeading } from '@components/PageHeading';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
+import * as React from 'react';
 import {
   FC,
-  FormEvent,
   Fragment,
   memo,
   type ReactNode,
+  type SubmitEvent,
   startTransition,
   useCallback,
   useMemo,
@@ -79,22 +86,20 @@ import {
   useState,
 } from 'react';
 import { CategoryBudgetPlansDialog } from './CategoryBudgetPlansDialog';
-import {
-  budgetAmountToMonthlyEquivalentMinor,
-  CATEGORY_BUDGET_LIST_ROW_GRID_INNER,
-  CategoryBudgetPlanUsageLine,
-} from './categoryBudgetUsage';
+import { CATEGORY_BUDGET_LIST_ROW_GRID_INNER, CategoryBudgetPlanUsageLine } from './categoryBudgetUsage';
 import { holdingToWalletDto } from '@pages/home/holdingAdapter';
-import { formatWalletAmount } from '@pages/home/walletDisplay';
-import { majorToMinorUnits } from '@utils/moneyMinorUnits';
+import { formatAssetAmount } from '@utils/formatAssetAmount';
+import { DEFAULT_FIAT_SCALE, majorToMinorUnitsForScale } from '@utils/moneyMinorUnits';
 import {
   asCategoryChildren,
   budgetsByCategoryIdFromFlat,
+  categoryActiveLightPageToFlat,
   categoryKindChipColor,
   categoryKindLabel,
   collectIdsInSubtree,
   collectIdsWithChildren,
   findNodeById,
+  hasActiveEmbeddedBudgetPlan,
   rootAncestorCategory,
   toCategoryTree,
 } from './categoryTreeUtils';
@@ -107,9 +112,77 @@ import {
 } from '@pages/home/transactionFormUtils';
 import { CreateCategoryRequestDtoCategoryKind, CreateTransactionRequestDtoTransactionType } from '@api/model';
 
-const LIST_BASE: Pick<CategoryFindAllActiveParams, 'page' | 'size'> = { page: 0, size: 200 };
+const LIST_BASE: Pick<CategoryFindAllActiveLightParams, 'page' | 'size'> = { page: 0, size: 200 };
 const BUDGET_LIST_PARAMS = { page: 0, size: 500 } as const;
 const BULK_MAX_LEVEL = 5;
+
+const DISPLAY_CURRENCY_SELECTION_CHANGED = 'display-currency-selection-changed';
+
+function readTrackerDisplayCurrencyCode(trackerId: string): string {
+  if (typeof window === 'undefined' || !trackerId) return '';
+  try {
+    return (localStorage.getItem(`tracker-${trackerId}-display-currency-selection-code`) ?? '')
+      .trim()
+      .toUpperCase();
+  } catch {
+    return '';
+  }
+}
+
+function convertedTotalsIsPresent(
+  ct: CategoryMovementConvertedTotalsDto | null | undefined,
+): ct is CategoryMovementConvertedTotalsDto {
+  if (ct == null) return false;
+  if (!(ct.targetAssetCode ?? '').trim()) return false;
+  return [
+    ct.expectedExpenseAmount,
+    ct.expectedIncomeAmount,
+    ct.expectedSavingAmount,
+    ct.actualExpenseAmount,
+    ct.actualIncomeAmount,
+    ct.actualSavingAmount,
+  ].some((v) => v != null && Number.isFinite(v));
+}
+
+function aggregateNativeMetric(
+  rows: CategoryMovementAssetTotalsDto[],
+  pick: (row: CategoryMovementAssetTotalsDto) => number | undefined,
+): { values: Map<string, number>; scales: Map<string, number> } {
+  const values = new Map<string, number>();
+  const scales = new Map<string, number>();
+  for (const r of rows) {
+    const code = (r.assetCode ?? 'CZK').toUpperCase();
+    const scale = r.assetScale ?? DEFAULT_FIAT_SCALE;
+    const add = pick(r) ?? 0;
+    values.set(code, (values.get(code) ?? 0) + add);
+    if (!scales.has(code)) scales.set(code, scale);
+  }
+  return { values, scales };
+}
+
+function formatNativeBuckets(values: Map<string, number>, scales: Map<string, number>): string {
+  if (values.size === 0) return '—';
+  const entries = [...values.entries()].sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 1) {
+    const [c, v] = entries[0];
+    return formatAssetAmount(v, c, scales.get(c) ?? DEFAULT_FIAT_SCALE);
+  }
+  return entries
+    .map(([c, v]) => formatAssetAmount(v, c, scales.get(c) ?? DEFAULT_FIAT_SCALE))
+    .join(', ');
+}
+
+function scaleNativeValues(values: Map<string, number>, factor: number): Map<string, number> {
+  return new Map([...values.entries()].map(([k, v]) => [k, Math.round(v * factor)]));
+}
+
+function savingsBucketsFromNative(rows: CategoryMovementAssetTotalsDto[], kind: 'expected' | 'actual'): Map<string, number> {
+  const pick =
+    kind === 'expected'
+      ? (r: CategoryMovementAssetTotalsDto) => r.expectedSavingAmount
+      : (r: CategoryMovementAssetTotalsDto) => r.actualSavingAmount;
+  return aggregateNativeMetric(rows, pick).values;
+}
 
 type CreateMode = { type: 'root' } | { type: 'child'; parentId: string };
 
@@ -124,6 +197,10 @@ type BulkDraftNode = {
 type BulkPreviewRow = {
   name: string;
   level: number;
+};
+
+type WalletOption = WalletResponseDto & {
+  assetScale?: number;
 };
 
 function parseBulkCategoryText(
@@ -241,13 +318,15 @@ export type CategoriesForTrackerProps = {
   trackerId: string;
   trackerName: string;
   /** Volitelné pozice z rodiče (např. dashboard na Domě) pro vynechání extra `holdingFindAll`. */
-  walletsFromParent?: WalletResponseDto[];
+  walletsFromParent?: WalletOption[];
   /** V záložce na Domě — bez vlastního hlavního nadpisu „Kategorie“. */
   embedded?: boolean;
   /** Když false, dotaz na kategorie neběží (řetězení po peněženkách na Domě). */
   categoriesQueryEnabled?: boolean;
-  /** ISO rozmezí pro `categoryFindAllActive` (rozpočty aktivní v období) — stejné jako u peněženek nahoře. */
+  /** ISO rozmezí pro `categoryFindAllActiveLight` (rozpočty aktivní v období) — stejné jako u peněženek nahoře. */
   categoryActivePeriodIso?: { from: string; to: string } | null;
+  /** Volitelný obsah vlevo v horním řádku se souhrnem. */
+  topSummaryLeft?: ReactNode;
 };
 
 function categoriesForTrackerPropsEqual(
@@ -260,6 +339,7 @@ function categoriesForTrackerPropsEqual(
     a.embedded === b.embedded &&
     a.categoriesQueryEnabled === b.categoriesQueryEnabled &&
     a.walletsFromParent === b.walletsFromParent &&
+    a.topSummaryLeft === b.topSummaryLeft &&
     (a.categoryActivePeriodIso?.from ?? '') === (b.categoryActivePeriodIso?.from ?? '') &&
     (a.categoryActivePeriodIso?.to ?? '') === (b.categoryActivePeriodIso?.to ?? '')
   );
@@ -272,14 +352,18 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   embedded,
   categoriesQueryEnabled = true,
   categoryActivePeriodIso = null,
+  topSummaryLeft,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [budgetCategory, setBudgetCategory] = useState<CategoryResponseDto | null>(null);
   const [showOnlyCategoriesWithMovements, setShowOnlyCategoriesWithMovements] = useState(false);
+  const [summaryDisplayAssetCode, setSummaryDisplayAssetCode] = useState(() =>
+    readTrackerDisplayCurrencyCode(trackerId),
+  );
 
-  const categoryListParams = useMemo((): CategoryFindAllActiveParams => {
-    const base: CategoryFindAllActiveParams = { ...LIST_BASE };
+  const categoryListParams = useMemo((): CategoryFindAllActiveLightParams => {
+    const base: CategoryFindAllActiveLightParams = { ...LIST_BASE };
     if (categoryActivePeriodIso) {
       base.dateFrom = categoryActivePeriodIso.from;
       base.dateTo = categoryActivePeriodIso.to;
@@ -287,9 +371,13 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     return base;
   }, [categoryActivePeriodIso]);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: getCategoryFindAllActiveQueryKey(trackerId, categoryListParams),
-    queryFn: () => categoryFindAllActive(trackerId, categoryListParams),
+  const { data: categoryActiveLightRes, isLoading, isError } = useQuery({
+    queryKey: getCategoryFindAllActiveLightQueryKey(trackerId, categoryListParams),
+    queryFn: async () => {
+      const res = await categoryFindAllActiveLight(trackerId, categoryListParams);
+      if (res.status < 200 || res.status >= 300) throw new Error('category-active-light');
+      return res.data as CategoryActivePageResponse;
+    },
     enabled: Boolean(trackerId) && categoriesQueryEnabled,
   });
 
@@ -315,10 +403,13 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     staleTime: 30_000,
   });
 
-  const paged = data?.data as PagedModelCategoryResponseDto | undefined;
-  const flat = paged?.content ?? [];
+  const flat = useMemo(
+    () => categoryActiveLightPageToFlat(categoryActiveLightRes),
+    [categoryActiveLightRes],
+  );
   const tree = useMemo(() => toCategoryTree(flat), [flat]);
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(() => new Set());
+  const expandAllTimerRef = useRef<number | null>(null);
 
   const budgetsByCategoryId = useMemo(() => budgetsByCategoryIdFromFlat(flat), [flat]);
 
@@ -376,14 +467,67 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
 
   const toggleExpandAllCategories = useCallback(() => {
     if (categoryIdsWithChildren.length === 0) return;
-    startTransition(() => {
-      if (allCategoriesExpanded) {
+    if (expandAllTimerRef.current != null) {
+      window.clearTimeout(expandAllTimerRef.current);
+      expandAllTimerRef.current = null;
+    }
+
+    if (allCategoriesExpanded) {
+      startTransition(() => {
         setExpandedCategoryIds(new Set());
+      });
+      return;
+    }
+
+    // Postupné rozbalení po dávkách sníží dlouhé blokující tasky na hlavním vlákně.
+    const ids = [...categoryIdsWithChildren];
+    const chunkSize = 120;
+    let cursor = 0;
+    setExpandedCategoryIds(new Set());
+
+    const runChunk = () => {
+      const end = Math.min(cursor + chunkSize, ids.length);
+      const nextChunk = ids.slice(cursor, end);
+      cursor = end;
+      startTransition(() => {
+        setExpandedCategoryIds((prev) => {
+          const next = new Set(prev);
+          for (const id of nextChunk) next.add(id);
+          return next;
+        });
+      });
+      if (cursor < ids.length) {
+        expandAllTimerRef.current = window.setTimeout(runChunk, 0);
       } else {
-        setExpandedCategoryIds(new Set(categoryIdsWithChildren));
+        expandAllTimerRef.current = null;
       }
-    });
+    };
+
+    runChunk();
   }, [categoryIdsWithChildren, allCategoriesExpanded]);
+
+  React.useEffect(() => {
+    return () => {
+      if (expandAllTimerRef.current != null) {
+        window.clearTimeout(expandAllTimerRef.current);
+        expandAllTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  React.useEffect(() => {
+    setSummaryDisplayAssetCode(readTrackerDisplayCurrencyCode(trackerId));
+  }, [trackerId]);
+
+  React.useEffect(() => {
+    const onDisplayCurrency = (event: Event) => {
+      const detail = (event as CustomEvent<{ trackerId?: string; assetCode?: string }>).detail;
+      if (!detail || detail.trackerId !== trackerId) return;
+      setSummaryDisplayAssetCode((detail.assetCode ?? '').trim().toUpperCase());
+    };
+    window.addEventListener(DISPLAY_CURRENCY_SELECTION_CHANGED, onDisplayCurrency);
+    return () => window.removeEventListener(DISPLAY_CURRENCY_SELECTION_CHANGED, onDisplayCurrency);
+  }, [trackerId]);
 
   const recurringBudgets = (recurringBudgetData?.content ?? []) as RecurringBudgetResponseDto[];
   const recurringByCategoryId = useMemo(() => {
@@ -398,162 +542,141 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     return m;
   }, [recurringBudgets]);
 
-  const rootExpenseCategoryIds = useMemo(() => {
-    // "top level" = kořeny stromu (hloubka 0).
-    // Požadavek: do součtu se počítají jen EXPENSE rodiče, děti ne.
-    return flat
-      .filter((n) => Boolean(n.id) && n.categoryKind === 'EXPENSE' && !n.parentId)
-      .map((n) => n.id as string);
-  }, [flat]);
+  const movementSummaryParams = useMemo((): CategoryMovementSummaryParams | null => {
+    if (!categoryActivePeriodIso?.from || !categoryActivePeriodIso?.to) return null;
+    const p: CategoryMovementSummaryParams = {
+      dateFrom: categoryActivePeriodIso.from,
+      dateTo: categoryActivePeriodIso.to,
+    };
+    const code = summaryDisplayAssetCode.trim();
+    if (code.length > 0) p.displayAssetCode = code;
+    return p;
+  }, [categoryActivePeriodIso, summaryDisplayAssetCode]);
 
-  const rootIncomeCategoryIds = useMemo(() => {
-    return flat
-      .filter((n) => Boolean(n.id) && n.categoryKind === 'INCOME' && !n.parentId)
-      .map((n) => n.id as string);
-  }, [flat]);
+  const movementSummaryQueryKey = useMemo(
+    () =>
+      movementSummaryParams != null
+        ? getCategoryMovementSummaryQueryKey(trackerId, movementSummaryParams)
+        : ([`/api/category/${trackerId}/summary`, 'disabled'] as const),
+    [trackerId, movementSummaryParams],
+  );
 
-  const toMonthlyMinor = useCallback(
-    (amountMinor: number, periodType: string | undefined, intervalValue?: number): number =>
-      budgetAmountToMonthlyEquivalentMinor(amountMinor, periodType, intervalValue ?? 1),
+  const { data: movementSummaryDto } = useQuery({
+    queryKey: movementSummaryQueryKey,
+    queryFn: async () => {
+      if (movementSummaryParams == null) throw new Error('category-movement-summary-disabled');
+      const res = await categoryMovementSummary(trackerId, movementSummaryParams);
+      if (res.status < 200 || res.status >= 300) throw new Error('category-movement-summary');
+      return res.data as CategoryMovementSummaryResponseDto;
+    },
+    enabled: Boolean(trackerId && categoriesQueryEnabled && movementSummaryParams),
+    staleTime: 15_000,
+  });
+
+  const {
+    predictedMonthlyExpenseText,
+    predictedMonthlyIncomeText,
+    actualMonthlyExpenseText,
+    actualMonthlyIncomeText,
+    predictedMonthlySavingsBuckets,
+    actualMonthlySavingsBuckets,
+    predictedMonthlySavingsScales,
+    actualMonthlySavingsScales,
+    predictedSavingsYearlyText,
+    actualSavingsYearlyText,
+  } = useMemo(() => {
+    const empty = new Map<string, number>();
+    const emptyScales = new Map<string, number>();
+    const fallback = {
+      predictedMonthlyExpenseText: '—',
+      predictedMonthlyIncomeText: '—',
+      actualMonthlyExpenseText: '—',
+      actualMonthlyIncomeText: '—',
+      predictedMonthlySavingsBuckets: empty,
+      actualMonthlySavingsBuckets: empty,
+      predictedMonthlySavingsScales: emptyScales,
+      actualMonthlySavingsScales: emptyScales,
+      predictedSavingsYearlyText: '—',
+      actualSavingsYearlyText: '—',
+    };
+    if (!movementSummaryDto) return fallback;
+
+    const ct = movementSummaryDto.convertedTotals;
+    if (convertedTotalsIsPresent(ct)) {
+      const code = (ct.targetAssetCode ?? 'CZK').toUpperCase();
+      const sc = ct.targetAssetScale ?? DEFAULT_FIAT_SCALE;
+      const predSav = ct.expectedSavingAmount;
+      const actSav = ct.actualSavingAmount;
+      const savingsScales = new Map([[code, sc]]);
+      return {
+        predictedMonthlyExpenseText: formatAssetAmount(ct.expectedExpenseAmount, code, sc),
+        predictedMonthlyIncomeText: formatAssetAmount(ct.expectedIncomeAmount, code, sc),
+        actualMonthlyExpenseText: formatAssetAmount(ct.actualExpenseAmount, code, sc),
+        actualMonthlyIncomeText: formatAssetAmount(ct.actualIncomeAmount, code, sc),
+        predictedMonthlySavingsBuckets:
+          predSav != null && Number.isFinite(predSav) ? new Map([[code, predSav]]) : new Map(),
+        actualMonthlySavingsBuckets:
+          actSav != null && Number.isFinite(actSav) ? new Map([[code, actSav]]) : new Map(),
+        predictedMonthlySavingsScales: savingsScales,
+        actualMonthlySavingsScales: savingsScales,
+        predictedSavingsYearlyText:
+          predSav != null && Number.isFinite(predSav)
+            ? formatAssetAmount(Math.round(predSav * 12), code, sc)
+            : '—',
+        actualSavingsYearlyText:
+          actSav != null && Number.isFinite(actSav) ? formatAssetAmount(Math.round(actSav * 12), code, sc) : '—',
+      };
+    }
+
+    const rows = movementSummaryDto.nativeByAsset ?? [];
+    const ee = aggregateNativeMetric(rows, (r) => r.expectedExpenseAmount);
+    const ei = aggregateNativeMetric(rows, (r) => r.expectedIncomeAmount);
+    const ae = aggregateNativeMetric(rows, (r) => r.actualExpenseAmount);
+    const ai = aggregateNativeMetric(rows, (r) => r.actualIncomeAmount);
+    const escales = aggregateNativeMetric(rows, (r) => r.expectedSavingAmount).scales;
+    const ascales = aggregateNativeMetric(rows, (r) => r.actualSavingAmount).scales;
+
+    return {
+      predictedMonthlyExpenseText: formatNativeBuckets(ee.values, ee.scales),
+      predictedMonthlyIncomeText: formatNativeBuckets(ei.values, ei.scales),
+      actualMonthlyExpenseText: formatNativeBuckets(ae.values, ae.scales),
+      actualMonthlyIncomeText: formatNativeBuckets(ai.values, ai.scales),
+      predictedMonthlySavingsBuckets: savingsBucketsFromNative(rows, 'expected'),
+      actualMonthlySavingsBuckets: savingsBucketsFromNative(rows, 'actual'),
+      predictedMonthlySavingsScales: escales,
+      actualMonthlySavingsScales: ascales,
+      predictedSavingsYearlyText: formatNativeBuckets(
+        scaleNativeValues(savingsBucketsFromNative(rows, 'expected'), 12),
+        escales,
+      ),
+      actualSavingsYearlyText: formatNativeBuckets(
+        scaleNativeValues(savingsBucketsFromNative(rows, 'actual'), 12),
+        ascales,
+      ),
+    };
+  }, [movementSummaryDto]);
+
+  const renderColoredSavingsAmounts = useCallback(
+    (buckets: Map<string, number>, scales: Map<string, number>): ReactNode => {
+      const entries = [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b));
+      if (entries.length === 0) return '—';
+      return entries.map(([cur, val], i) => (
+        <Fragment key={cur}>
+          {i > 0 ? ', ' : null}
+          <Box
+            component="span"
+            sx={{
+              color: val > 0 ? 'success.main' : val < 0 ? 'error.main' : 'text.secondary',
+              fontWeight: 600,
+            }}
+          >
+            {formatAssetAmount(val, cur, scales.get(cur) ?? DEFAULT_FIAT_SCALE)}
+          </Box>
+        </Fragment>
+      ));
+    },
     [],
   );
-
-  const predictedMonthlyExpenseBuckets = useMemo(() => {
-    const sums = new Map<string, number>();
-    const add = (currency: string | undefined, amountMinor: number) => {
-      const cur = (currency ?? 'CZK').toUpperCase();
-      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
-    };
-
-    for (const categoryId of rootExpenseCategoryIds) {
-      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
-        add(p.currencyCode, toMonthlyMinor(p.amount ?? 0, p.periodType, 1));
-      }
-    }
-    return sums;
-  }, [rootExpenseCategoryIds, budgetsByCategoryId, toMonthlyMinor]);
-
-  const formatCurrencyBuckets = useCallback((buckets: Map<string, number>): string => {
-    if (buckets.size === 0) return '—';
-    const entries = Array.from(buckets.entries());
-    if (entries.length === 1) {
-      const [currency, sum] = entries[0];
-      return formatWalletAmount(sum, currency);
-    }
-    return entries.map(([currency, sum]) => formatWalletAmount(sum, currency)).join(', ');
-  }, []);
-
-  const diffBuckets = useCallback((income: Map<string, number>, expense: Map<string, number>): Map<string, number> => {
-    const out = new Map<string, number>();
-    const keys = new Set([...income.keys(), ...expense.keys()]);
-    for (const k of keys) {
-      out.set(k, (income.get(k) ?? 0) - (expense.get(k) ?? 0));
-    }
-    return out;
-  }, []);
-
-  const scaleBuckets = useCallback((buckets: Map<string, number>, factor: number): Map<string, number> => {
-    return new Map([...buckets.entries()].map(([c, v]) => [c, Math.round(v * factor)]));
-  }, []);
-
-  const predictedMonthlyExpenseText = useMemo(() => {
-    return formatCurrencyBuckets(predictedMonthlyExpenseBuckets);
-  }, [predictedMonthlyExpenseBuckets, formatCurrencyBuckets]);
-
-  const predictedMonthlyIncomeBuckets = useMemo(() => {
-    const sums = new Map<string, number>();
-    const add = (currency: string | undefined, amountMinor: number) => {
-      const cur = (currency ?? 'CZK').toUpperCase();
-      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
-    };
-
-    for (const categoryId of rootIncomeCategoryIds) {
-      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
-        add(p.currencyCode, toMonthlyMinor(p.amount ?? 0, p.periodType, 1));
-      }
-    }
-
-    return sums;
-  }, [rootIncomeCategoryIds, budgetsByCategoryId, toMonthlyMinor]);
-
-  const predictedMonthlyIncomeText = useMemo(() => {
-    return formatCurrencyBuckets(predictedMonthlyIncomeBuckets);
-  }, [predictedMonthlyIncomeBuckets, formatCurrencyBuckets]);
-
-  const actualMonthlyExpenseBuckets = useMemo(() => {
-    const sums = new Map<string, number>();
-    const add = (currency: string | undefined, amountMinor: number) => {
-      const cur = (currency ?? 'CZK').toUpperCase();
-      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
-    };
-    for (const categoryId of rootExpenseCategoryIds) {
-      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
-        add(p.currencyCode, p.alreadySpent ?? 0);
-      }
-    }
-    return sums;
-  }, [rootExpenseCategoryIds, budgetsByCategoryId]);
-
-  const actualMonthlyIncomeBuckets = useMemo(() => {
-    const sums = new Map<string, number>();
-    const add = (currency: string | undefined, amountMinor: number) => {
-      const cur = (currency ?? 'CZK').toUpperCase();
-      sums.set(cur, (sums.get(cur) ?? 0) + amountMinor);
-    };
-    for (const categoryId of rootIncomeCategoryIds) {
-      for (const p of budgetsByCategoryId.get(categoryId) ?? []) {
-        add(p.currencyCode, p.alreadySpent ?? 0);
-      }
-    }
-    return sums;
-  }, [rootIncomeCategoryIds, budgetsByCategoryId]);
-
-  const actualMonthlyExpenseText = useMemo(() => {
-    return formatCurrencyBuckets(actualMonthlyExpenseBuckets);
-  }, [actualMonthlyExpenseBuckets, formatCurrencyBuckets]);
-
-  const actualMonthlyIncomeText = useMemo(() => {
-    return formatCurrencyBuckets(actualMonthlyIncomeBuckets);
-  }, [actualMonthlyIncomeBuckets, formatCurrencyBuckets]);
-
-  const predictedMonthlySavingsBuckets = useMemo(
-    () => diffBuckets(predictedMonthlyIncomeBuckets, predictedMonthlyExpenseBuckets),
-    [diffBuckets, predictedMonthlyIncomeBuckets, predictedMonthlyExpenseBuckets],
-  );
-
-  const actualMonthlySavingsBuckets = useMemo(
-    () => diffBuckets(actualMonthlyIncomeBuckets, actualMonthlyExpenseBuckets),
-    [actualMonthlyIncomeBuckets, actualMonthlyExpenseBuckets, diffBuckets],
-  );
-
-  const predictedSavingsYearlyText = useMemo(
-    () => formatCurrencyBuckets(scaleBuckets(predictedMonthlySavingsBuckets, 12)),
-    [formatCurrencyBuckets, predictedMonthlySavingsBuckets, scaleBuckets],
-  );
-
-  const actualSavingsYearlyText = useMemo(
-    () => formatCurrencyBuckets(scaleBuckets(actualMonthlySavingsBuckets, 12)),
-    [actualMonthlySavingsBuckets, formatCurrencyBuckets, scaleBuckets],
-  );
-
-  const renderColoredSavingsAmounts = useCallback((buckets: Map<string, number>): ReactNode => {
-    const entries = [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b));
-    if (entries.length === 0) return '—';
-    return entries.map(([cur, val], i) => (
-      <Fragment key={cur}>
-        {i > 0 ? ', ' : null}
-        <Box
-          component="span"
-          sx={{
-            color: val > 0 ? 'success.main' : val < 0 ? 'error.main' : 'text.secondary',
-            fontWeight: 600,
-          }}
-        >
-          {formatWalletAmount(val, cur)}
-        </Box>
-      </Fragment>
-    ));
-  }, []);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -569,6 +692,8 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   const [quickTxCategory, setQuickTxCategory] = useState<CategoryResponseDto | null>(null);
   const [quickTxWalletId, setQuickTxWalletId] = useState('');
   const [quickTxAmountCanon, setQuickTxAmountCanon] = useState('');
+  const [quickTxFeeCanon, setQuickTxFeeCanon] = useState('');
+  const [quickTxExchangeRate, setQuickTxExchangeRate] = useState('');
   const [quickTxWhen, setQuickTxWhen] = useState(defaultDatetimeLocal());
   const [quickTxDescription, setQuickTxDescription] = useState('');
 
@@ -583,12 +708,14 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({
-      queryKey: [`/api/category/${trackerId}/active`],
+      queryKey: getCategoryFindAllActiveLightQueryKey(trackerId),
     });
+    queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/summary`] });
   }, [queryClient, trackerId]);
 
   const invalidateBudgets = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/active`] });
+    queryClient.invalidateQueries({ queryKey: getCategoryFindAllActiveLightQueryKey(trackerId) });
+    queryClient.invalidateQueries({ queryKey: [`/api/category/${trackerId}/summary`] });
     queryClient.invalidateQueries({ queryKey: [`/api/recurring-budget/${trackerId}/active`] });
   }, [queryClient, trackerId]);
 
@@ -629,9 +756,14 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     }
     const holdings = walletsData?.content ?? [];
     return holdings
-      .map((h) => holdingToWalletDto(h))
+      .map((h): WalletOption => ({ ...holdingToWalletDto(h), assetScale: h.assetScale }))
       .filter((w) => w.active !== false && w.id);
   }, [walletsFromParent, walletsData]);
+
+  const quickTxWallet = useMemo(
+    () => activeWallets.find((w) => w.id === quickTxWalletId),
+    [activeWallets, quickTxWalletId],
+  );
 
   const openCreateRoot = useCallback(() => {
     setCreateMode({ type: 'root' });
@@ -704,6 +836,19 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     return walk(tree, 0);
   }, [tree]);
 
+  const createParentOptionIds = useMemo(
+    () => new Set(parentOptionsForCreate.map((o) => o.id)),
+    [parentOptionsForCreate],
+  );
+  const editParentOptionIds = useMemo(
+    () => new Set(parentOptionsForEdit.map((o) => o.id)),
+    [parentOptionsForEdit],
+  );
+  const createParentSelectValue =
+    createMode.type === 'root' && formParentId && !createParentOptionIds.has(formParentId) ? '' : formParentId;
+  const editParentSelectValue =
+    formParentId && !editParentOptionIds.has(formParentId) ? '' : formParentId;
+
   const nextSortOrderForParent = useCallback(
     (parentId?: string): number => {
       const parentKey = parentId ?? '';
@@ -719,7 +864,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     [flat],
   );
 
-  const handleCreate = async (e: FormEvent) => {
+  const handleCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     const name = formName.trim();
     if (!name) {
@@ -758,7 +903,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     }
   };
 
-  const handleBulkCreate = async (e: FormEvent) => {
+  const handleBulkCreate = async (e: SubmitEvent) => {
     e.preventDefault();
     const kind = bulkKind === CreateCategoryRequestDtoCategoryKind.INCOME ? 'INCOME' : 'EXPENSE';
     const parsed = parseBulkCategoryText(bulkText, kind, nextSortOrderForParent(undefined));
@@ -821,7 +966,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     [trackerId, enqueueSnackbar, invalidate],
   );
 
-  const handleUpdate = async (e: FormEvent) => {
+  const handleUpdate = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!editState?.category?.id) return;
     const name = formName.trim();
@@ -877,9 +1022,12 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
   };
 
   const handleQuickTxOpen = useCallback((category: CategoryResponseDto) => {
+    if (!hasActiveEmbeddedBudgetPlan(category)) return;
     setQuickTxCategory(category);
     setQuickTxWalletId('');
     setQuickTxAmountCanon('');
+    setQuickTxFeeCanon('');
+    setQuickTxExchangeRate('');
     setQuickTxWhen(defaultDatetimeLocal());
     setQuickTxDescription('');
   }, []);
@@ -889,9 +1037,13 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     setDeleteId(id);
   }, []);
 
-  const handleQuickTxSubmit = async (e: FormEvent) => {
+  const handleQuickTxSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (!quickTxCategory?.id) return;
+    if (!hasActiveEmbeddedBudgetPlan(quickTxCategory)) {
+      enqueueSnackbar('Transakci lze zadat jen u kategorie s aktivním rozpočtem.', { variant: 'warning' });
+      return;
+    }
     if (!quickTxWalletId) {
       enqueueSnackbar('Vyber pozici (účet + měnu)', { variant: 'warning' });
       return;
@@ -901,6 +1053,50 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
       enqueueSnackbar('Zadej kladnou částku', { variant: 'warning' });
       return;
     }
+    const amountScale = quickTxWallet?.assetScale ?? DEFAULT_FIAT_SCALE;
+    const amountMinor = majorToMinorUnitsForScale(amount, amountScale);
+    if (amountMinor <= 0) {
+      const code = quickTxWallet?.currencyCode?.trim().toUpperCase() || 'měny';
+      enqueueSnackbar(`Částka je menší než nejmenší jednotka ${code}.`, { variant: 'warning' });
+      return;
+    }
+
+    const feeRaw = quickTxFeeCanon.trim();
+    let feeMinor: number | undefined;
+    if (feeRaw !== '') {
+      const feeMajor = parseAmount(quickTxFeeCanon);
+      if (feeMajor == null || !Number.isFinite(feeMajor)) {
+        enqueueSnackbar('Poplatek musí být platné číslo (nebo pole nechat prázdné).', { variant: 'warning' });
+        return;
+      }
+      if (feeMajor < 0) {
+        enqueueSnackbar('Poplatek nesmí být záporný.', { variant: 'warning' });
+        return;
+      }
+      if (feeMajor > 0) {
+        feeMinor = majorToMinorUnitsForScale(feeMajor, amountScale);
+        if (feeMinor <= 0) {
+          enqueueSnackbar('Poplatek je menší než nejmenší jednotka měny pozice.', { variant: 'warning' });
+          return;
+        }
+      }
+    }
+
+    const rateTrim = quickTxExchangeRate.trim().replace(/\s/g, '').replace(',', '.');
+    let exchangeRate: number | undefined;
+    if (rateTrim !== '') {
+      const r = parseFloat(rateTrim);
+      if (!Number.isFinite(r)) {
+        enqueueSnackbar('Kurz musí být platné číslo (nebo pole nechat prázdné).', { variant: 'warning' });
+        return;
+      }
+      if (r <= 0) {
+        enqueueSnackbar('Kurz musí být kladné číslo.', { variant: 'warning' });
+        return;
+      }
+      exchangeRate = r;
+    }
+
     const txDateIso = toIsoFromDatetimeLocal(quickTxWhen);
     if (!txDateIso) {
       enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', { variant: 'warning' });
@@ -918,13 +1114,15 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     const payload: CreateTransactionRequestDto = {
       categoryId: quickTxCategory.id,
       holdingId: quickTxWalletId,
-      amount: majorToMinorUnits(amount),
+      amount: amountMinor,
       transactionDate: txDateIso,
       transactionType:
         kind === CreateCategoryRequestDtoCategoryKind.EXPENSE
           ? CreateTransactionRequestDtoTransactionType.EXPENSE
           : CreateTransactionRequestDtoTransactionType.INCOME,
       ...(quickTxDescription.trim() ? { description: quickTxDescription.trim() } : {}),
+      ...(feeMinor != null && feeMinor > 0 ? { feeAmount: feeMinor } : {}),
+      ...(exchangeRate != null ? { exchangeRate } : {}),
     };
 
     setSubmitting(true);
@@ -939,6 +1137,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
       await queryClient.invalidateQueries({ queryKey: [`/api/transaction/${trackerId}`] });
       await queryClient.invalidateQueries({ queryKey: [`/api/holding/${trackerId}`] });
       await queryClient.invalidateQueries({ queryKey: [`/api/institution/${trackerId}/dashboard`] });
+      await queryClient.invalidateQueries({ queryKey: getInstitutionHeaderBalancesQueryKey(trackerId) });
       await invalidateBudgets();
     } catch {
       enqueueSnackbar('Transakci se nepodařilo uložit', { variant: 'error' });
@@ -961,11 +1160,11 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
         </Typography>
       )}
 
-      {!categoriesQueryEnabled || isLoading ? (
+      {isLoading ? (
         <>
           <Typography color="text.secondary">Načítám…</Typography>
         </>
-      ) : (
+      ) : !categoriesQueryEnabled ? null : (
         <>
           <Box
             sx={{
@@ -977,7 +1176,122 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
               flexWrap: 'wrap',
             }}
           >
-            <Stack spacing={0.5} sx={{ flex: '0 1 780px', minWidth: 0 }}>
+            {topSummaryLeft ? (
+              <Box sx={{ minWidth: 0, alignSelf: 'flex-start' }}>
+                {embedded ? (
+                  <Stack spacing={0.75} alignItems="flex-start" sx={{ minWidth: 0 }}>
+                    <Stack
+                      direction="row"
+                      alignItems="center"
+                      spacing={1.5}
+                      useFlexGap
+                      sx={{ flexWrap: 'wrap', rowGap: 0.75 }}
+                    >
+                      <PageHeading component="h1" sx={{ mt: 0.25, mb: 0 }}>
+                        Kategorie
+                      </PageHeading>
+                      {topSummaryLeft}
+                      <Tooltip
+                        title={
+                          showOnlyCategoriesWithMovements
+                            ? 'Zobrazit všechny kategorie'
+                            : 'Zobrazit jen kategorie s pohyby'
+                        }
+                      >
+                        <IconButton
+                          size="small"
+                          onClick={() => setShowOnlyCategoriesWithMovements((prev) => !prev)}
+                          aria-label={
+                            showOnlyCategoriesWithMovements
+                              ? 'Zobrazit všechny kategorie'
+                              : 'Zobrazit jen kategorie s pohyby'
+                          }
+                          aria-pressed={showOnlyCategoriesWithMovements}
+                          sx={{ color: 'primary.main' }}
+                        >
+                          {showOnlyCategoriesWithMovements ? (
+                            <VisibilityOffIcon fontSize="small" />
+                          ) : (
+                            <VisibilityIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                      {tree.length > 0 && categoryIdsWithChildren.length > 0 ? (
+                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                          <Tooltip title={allCategoriesExpanded ? 'Sbalit všechny podstromy' : 'Rozbalit všechny podstromy'}>
+                            <IconButton
+                              size="small"
+                              onClick={toggleExpandAllCategories}
+                              aria-expanded={allCategoriesExpanded}
+                              aria-label={allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                            >
+                              <ChevronRightIcon
+                                fontSize="small"
+                                sx={{
+                                  transition: (t) =>
+                                    t.transitions.create('transform', { duration: t.transitions.duration.shorter }),
+                                  transform: allCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                                }}
+                              />
+                            </IconButton>
+                          </Tooltip>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            component="button"
+                            type="button"
+                            onClick={toggleExpandAllCategories}
+                            sx={{
+                              cursor: 'pointer',
+                              border: 'none',
+                              background: 'none',
+                              font: 'inherit',
+                              p: 0,
+                              textDecoration: 'none',
+                              '&:hover': { textDecoration: 'underline' },
+                            }}
+                          >
+                            {allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                          </Typography>
+                        </Stack>
+                      ) : null}
+                      <Tooltip title="Z aktivních opakujících se šablon vytvoří nebo doplní konkrétní rozpočty (budget plány) pro aktuální období.">
+                        <span>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<SyncOutlinedIcon />}
+                            onClick={handleSyncRecurringBudgets}
+                            disabled={!trackerId || syncRecurringBudgetsSubmitting}
+                          >
+                            Rozpočty ze šablon
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Button variant="outlined" size="small" onClick={openBulkCreate}>
+                        Hromadně přidat
+                      </Button>
+                      <Button variant="contained" size="small" startIcon={<AddOutlinedIcon />} onClick={openCreateRoot}>
+                        Přidat kategorii
+                      </Button>
+                    </Stack>
+                  </Stack>
+                ) : (
+                  topSummaryLeft
+                )}
+              </Box>
+            ) : null}
+            <Stack
+              spacing={0.5}
+              sx={{
+                flex: '0 1 780px',
+                minWidth: 0,
+                ml: topSummaryLeft ? 0 : 'auto',
+                alignSelf: 'flex-start',
+              }}
+            >
               <Box
                 sx={{
                   display: 'grid',
@@ -1082,7 +1396,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {renderColoredSavingsAmounts(predictedMonthlySavingsBuckets)}
+                      {renderColoredSavingsAmounts(predictedMonthlySavingsBuckets, predictedMonthlySavingsScales)}
                     </Box>
                   </Box>
                 </Tooltip>
@@ -1110,95 +1424,103 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {renderColoredSavingsAmounts(actualMonthlySavingsBuckets)}
+                      {renderColoredSavingsAmounts(actualMonthlySavingsBuckets, actualMonthlySavingsScales)}
                     </Box>
                   </Box>
                 </Tooltip>
               </Box>
             </Stack>
           </Box>
-          <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-            <Box>
-              {tree.length > 0 && categoryIdsWithChildren.length > 0 ? (
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                  <Tooltip title={allCategoriesExpanded ? 'Sbalit všechny podstromy' : 'Rozbalit všechny podstromy'}>
-                    <IconButton
-                      size="small"
+          {!(embedded && topSummaryLeft) ? (
+            <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+              <Stack direction="row" alignItems="center" spacing={1.5} useFlexGap sx={{ minWidth: 0, flexWrap: 'wrap' }}>
+                {tree.length > 0 && categoryIdsWithChildren.length > 0 ? (
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <Tooltip title={allCategoriesExpanded ? 'Sbalit všechny podstromy' : 'Rozbalit všechny podstromy'}>
+                      <IconButton
+                        size="small"
+                        onClick={toggleExpandAllCategories}
+                        aria-expanded={allCategoriesExpanded}
+                        aria-label={allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                      >
+                        <ChevronRightIcon
+                          fontSize="small"
+                          sx={{
+                            transition: (t) =>
+                              t.transitions.create('transform', { duration: t.transitions.duration.shorter }),
+                            transform: allCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                          }}
+                        />
+                      </IconButton>
+                    </Tooltip>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      component="button"
+                      type="button"
                       onClick={toggleExpandAllCategories}
-                      aria-expanded={allCategoriesExpanded}
-                      aria-label={allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                      sx={{
+                        cursor: 'pointer',
+                        border: 'none',
+                        background: 'none',
+                        font: 'inherit',
+                        p: 0,
+                        textDecoration: 'none',
+                        '&:hover': { textDecoration: 'underline' },
+                      }}
                     >
-                      <ChevronRightIcon
-                        fontSize="small"
-                        sx={{
-                          transition: (t) =>
-                            t.transitions.create('transform', { duration: t.transitions.duration.shorter }),
-                          transform: allCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                        }}
-                      />
-                    </IconButton>
-                  </Tooltip>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    component="button"
-                    type="button"
-                    onClick={toggleExpandAllCategories}
-                    sx={{
-                      cursor: 'pointer',
-                      border: 'none',
-                      background: 'none',
-                      font: 'inherit',
-                      p: 0,
-                      textDecoration: 'none',
-                      '&:hover': { textDecoration: 'underline' },
-                    }}
-                  >
-                    {allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
-                  </Typography>
-                </Stack>
-              ) : null}
+                      {allCategoriesExpanded ? 'collapseAll' : 'expandAll'}
+                    </Typography>
+                  </Stack>
+                ) : null}
+                <Button variant="outlined" onClick={openBulkCreate}>
+                  Hromadně přidat
+                </Button>
+                <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreateRoot}>
+                  Přidat kategorii
+                </Button>
+              </Stack>
+              <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="text"
+                  startIcon={showOnlyCategoriesWithMovements ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  onClick={() => setShowOnlyCategoriesWithMovements((prev) => !prev)}
+                >
+                  {showOnlyCategoriesWithMovements ? 'Zobrazit vše' : 'Zobrazit jen pohyby'}
+                </Button>
+                <Tooltip title="Z aktivních opakujících se šablon vytvoří nebo doplní konkrétní rozpočty (budget plány) pro aktuální období.">
+                  <span>
+                    <Button
+                      variant="outlined"
+                      startIcon={<SyncOutlinedIcon />}
+                      onClick={handleSyncRecurringBudgets}
+                      disabled={!trackerId || syncRecurringBudgetsSubmitting}
+                    >
+                      Rozpočty ze šablon
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Stack>
             </Box>
-            <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <Button
-                variant="text"
-                startIcon={showOnlyCategoriesWithMovements ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                onClick={() => setShowOnlyCategoriesWithMovements((prev) => !prev)}
-              >
-                {showOnlyCategoriesWithMovements ? 'Zobrazit vše' : 'Zobrazit jen pohyby'}
-              </Button>
-              <Tooltip title="Z aktivních opakujících se šablon vytvoří nebo doplní konkrétní rozpočty (budget plány) pro aktuální období.">
-                <span>
-                  <Button
-                    variant="outlined"
-                    startIcon={<SyncOutlinedIcon />}
-                    onClick={handleSyncRecurringBudgets}
-                    disabled={!trackerId || syncRecurringBudgetsSubmitting}
-                  >
-                    Rozpočty ze šablon
-                  </Button>
-                </span>
-              </Tooltip>
-              <Button variant="outlined" onClick={openBulkCreate}>
-                Hromadně přidat
-              </Button>
-              <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreateRoot}>
-                Přidat kategorii
-              </Button>
-            </Stack>
-          </Box>
+          ) : null}
           <Paper variant="outlined" sx={{ p: 2 }}>
             {filteredTree.length === 0 ? (
               <Typography color="text.secondary">Zatím žádná kategorie — přidej první.</Typography>
             ) : (
               <Stack spacing={0}>
-                {filteredTree.map((node, idx) => (
+                {filteredTree.map((node, idx) => {
+                  const prevSibling = idx > 0 ? filteredTree[idx - 1] : undefined;
+                  const nextSibling = idx < filteredTree.length - 1 ? filteredTree[idx + 1] : undefined;
+                  return (
                   <CategoryTreeRows
                     key={node.id ?? node.name}
                     node={node}
                     depth={0}
                     siblingIndex={idx}
-                    siblings={filteredTree}
+                    prevSiblingId={prevSibling?.id}
+                    prevSiblingSortOrder={prevSibling?.sortOrder}
+                    nextSiblingId={nextSibling?.id}
+                    nextSiblingSortOrder={nextSibling?.sortOrder}
                     rowSubmitting={submitting}
                     onAddChild={openCreateChild}
                     onEdit={openEdit}
@@ -1211,7 +1533,8 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                     expandedCategoryIds={expandedCategoryIds}
                     onToggleCategoryExpand={toggleCategoryExpand}
                   />
-                ))}
+                  );
+                })}
               </Stack>
             )}
           </Paper>
@@ -1266,7 +1589,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                   <Select
                     labelId="create-parent"
                     label="Nadřazená (volitelné)"
-                    value={formParentId}
+                    value={createParentSelectValue}
                     onChange={(e) => setFormParentId(e.target.value as string)}
                   >
                     <MenuItem value="">
@@ -1297,16 +1620,16 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
         open={Boolean(quickTxCategory)}
         onClose={() => !submitting && setQuickTxCategory(null)}
         fullWidth
-        maxWidth="sm"
+        maxWidth="md"
       >
         <DialogTitle>Přidat transakci</DialogTitle>
         <Box component="form" onSubmit={handleQuickTxSubmit}>
           <DialogContent>
-            <Stack spacing={2}>
+            <Stack spacing={2.5}>
               <Typography variant="body2" color="text.secondary">
                 Kategorie: <strong>{quickTxCategory?.name ?? '—'}</strong>
               </Typography>
-              <FormControl fullWidth required size="small">
+              <FormControl fullWidth required>
                 <InputLabel id="quick-tx-wallet">Pozice</InputLabel>
                 <Select
                   labelId="quick-tx-wallet"
@@ -1321,13 +1644,36 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                   ))}
                 </Select>
               </FormControl>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} useFlexGap>
+                <TextField
+                  label="Částka"
+                  value={formatAmountDisplayCs(quickTxAmountCanon)}
+                  onChange={(e) => setQuickTxAmountCanon(canonicalAmountFromUserInput(e.target.value))}
+                  required
+                  fullWidth
+                  inputMode="decimal"
+                  helperText={
+                    quickTxWallet?.currencyCode?.trim().toUpperCase() === 'BTC'
+                      ? '1 satoshi zadej jako 0,00000001 BTC.'
+                      : 'Hlavní částka v měně vybrané pozice.'
+                  }
+                />
+                <TextField
+                  label="Poplatek (volitelné)"
+                  value={formatAmountDisplayCs(quickTxFeeCanon)}
+                  onChange={(e) => setQuickTxFeeCanon(canonicalAmountFromUserInput(e.target.value))}
+                  fullWidth
+                  inputMode="decimal"
+                  helperText="Ve stejné měně jako částka."
+                />
+              </Stack>
               <TextField
-                label="Částka"
-                value={formatAmountDisplayCs(quickTxAmountCanon)}
-                onChange={(e) => setQuickTxAmountCanon(canonicalAmountFromUserInput(e.target.value))}
-                required
+                label="Kurz (volitelné)"
+                value={quickTxExchangeRate}
+                onChange={(e) => setQuickTxExchangeRate(e.target.value)}
                 fullWidth
-                size="small"
+                placeholder="např. 24,55"
+                helperText="Použij jen pokud transakce zahrnuje přepočet měn podle zadaného kurzu."
                 inputMode="decimal"
               />
               <TextField
@@ -1338,14 +1684,14 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                 helperText="Formát dd.MM.yyyy HH:mm (24 h)"
                 required
                 fullWidth
-                size="small"
               />
               <TextField
                 label="Popis (volitelné)"
                 value={quickTxDescription}
                 onChange={(e) => setQuickTxDescription(e.target.value)}
                 fullWidth
-                size="small"
+                multiline
+                minRows={2}
               />
             </Stack>
           </DialogContent>
@@ -1486,7 +1832,7 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                 <Select
                   labelId="edit-parent"
                   label="Nadřazená"
-                  value={formParentId}
+                  value={editParentSelectValue}
                   onChange={(e) => setFormParentId(e.target.value as string)}
                 >
                   <MenuItem value="">
@@ -1574,7 +1920,10 @@ type RowProps = {
   node: CategoryResponseDto;
   depth: number;
   siblingIndex: number;
-  siblings: CategoryResponseDto[];
+  prevSiblingId?: string;
+  prevSiblingSortOrder?: number;
+  nextSiblingId?: string;
+  nextSiblingSortOrder?: number;
   rowSubmitting: boolean;
   onAddChild: (parentId: string) => void;
   onEdit: (c: CategoryResponseDto) => void;
@@ -1597,7 +1946,10 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
   node,
   depth,
   siblingIndex,
-  siblings,
+  prevSiblingId,
+  prevSiblingSortOrder,
+  nextSiblingId,
+  nextSiblingSortOrder,
   rowSubmitting,
   onAddChild,
   onEdit,
@@ -1621,11 +1973,10 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
 
   const budgetCount = id ? getBudgetCount(id) : 0;
   const oneOffPlans = id ? getOneOffBudgets(id) : [];
-  const prevSibling = siblingIndex > 0 ? siblings[siblingIndex - 1] : undefined;
-  const nextSibling = siblingIndex < siblings.length - 1 ? siblings[siblingIndex + 1] : undefined;
+  const canQuickAddTransaction = hasActiveEmbeddedBudgetPlan(node);
   const currentSort = node.sortOrder ?? siblingIndex;
-  const prevSort = prevSibling?.sortOrder ?? siblingIndex - 1;
-  const nextSort = nextSibling?.sortOrder ?? siblingIndex + 1;
+  const prevSort = prevSiblingSortOrder ?? siblingIndex - 1;
+  const nextSort = nextSiblingSortOrder ?? siblingIndex + 1;
 
   return (
     <Box>
@@ -1693,17 +2044,27 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
         </Typography>
         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
           {id ? (
-            <Tooltip title="Přidat transakci do této kategorie">
-              <IconButton
-                size="small"
-                aria-label="přidat transakci"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onQuickAddTransaction(node);
-                }}
-              >
-                <PostAddIcon fontSize="small" />
-              </IconButton>
+            <Tooltip
+              title={
+                canQuickAddTransaction
+                  ? 'Přidat transakci do této kategorie'
+                  : 'Transakci lze zadat jen u kategorie s aktivním rozpočtem pro vybrané období.'
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  aria-label="přidat transakci"
+                  disabled={!canQuickAddTransaction}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
+                    onQuickAddTransaction(node);
+                  }}
+                >
+                  <PostAddIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
           ) : (
             <Box sx={{ width: 32 }} />
@@ -1774,11 +2135,11 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   <IconButton
                     size="small"
                     aria-label="posunout kategorii výš"
-                    disabled={!prevSibling?.id || rowSubmitting}
+                    disabled={!prevSiblingId || rowSubmitting}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!prevSibling?.id) return;
-                      onSwapSiblingOrder(id, prevSibling.id, currentSort, prevSort);
+                      if (!prevSiblingId) return;
+                      onSwapSiblingOrder(id, prevSiblingId, currentSort, prevSort);
                     }}
                   >
                     <ArrowUpwardIcon fontSize="small" />
@@ -1790,11 +2151,11 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   <IconButton
                     size="small"
                     aria-label="posunout kategorii níž"
-                    disabled={!nextSibling?.id || rowSubmitting}
+                    disabled={!nextSiblingId || rowSubmitting}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!nextSibling?.id) return;
-                      onSwapSiblingOrder(id, nextSibling.id, currentSort, nextSort);
+                      if (!nextSiblingId) return;
+                      onSwapSiblingOrder(id, nextSiblingId, currentSort, nextSort);
                     }}
                   >
                     <ArrowDownwardIcon fontSize="small" />
@@ -1807,6 +2168,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   aria-label="rozpočty kategorie"
                   onClick={(e) => {
                     e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
                     onManageBudgets(node);
                   }}
                   color={budgetCount > 0 ? 'primary' : 'default'}
@@ -1820,6 +2182,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   aria-label="přidat podkategorii"
                   onClick={(e) => {
                     e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
                     onAddChild(id);
                   }}
                 >
@@ -1832,6 +2195,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   aria-label="upravit"
                   onClick={(e) => {
                     e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
                     onEdit(node);
                   }}
                 >
@@ -1845,6 +2209,7 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                   color="error"
                   onClick={(e) => {
                     e.stopPropagation();
+                    (e.currentTarget as HTMLButtonElement).blur();
                     onDelete(id);
                   }}
                 >
@@ -1855,16 +2220,21 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
           )}
         </Stack>
       </Box>
-      {hasChildren && (
-        <Collapse in={expanded} timeout="auto" unmountOnExit>
-          <Box>
-            {children.map((ch, idx) => (
+      {hasChildren && expanded && (
+        <Box>
+          {children.map((ch, idx) => {
+            const prevSibling = idx > 0 ? children[idx - 1] : undefined;
+            const nextSibling = idx < children.length - 1 ? children[idx + 1] : undefined;
+            return (
               <CategoryTreeRows
                 key={ch.id ?? ch.name}
                 node={ch}
                 depth={depth + 1}
                 siblingIndex={idx}
-                siblings={children}
+                prevSiblingId={prevSibling?.id}
+                prevSiblingSortOrder={prevSibling?.sortOrder}
+                nextSiblingId={nextSibling?.id}
+                nextSiblingSortOrder={nextSibling?.sortOrder}
                 rowSubmitting={rowSubmitting}
                 onAddChild={onAddChild}
                 onEdit={onEdit}
@@ -1877,9 +2247,9 @@ const CategoryTreeRows = memo(function CategoryTreeRows({
                 expandedCategoryIds={expandedCategoryIds}
                 onToggleCategoryExpand={onToggleCategoryExpand}
               />
-            ))}
-          </Box>
-        </Collapse>
+            );
+          })}
+        </Box>
       )}
     </Box>
   );

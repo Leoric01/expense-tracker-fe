@@ -203,10 +203,14 @@ export const NutritionGoalPlanSummaryPage: FC = () => {
                       tickFormatter={(v) => `${v}`}
                     />
                     <RechartsTooltip
-                      formatter={(value: number, name: string) => [
-                        `${value?.toFixed?.(1) ?? value} kg`,
-                        name === 'avgWeight' ? 'Prům. váha' : 'Projekce (cíl)',
-                      ]}
+                      formatter={(value, name) => {
+                        const n = typeof value === 'number' ? value : Number(value);
+                        const label = Number.isFinite(n) ? `${n.toFixed(1)} kg` : '—';
+                        return [
+                          label,
+                          name === 'avgWeight' ? 'Prům. váha' : 'Projekce (cíl)',
+                        ];
+                      }}
                       labelFormatter={(l) => `Týden ${l}`}
                     />
                     <Legend />

@@ -352,7 +352,11 @@ export const NutritionDashboardPage: FC = () => {
                       />
                       <RechartsTooltip
                         labelFormatter={(v) => formatDateCs(String(v))}
-                        formatter={(value: number) => [`${value?.toFixed?.(1) ?? value} kg`, 'Váha']}
+                        formatter={(value) => {
+                          const n = typeof value === 'number' ? value : Number(value);
+                          const label = Number.isFinite(n) ? `${n.toFixed(1)} kg` : '—';
+                          return [label, 'Váha'];
+                        }}
                       />
                       <Legend />
                       <Line
@@ -392,7 +396,11 @@ export const NutritionDashboardPage: FC = () => {
                       <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} width={44} />
                       <RechartsTooltip
                         labelFormatter={(v) => formatDateCs(String(v))}
-                        formatter={(value: number) => [`${Math.round(value)} kcal`, 'Kalorie']}
+                        formatter={(value) => {
+                          const n = typeof value === 'number' ? value : Number(value);
+                          const label = Number.isFinite(n) ? `${Math.round(n)} kcal` : '—';
+                          return [label, 'Kalorie'];
+                        }}
                       />
                       <Legend />
                       <Line
