@@ -11,7 +11,8 @@ export interface BudgetPlanResponseDto {
   id?: string;
   name?: string;
   amount?: number;
-  currencyCode?: string;
+  assetCode?: string;
+  assetScale?: number;
   periodType?: BudgetPlanResponseDtoPeriodType;
   categoryId?: string;
   categoryName?: string;

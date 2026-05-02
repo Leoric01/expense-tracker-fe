@@ -2,6 +2,7 @@ import {
   recurringBudgetFindAllActive,
   syncRecurringBudgets,
 } from '@api/recurring-budget-controller/recurring-budget-controller';
+import { useAssetExchangeRateQuote } from '@api/transaction-v-2-controller/transaction-v-2-controller';
 import { transactionCreate } from '@api/transaction-controller/transaction-controller';
 import { holdingFindAll } from '@api/holding-controller/holding-controller';
 import { getInstitutionHeaderBalancesQueryKey } from '@api/institution-controller/institution-controller';
@@ -23,6 +24,7 @@ import type {
   CategoryMovementConvertedTotalsDto,
   CategoryMovementSummaryParams,
   CategoryMovementSummaryResponseDto,
+  AssetExchangeRateQuoteResponseDto,
   CategoryResponseDto,
   CreateTransactionRequestDto,
   PagedModelHoldingResponseDto,
@@ -58,6 +60,7 @@ import {
   FormControl,
   FormControlLabel,
   IconButton,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Paper,
@@ -66,6 +69,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  CircularProgress,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { PageHeading } from '@components/PageHeading';
@@ -100,6 +104,7 @@ import {
   collectIdsWithChildren,
   findNodeById,
   hasActiveEmbeddedBudgetPlan,
+  primaryBudgetPlanAssetCode,
   rootAncestorCategory,
   toCategoryTree,
 } from './categoryTreeUtils';
@@ -117,6 +122,25 @@ const BUDGET_LIST_PARAMS = { page: 0, size: 500 } as const;
 const BULK_MAX_LEVEL = 5;
 
 const DISPLAY_CURRENCY_SELECTION_CHANGED = 'display-currency-selection-changed';
+
+function formatExchangeRateInputForQuickTx(value: number): string {
+  if (!Number.isFinite(value)) return '';
+  return new Intl.NumberFormat('en-US', {
+    useGrouping: false,
+    maximumSignificantDigits: 15,
+  }).format(value);
+}
+
+function findWalletIdForAssetUpper(
+  wallets: { id?: string; currencyCode?: string }[],
+  assetUpper: string,
+): string | undefined {
+  const u = assetUpper.trim().toUpperCase();
+  for (const w of wallets) {
+    if (w.id && (w.currencyCode ?? '').trim().toUpperCase() === u) return w.id;
+  }
+  return undefined;
+}
 
 function readTrackerDisplayCurrencyCode(trackerId: string): string {
   if (typeof window === 'undefined' || !trackerId) return '';
@@ -764,6 +788,79 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
     () => activeWallets.find((w) => w.id === quickTxWalletId),
     [activeWallets, quickTxWalletId],
   );
+
+  const quickTxBudgetAssetCode = useMemo(
+    () => (quickTxCategory ? primaryBudgetPlanAssetCode(quickTxCategory) : ''),
+    [quickTxCategory],
+  );
+
+  const { mutate: mutateQuickTxRateQuote, isPending: quotingQuickTxRate } = useAssetExchangeRateQuote({
+    mutation: {
+      onSuccess: (res) => {
+        const dto = res.data as unknown as AssetExchangeRateQuoteResponseDto;
+        if (dto.exchangeRate == null || !Number.isFinite(dto.exchangeRate)) {
+          enqueueSnackbar('Kurz se nepodařilo zjistit', { variant: 'warning' });
+          return;
+        }
+        setQuickTxExchangeRate(formatExchangeRateInputForQuickTx(dto.exchangeRate));
+        enqueueSnackbar('Kurz byl doplněn', { variant: 'success' });
+      },
+      onError: () => {
+        enqueueSnackbar('Kurz se nepodařilo zjistit', { variant: 'error' });
+      },
+    },
+  });
+
+  const handleQuickTxRateQuote = useCallback(() => {
+    if (!trackerId || !quickTxCategory) return;
+    if (!quickTxWalletId) {
+      enqueueSnackbar('Nejdřív vyber pozici (holding).', { variant: 'warning' });
+      return;
+    }
+    const budgetCur = primaryBudgetPlanAssetCode(quickTxCategory);
+    if (!budgetCur) {
+      enqueueSnackbar('U kategorie není kód aktiva rozpočtu (assetCode plánu).', { variant: 'warning' });
+      return;
+    }
+    const holdingCur = (quickTxWallet?.currencyCode ?? '').trim().toUpperCase();
+    if (!holdingCur) {
+      enqueueSnackbar('U vybrané pozice chybí kód aktiva (měna).', { variant: 'warning' });
+      return;
+    }
+    if (budgetCur === holdingCur) {
+      setQuickTxExchangeRate(formatExchangeRateInputForQuickTx(1));
+      enqueueSnackbar('Měny jsou shodné — kurz 1.', { variant: 'success' });
+      return;
+    }
+    const budgetWalletId = findWalletIdForAssetUpper(activeWallets, budgetCur);
+    if (!budgetWalletId) {
+      enqueueSnackbar(
+        `Nelze zjistit kurz: v trackeru chybí pozice v měně rozpočtu kategorie (${budgetCur}).`,
+        { variant: 'warning' },
+      );
+      return;
+    }
+    if (budgetWalletId === quickTxWalletId) {
+      setQuickTxExchangeRate(formatExchangeRateInputForQuickTx(1));
+      enqueueSnackbar('Měny jsou shodné — kurz 1.', { variant: 'success' });
+      return;
+    }
+    mutateQuickTxRateQuote({
+      trackerId,
+      data: {
+        sourceHoldingId: quickTxWalletId,
+        targetHoldingId: budgetWalletId,
+      },
+    });
+  }, [
+    trackerId,
+    quickTxCategory,
+    quickTxWalletId,
+    quickTxWallet?.currencyCode,
+    activeWallets,
+    enqueueSnackbar,
+    mutateQuickTxRateQuote,
+  ]);
 
   const openCreateRoot = useCallback(() => {
     setCreateMode({ type: 'root' });
@@ -1620,16 +1717,35 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
         open={Boolean(quickTxCategory)}
         onClose={() => !submitting && setQuickTxCategory(null)}
         fullWidth
-        maxWidth="md"
+        maxWidth="sm"
+        slotProps={{
+          paper: {
+            sx: { width: '100%', maxWidth: { xs: '100%', sm: 440 } },
+          },
+        }}
       >
-        <DialogTitle>Přidat transakci</DialogTitle>
+        <DialogTitle sx={{ py: 1, px: 2, typography: 'subtitle2', fontWeight: 600 }}>
+          Přidat transakci
+        </DialogTitle>
         <Box component="form" onSubmit={handleQuickTxSubmit}>
-          <DialogContent>
-            <Stack spacing={2.5}>
-              <Typography variant="body2" color="text.secondary">
+          <DialogContent sx={{ pt: 0, px: 2, pb: 1 }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                gap: 1.25,
+                alignItems: 'flex-start',
+              }}
+            >
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ gridColumn: { xs: '1', sm: 'span 2' }, lineHeight: 1.35 }}
+              >
                 Kategorie: <strong>{quickTxCategory?.name ?? '—'}</strong>
               </Typography>
-              <FormControl fullWidth required>
+
+              <FormControl size="small" fullWidth required sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}>
                 <InputLabel id="quick-tx-wallet">Pozice</InputLabel>
                 <Select
                   labelId="quick-tx-wallet"
@@ -1644,63 +1760,127 @@ const CategoriesForTrackerInner: FC<CategoriesForTrackerProps> = ({
                   ))}
                 </Select>
               </FormControl>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} useFlexGap>
-                <TextField
-                  label="Částka"
-                  value={formatAmountDisplayCs(quickTxAmountCanon)}
-                  onChange={(e) => setQuickTxAmountCanon(canonicalAmountFromUserInput(e.target.value))}
-                  required
-                  fullWidth
-                  inputMode="decimal"
-                  helperText={
-                    quickTxWallet?.currencyCode?.trim().toUpperCase() === 'BTC'
-                      ? '1 satoshi zadej jako 0,00000001 BTC.'
-                      : 'Hlavní částka v měně vybrané pozice.'
-                  }
-                />
-                <TextField
-                  label="Poplatek (volitelné)"
-                  value={formatAmountDisplayCs(quickTxFeeCanon)}
-                  onChange={(e) => setQuickTxFeeCanon(canonicalAmountFromUserInput(e.target.value))}
-                  fullWidth
-                  inputMode="decimal"
-                  helperText="Ve stejné měně jako částka."
-                />
-              </Stack>
+
               <TextField
-                label="Kurz (volitelné)"
-                value={quickTxExchangeRate}
-                onChange={(e) => setQuickTxExchangeRate(e.target.value)}
+                size="small"
+                label="Částka *"
+                value={formatAmountDisplayCs(quickTxAmountCanon)}
+                onChange={(e) => setQuickTxAmountCanon(canonicalAmountFromUserInput(e.target.value))}
+                required
                 fullWidth
-                placeholder="např. 24,55"
-                helperText="Použij jen pokud transakce zahrnuje přepočet měn podle zadaného kurzu."
                 inputMode="decimal"
+                placeholder="0"
+                helperText={
+                  quickTxWallet?.currencyCode?.trim().toUpperCase() === 'BTC'
+                    ? '1 satoshi = 0,00000001'
+                    : undefined
+                }
+                FormHelperTextProps={{ sx: { mt: 0.25, mx: 0 } }}
+                InputProps={{
+                  endAdornment: quickTxWallet?.currencyCode?.trim() ? (
+                    <InputAdornment position="end">
+                      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                        {quickTxWallet.currencyCode.trim().toUpperCase()}
+                      </Typography>
+                    </InputAdornment>
+                  ) : undefined,
+                }}
               />
               <TextField
-                label="Datum a čas"
+                size="small"
+                label="Poplatek"
+                value={formatAmountDisplayCs(quickTxFeeCanon)}
+                onChange={(e) => setQuickTxFeeCanon(canonicalAmountFromUserInput(e.target.value))}
+                fullWidth
+                inputMode="decimal"
+                placeholder="volitelné"
+                InputProps={{
+                  endAdornment: quickTxWallet?.currencyCode?.trim() ? (
+                    <InputAdornment position="end">
+                      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                        {quickTxWallet.currencyCode.trim().toUpperCase()}
+                      </Typography>
+                    </InputAdornment>
+                  ) : undefined,
+                }}
+              />
+
+              <Stack
+                direction="row"
+                spacing={0.75}
+                alignItems="flex-start"
+                sx={{ gridColumn: { xs: '1', sm: '1' }, minWidth: 0 }}
+              >
+                <TextField
+                  size="small"
+                  label="Kurz"
+                  value={quickTxExchangeRate}
+                  onChange={(e) => setQuickTxExchangeRate(e.target.value)}
+                  fullWidth
+                  inputMode="decimal"
+                  placeholder="volitelné"
+                  disabled={quotingQuickTxRate}
+                  sx={{ flex: 1, minWidth: 0 }}
+                  InputProps={{
+                    startAdornment:
+                      quickTxBudgetAssetCode && quickTxWallet?.currencyCode?.trim() ? (
+                        <InputAdornment position="start">
+                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                            1 {quickTxWallet.currencyCode.trim().toUpperCase()} =
+                          </Typography>
+                        </InputAdornment>
+                      ) : undefined,
+                    endAdornment: quickTxBudgetAssetCode ? (
+                      <InputAdornment position="end">
+                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                          {quickTxBudgetAssetCode}
+                        </Typography>
+                      </InputAdornment>
+                    ) : undefined,
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="small"
+                  variant="outlined"
+                  disabled={submitting || quotingQuickTxRate || !quickTxWalletId}
+                  onClick={handleQuickTxRateQuote}
+                  sx={{ whiteSpace: 'nowrap', minWidth: 44, px: 0.75, mt: 0.5 }}
+                  aria-label="Načíst kurz mezi měnou rozpočtu a pozicí"
+                >
+                  {quotingQuickTxRate ? <CircularProgress size={16} /> : 'Kurz'}
+                </Button>
+              </Stack>
+              <TextField
+                size="small"
+                label="Datum a čas *"
                 value={quickTxWhen}
                 onChange={(e) => setQuickTxWhen(e.target.value)}
                 placeholder="dd.MM.yyyy HH:mm"
-                helperText="Formát dd.MM.yyyy HH:mm (24 h)"
                 required
                 fullWidth
               />
+
               <TextField
-                label="Popis (volitelné)"
+                size="small"
+                label="Popis"
                 value={quickTxDescription}
                 onChange={(e) => setQuickTxDescription(e.target.value)}
                 fullWidth
                 multiline
-                minRows={2}
+                minRows={1}
+                maxRows={3}
+                placeholder="volitelné"
+                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
               />
-            </Stack>
+            </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setQuickTxCategory(null)} disabled={submitting}>
+          <DialogActions sx={{ px: 2, py: 1, gap: 1 }}>
+            <Button size="small" onClick={() => setQuickTxCategory(null)} disabled={submitting}>
               Zrušit
             </Button>
-            <Button type="submit" variant="contained" disabled={submitting}>
-              Uložit transakci
+            <Button size="small" type="submit" variant="contained" disabled={submitting}>
+              Uložit
             </Button>
           </DialogActions>
         </Box>

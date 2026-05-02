@@ -11,7 +11,8 @@ export interface RecurringBudgetResponseDto {
   id?: string;
   name?: string;
   amount?: number;
-  currencyCode?: string;
+  assetCode?: string;
+  assetScale?: number;
   periodType?: RecurringBudgetResponseDtoPeriodType;
   intervalValue?: number;
   categoryId?: string;

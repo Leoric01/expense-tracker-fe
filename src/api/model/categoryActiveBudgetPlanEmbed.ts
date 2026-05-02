@@ -11,7 +11,8 @@ export interface CategoryActiveBudgetPlanEmbed {
   id?: string;
   name?: string;
   amount?: number;
-  currencyCode?: string;
+  assetCode?: string;
+  assetScale?: number;
   periodType?: CategoryActiveBudgetPlanEmbedPeriodType;
   validFrom?: string;
   validTo?: string;

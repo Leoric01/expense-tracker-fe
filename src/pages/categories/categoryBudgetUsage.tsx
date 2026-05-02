@@ -3,7 +3,7 @@ import { Box, Chip, LinearProgress, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
 import { formatDateDdMmYyyy } from '@utils/dateTimeCs';
-import { minorUnitsToMajor } from '@utils/moneyMinorUnits';
+import { DEFAULT_FIAT_SCALE, minorUnitsToMajorForScale } from '@utils/moneyMinorUnits';
 import { FC, Fragment } from 'react';
 import { budgetPeriodLabelCs, budgetPlanPeriodChipSx } from './categoryBudgetPeriodLabels';
 
@@ -125,15 +125,24 @@ export function budgetAmountToMonthlyEquivalentMinor(
 }
 
 /** Čísla v liště bez desetin (celé jednotky); přesnost je v `title` / tooltipu. */
-function formatBudgetBarAmountPairCs(spentMinor: number, limitMinor: number): string {
+function formatBudgetBarAmountPairCs(spentMinor: number, limitMinor: number, scale: number): string {
+  const sc = Number.isFinite(scale) && scale >= 0 ? Math.floor(scale) : DEFAULT_FIAT_SCALE;
   const fmt = (minor: number) => {
-    const major = minorUnitsToMajor(minor) ?? 0;
+    const major = minorUnitsToMajorForScale(minor, sc) ?? 0;
     return new Intl.NumberFormat('cs-CZ', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(Math.round(major));
   };
   return `${fmt(spentMinor)}/${fmt(limitMinor)}`;
+}
+
+function planAssetCode(plan: BudgetPlanResponseDto): string {
+  return (plan.assetCode ?? 'CZK').trim().toUpperCase() || 'CZK';
+}
+
+function planAssetScale(plan: BudgetPlanResponseDto): number {
+  return plan.assetScale ?? DEFAULT_FIAT_SCALE;
 }
 
 /** Plnicí lišta s čísly uvnitř (bez měny); žádné svislé okraje navíc. */
@@ -143,10 +152,11 @@ function BudgetUsageBarInlineAmounts(props: {
   incomeOverBudget?: boolean;
   spentMinor: number;
   limitMinor: number;
+  assetScale: number;
 }) {
-  const { fillPercent, overBudget, incomeOverBudget = false, spentMinor, limitMinor } = props;
+  const { fillPercent, overBudget, incomeOverBudget = false, spentMinor, limitMinor, assetScale } = props;
   const w = Math.min(100, Math.max(0, fillPercent));
-  const label = formatBudgetBarAmountPairCs(spentMinor, limitMinor);
+  const label = formatBudgetBarAmountPairCs(spentMinor, limitMinor, assetScale);
   return (
     <Box
       sx={{
@@ -223,13 +233,14 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
 } {
   const amount = plan.amount ?? 0;
   const spent = plan.alreadySpent ?? 0;
-  const currency = plan.currencyCode;
+  const currency = planAssetCode(plan);
+  const scale = planAssetScale(plan);
   const remaining = amount - spent;
   const periodDdMm = formatBudgetDateRangeDdMmOnly(plan.validFrom, plan.validTo);
   const daysLeft = budgetDaysLeftInclusive(plan.validFrom, plan.validTo);
 
-  const spentVsLimit = `${formatWalletAmount(spent, currency)} / ${formatWalletAmount(amount, currency)}`;
-  const remainingText = `zbývá ${formatWalletAmount(remaining, currency)}`;
+  const spentVsLimit = `${formatWalletAmount(spent, currency, scale)} / ${formatWalletAmount(amount, currency, scale)}`;
+  const remainingText = `zbývá ${formatWalletAmount(remaining, currency, scale)}`;
   const periodBadge = plan.periodType
     ? budgetPeriodLabelCs(plan.periodType).toLocaleUpperCase('cs-CZ')
     : '—';
@@ -239,7 +250,7 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
     perDay = '—';
   } else {
     const perDayMinor = Math.round(remaining / daysLeft);
-    perDay = `${formatWalletAmount(perDayMinor, currency)}/den`;
+    perDay = `${formatWalletAmount(perDayMinor, currency, scale)}/den`;
   }
 
   const detailTitle = [`${spentVsLimit} ${periodBadge} · ${remainingText}`, periodDdMm || null, perDay]
@@ -250,6 +261,7 @@ function budgetListRowSegments(plan: BudgetPlanResponseDto): {
     ? `Přepočet na měsíc: ${formatWalletAmount(
         budgetAmountToMonthlyEquivalentMinor(amount, plan.periodType, 1),
         currency,
+        scale,
       )}`
     : null;
 
@@ -284,6 +296,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
   const pct = budgetUsagePercent(amount, spent);
   const validity = formatBudgetValidityRange(plan.validFrom, plan.validTo);
   const tubeFill = overBudget ? 100 : pct;
+  const barScale = planAssetScale(plan);
 
   if (variant === 'listRow') {
     const { spentVsLimit, remainingText, periodDdMm, periodBadge, perDay, title } = budgetListRowSegments(plan);
@@ -298,7 +311,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
     };
 
     if (gridCells) {
-      const cur = (plan.currencyCode ?? 'CZK').toUpperCase();
+      const cur = planAssetCode(plan);
       return (
         <Fragment>
           <Box
@@ -317,6 +330,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
               incomeOverBudget={incomeOverBudget}
               spentMinor={spent}
               limitMinor={amount}
+              assetScale={barScale}
             />
             <Typography
               {...captionBase}
@@ -390,7 +404,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
       );
     }
 
-    const curStack = (plan.currencyCode ?? 'CZK').toUpperCase();
+    const curStack = planAssetCode(plan);
     return (
       <Stack
         direction="row"
@@ -418,6 +432,7 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
             incomeOverBudget={incomeOverBudget}
             spentMinor={spent}
             limitMinor={amount}
+            assetScale={barScale}
           />
           <Typography
             {...captionBase}
@@ -519,7 +534,8 @@ export const CategoryBudgetPlanUsageLine: FC<UsageLineProps> = ({
             whiteSpace: 'nowrap',
           }}
         >
-          {formatWalletAmount(spent, plan.currencyCode)} / {formatWalletAmount(amount, plan.currencyCode)}
+          {formatWalletAmount(spent, planAssetCode(plan), barScale)} /{' '}
+          {formatWalletAmount(amount, planAssetCode(plan), barScale)}
         </Typography>
       </Stack>
       {bar}

@@ -12,7 +12,8 @@ function budgetPlanEmbedToActiveDto(embed: CategoryActiveBudgetPlanEmbed): Categ
     id: embed.id,
     name: embed.name,
     amount: embed.amount,
-    currencyCode: embed.currencyCode,
+    assetCode: embed.assetCode,
+    assetScale: embed.assetScale,
     periodType: embed.periodType as CategoryActiveBudgetPlanDto['periodType'],
     validFrom: embed.validFrom,
     validTo: embed.validTo,
@@ -190,7 +191,8 @@ export function activeBudgetPlanToBudgetPlanResponse(
     id: p.id,
     name: p.name,
     amount: p.amount,
-    currencyCode: p.currencyCode,
+    assetCode: p.assetCode,
+    assetScale: p.assetScale,
     periodType: p.periodType as BudgetPlanResponseDto['periodType'],
     categoryId,
     categoryName,
@@ -226,6 +228,15 @@ export function hasActiveEmbeddedBudgetPlan(category: CategoryResponseDto | null
     if ((p.id ?? '').trim() && p.active !== false) return true;
   }
   return false;
+}
+
+/** Kód aktiva z prvního vnořeného plánu s `assetCode` (active-light / `budgetPlansForSelectedPeriod`). */
+export function primaryBudgetPlanAssetCode(category: CategoryResponseDto | null | undefined): string {
+  for (const p of budgetPlansFromCategoryEmbedded(category)) {
+    const c = p.assetCode?.trim();
+    if (c) return c.toUpperCase();
+  }
+  return '';
 }
 
 /** Mapa categoryId → jednorázové plány jen z vnořených dat kategorií (bez samostatného GET budget-plan). */

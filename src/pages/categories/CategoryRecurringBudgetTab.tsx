@@ -3,9 +3,12 @@ import {
   recurringBudgetDeactivate,
   recurringBudgetUpdate,
 } from '@api/recurring-budget-controller/recurring-budget-controller';
+import { assetFindAll, getAssetFindAllQueryKey } from '@api/asset-controller/asset-controller';
 import type {
+  AssetResponseDto,
   CategoryResponseDto,
   CreateRecurringBudgetRequestDto,
+  PagedModelAssetResponseDto,
   RecurringBudgetResponseDto,
   UpdateRecurringBudgetRequestDto,
 } from '@api/model';
@@ -29,6 +32,7 @@ import {
 } from '@mui/material';
 import { AmountTextFieldCs } from '@pages/home/AmountTextFieldCs';
 import { formatWalletAmount } from '@pages/home/walletDisplay';
+import { assetSelectLabel } from '@pages/home/holdingAdapter';
 import { formatAmountDisplayCs, parseAmount } from '@pages/home/transactionFormUtils';
 import { apiErrorMessage } from '@utils/apiErrorMessage';
 import {
@@ -40,9 +44,14 @@ import {
   parseCsDateTime,
   startOfCurrentLocalMonthDate,
 } from '@utils/dateTimeCs';
-import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
+import {
+  DEFAULT_FIAT_SCALE,
+  majorToMinorUnitsForScale,
+  minorUnitsToMajorForScale,
+} from '@utils/moneyMinorUnits';
+import { useQuery } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { FC, type SubmitEvent, useCallback, useEffect, useState } from 'react';
+import { FC, type SubmitEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
 import { intervalFieldHelperCs, recurringIntervalDescriptionCs } from './categoryRecurringBudgetIntervalText';
 
@@ -54,6 +63,7 @@ type Props = {
 };
 
 const PERIOD_OPTIONS = Object.values(CreateRecurringBudgetRequestDtoPeriodType);
+const ASSET_LIST_PARAMS = { page: 0, size: 500 } as const;
 
 function isoToDdMmYyyyInput(iso?: string): string {
   if (!iso?.trim()) return '';
@@ -74,14 +84,53 @@ function parseDdMmYyyyToEndIso(s: string): string | null {
   return calendarDayEndUtcIso(d);
 }
 
+function scaleForCode(assets: AssetResponseDto[], code: string | undefined): number {
+  const u = (code ?? '').trim().toUpperCase();
+  const a = assets.find((x) => (x.code ?? '').trim().toUpperCase() === u);
+  return a?.scale ?? DEFAULT_FIAT_SCALE;
+}
+
+/** Major hodnota z minor + scale → řetězec pro AmountTextFieldCs (bez vědecké notace). */
+function majorStringFromMinor(minor: number | undefined, scale: number): string {
+  const maj = minorUnitsToMajorForScale(minor, scale);
+  if (maj == null || !Number.isFinite(maj)) return '';
+  const digits = Math.min(Math.max(0, Math.floor(scale)), 20);
+  return maj
+    .toFixed(digits)
+    .replace(/(\.\d*?)0+$/, '$1')
+    .replace(/\.$/, '');
+}
+
 export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, plans, onInvalidate }) => {
   const { enqueueSnackbar } = useSnackbar();
   const [submitting, setSubmitting] = useState(false);
   const [editing, setEditing] = useState<RecurringBudgetResponseDto | null>(null);
 
+  const { data: assetsRes } = useQuery({
+    queryKey: getAssetFindAllQueryKey(ASSET_LIST_PARAMS),
+    queryFn: async () => {
+      const res = await assetFindAll(ASSET_LIST_PARAMS);
+      if (res.status < 200 || res.status >= 300) throw new Error('asset');
+      return res.data as PagedModelAssetResponseDto;
+    },
+    staleTime: 60_000,
+  });
+
+  const assetsSorted = useMemo(() => {
+    const raw = assetsRes?.content ?? [];
+    const list = raw.filter((a) => a.id && a.active !== false && (a.code ?? '').trim());
+    return [...list].sort((a, b) => (a.code ?? '').localeCompare(b.code ?? '', undefined, { sensitivity: 'base' }));
+  }, [assetsRes?.content]);
+
+  const defaultAssetId = useMemo(() => {
+    if (assetsSorted.length === 0) return '';
+    const cz = assetsSorted.find((a) => a.code?.trim().toUpperCase() === 'CZK');
+    return (cz ?? assetsSorted[0]).id ?? '';
+  }, [assetsSorted]);
+
   const [cName, setCName] = useState('');
   const [cAmount, setCAmount] = useState('');
-  const [cCurrency, setCCurrency] = useState('CZK');
+  const [cAssetId, setCAssetId] = useState('');
   const [cPeriod, setCPeriod] = useState<CreateRecurringBudgetRequestDtoPeriodType>(
     CreateRecurringBudgetRequestDtoPeriodType.MONTHLY,
   );
@@ -91,7 +140,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
 
   const [eName, setEName] = useState('');
   const [eAmount, setEAmount] = useState('');
-  const [eCurrency, setECurrency] = useState('CZK');
+  const [eAssetId, setEAssetId] = useState('');
   const [ePeriod, setEPeriod] = useState<UpdateRecurringBudgetRequestDtoPeriodType>(
     UpdateRecurringBudgetRequestDtoPeriodType.MONTHLY,
   );
@@ -102,7 +151,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
   const resetCreate = useCallback((cat: CategoryResponseDto | null) => {
     setCName(cat?.name ? `Limit — ${cat.name}` : 'Limit');
     setCAmount('');
-    setCCurrency('CZK');
+    setCAssetId('');
     setCPeriod(CreateRecurringBudgetRequestDtoPeriodType.MONTHLY);
     setCInterval('1');
     setCStart(formatDateDdMmYyyyFromDate(startOfCurrentLocalMonthDate()));
@@ -110,16 +159,25 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
   }, []);
 
   useEffect(() => {
-    if (category) resetCreate(category);
+    if (!category) return;
+    resetCreate(category);
     setEditing(null);
   }, [category?.id, resetCreate, category]);
 
   useEffect(() => {
+    if (!defaultAssetId) return;
+    setCAssetId((id) => id || defaultAssetId);
+  }, [defaultAssetId, category?.id]);
+
+  useEffect(() => {
     if (!editing) return;
     setEName(editing.name ?? '');
-    const maj = minorUnitsToMajor(editing.amount);
-    setEAmount(maj !== undefined ? String(maj) : '');
-    setECurrency((editing.currencyCode ?? 'CZK').toUpperCase());
+    const sc = editing.assetScale ?? scaleForCode(assetsSorted, editing.assetCode);
+    setEAmount(majorStringFromMinor(editing.amount, sc));
+    const match = assetsSorted.find(
+      (a) => (a.code ?? '').trim().toUpperCase() === (editing.assetCode ?? '').trim().toUpperCase(),
+    );
+    setEAssetId(match?.id ?? '');
     setEPeriod(
       (editing.periodType as UpdateRecurringBudgetRequestDtoPeriodType) ??
         UpdateRecurringBudgetRequestDtoPeriodType.MONTHLY,
@@ -127,7 +185,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
     setEInterval(String(editing.intervalValue ?? 1));
     setEStart(isoToDdMmYyyyInput(editing.startDate));
     setEEnd(isoToDdMmYyyyInput(editing.endDate));
-  }, [editing]);
+  }, [editing, assetsSorted]);
 
   const parseInterval = (s: string): number | null => {
     const n = parseInt(s.trim(), 10);
@@ -148,11 +206,19 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
       enqueueSnackbar('Zadej platnou částku', { variant: 'warning' });
       return;
     }
-    const code = cCurrency.trim().toUpperCase();
-    if (!code) {
-      enqueueSnackbar('Vyplň měnu', { variant: 'warning' });
+    const assetId = cAssetId || defaultAssetId;
+    const asset = assetsSorted.find((a) => a.id === assetId);
+    if (!asset?.code?.trim()) {
+      enqueueSnackbar('Vyber aktivum (měnu rozpočtu).', { variant: 'warning' });
       return;
     }
+    const scale = asset.scale ?? DEFAULT_FIAT_SCALE;
+    const amountMinor = majorToMinorUnitsForScale(major, scale);
+    if (amountMinor <= 0) {
+      enqueueSnackbar('Částka je menší než nejmenší jednotka zvoleného aktiva.', { variant: 'warning' });
+      return;
+    }
+    const code = asset.code.trim().toUpperCase();
     const iv = parseInterval(cInterval);
     if (iv == null) {
       enqueueSnackbar('Interval musí být celé číslo ≥ 1', { variant: 'warning' });
@@ -175,7 +241,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
 
     const payload: CreateRecurringBudgetRequestDto = {
       name,
-      amount: majorToMinorUnits(major),
+      amount: amountMinor,
       currencyCode: code,
       periodType: cPeriod,
       intervalValue: iv,
@@ -216,11 +282,18 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
       enqueueSnackbar('Zadej platnou částku', { variant: 'warning' });
       return;
     }
-    const code = eCurrency.trim().toUpperCase();
-    if (!code) {
-      enqueueSnackbar('Vyplň měnu', { variant: 'warning' });
+    const asset = assetsSorted.find((a) => a.id === eAssetId);
+    if (!asset?.code?.trim()) {
+      enqueueSnackbar('Vyber aktivum (měnu rozpočtu).', { variant: 'warning' });
       return;
     }
+    const scale = asset.scale ?? DEFAULT_FIAT_SCALE;
+    const amountMinor = majorToMinorUnitsForScale(major, scale);
+    if (amountMinor <= 0) {
+      enqueueSnackbar('Částka je menší než nejmenší jednotka zvoleného aktiva.', { variant: 'warning' });
+      return;
+    }
+    const code = asset.code.trim().toUpperCase();
     const iv = parseInterval(eInterval);
     if (iv == null) {
       enqueueSnackbar('Interval musí být celé číslo ≥ 1', { variant: 'warning' });
@@ -243,7 +316,7 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
 
     const body: UpdateRecurringBudgetRequestDto = {
       name,
-      amount: majorToMinorUnits(major),
+      amount: amountMinor,
       currencyCode: code,
       periodType: ePeriod,
       intervalValue: iv,
@@ -289,125 +362,149 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
     }
   };
 
+  const compactFieldProps = { size: 'small' as const, helperText: ' ' };
+
+  const formGridSx = {
+    display: 'grid',
+    gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+    gap: 1,
+    alignItems: 'flex-start',
+  };
+
   return (
-    <Stack spacing={2}>
+    <Stack spacing={1}>
       {plans.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="caption" color="text.secondary">
           Zatím žádný opakující se limit.
         </Typography>
       ) : (
-        <Stack spacing={1}>
-          {plans.map((p) => (
-            <Box
-              key={p.id ?? p.name}
-              sx={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 1,
-                py: 1,
-                borderBottom: 1,
-                borderColor: 'divider',
-              }}
-            >
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="subtitle2">{p.name ?? '—'}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  max. {formatWalletAmount(p.amount, p.currencyCode)} ·{' '}
-                  {recurringIntervalDescriptionCs(p.periodType, p.intervalValue ?? 1)}
-                </Typography>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'baseline',
-                    columnGap: 0.75,
-                    rowGap: 0.25,
-                  }}
-                >
-                  {(p.startDate || p.endDate) && (
-                    <Typography component="span" variant="caption" color="text.secondary">
-                      {[
-                        p.startDate ? `Od ${formatDateDdMmYyyy(p.startDate)}` : null,
-                        p.endDate ? `do ${formatDateDdMmYyyy(p.endDate)}` : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </Typography>
-                  )}
-                  {p.nextRunDate && (
-                    <Typography component="span" variant="caption" color="primary">
-                      {(p.startDate || p.endDate) && '· '}
-                      Další běh / nový rozpočet: {formatDateTimeDdMmYyyyHhMm(p.nextRunDate)}
-                    </Typography>
-                  )}
+        <Stack spacing={0}>
+          {plans.map((p) => {
+            const sc = p.assetScale ?? scaleForCode(assetsSorted, p.assetCode);
+            return (
+              <Box
+                key={p.id ?? p.name}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 0.75,
+                  py: 0.75,
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                }}
+              >
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" fontWeight={600} sx={{ lineHeight: 1.3 }}>
+                    {p.name ?? '—'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.35 }}>
+                    max. {formatWalletAmount(p.amount, p.assetCode, sc)} ·{' '}
+                    {recurringIntervalDescriptionCs(p.periodType, p.intervalValue ?? 1)}
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'baseline',
+                      columnGap: 0.5,
+                      rowGap: 0,
+                      mt: 0.25,
+                    }}
+                  >
+                    {(p.startDate || p.endDate) && (
+                      <Typography component="span" variant="caption" color="text.secondary">
+                        {[
+                          p.startDate ? `Od ${formatDateDdMmYyyy(p.startDate)}` : null,
+                          p.endDate ? `do ${formatDateDdMmYyyy(p.endDate)}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Typography>
+                    )}
+                    {p.nextRunDate && (
+                      <Typography component="span" variant="caption" color="primary">
+                        {(p.startDate || p.endDate) && ' · '}
+                        Další: {formatDateTimeDdMmYyyyHhMm(p.nextRunDate)}
+                      </Typography>
+                    )}
+                  </Box>
                 </Box>
+                <Tooltip title="Upravit">
+                  <IconButton
+                    size="small"
+                    aria-label="upravit"
+                    disabled={submitting}
+                    onClick={() => setEditing(p)}
+                  >
+                    <EditOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Zastavit opakování">
+                  <IconButton
+                    size="small"
+                    color="error"
+                    aria-label="zastavit"
+                    disabled={submitting}
+                    onClick={() => handleDeactivate(p)}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </Box>
-              <Tooltip title="Upravit">
-                <IconButton
-                  size="small"
-                  aria-label="upravit"
-                  disabled={submitting}
-                  onClick={() => setEditing(p)}
-                >
-                  <EditOutlinedIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Zastavit opakování">
-                <IconButton
-                  size="small"
-                  color="error"
-                  aria-label="zastavit"
-                  disabled={submitting}
-                  onClick={() => handleDeactivate(p)}
-                >
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          ))}
+            );
+          })}
         </Stack>
       )}
 
       {editing && (
         <>
-          <Divider />
-          <Typography variant="subtitle2">Upravit opakující se limit</Typography>
-          <Box component="form" onSubmit={handleUpdate}>
-            <Stack spacing={2}>
+          <Divider sx={{ my: 0.5 }} />
+          <Typography variant="caption" color="text.secondary" fontWeight={600}>
+            Upravit opakující se limit
+          </Typography>
+          <Box component="form" onSubmit={handleUpdate} sx={{ mt: 0.25 }}>
+            <Box sx={formGridSx}>
               <TextField
                 label="Název"
                 value={eName}
-                onChange={(e) => setEName(e.target.value)}
+                onChange={(ev) => setEName(ev.target.value)}
                 required
                 fullWidth
-                size="small"
+                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
+                {...compactFieldProps}
               />
               <AmountTextFieldCs
-                label="Max. částka za období"
+                label="Max. za období"
                 canonical={eAmount}
                 setCanonical={setEAmount}
                 required
                 fullWidth
                 size="small"
+                helperText=" "
+                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
               />
-              <TextField
-                label="Měna (ISO)"
-                value={eCurrency}
-                onChange={(e) => setECurrency(e.target.value)}
-                required
-                fullWidth
-                size="small"
-                inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
-              />
-              <FormControl fullWidth size="small">
+              <FormControl fullWidth size="small" required>
+                <InputLabel id="e-rec-asset">Aktivum</InputLabel>
+                <Select
+                  labelId="e-rec-asset"
+                  label="Aktivum"
+                  value={eAssetId}
+                  onChange={(ev) => setEAssetId(ev.target.value as string)}
+                >
+                  {assetsSorted.map((a) => (
+                    <MenuItem key={a.id} value={a.id}>
+                      {assetSelectLabel(a)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl fullWidth size="small" sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}>
                 <InputLabel id="e-rec-period">Druh období</InputLabel>
                 <Select
                   labelId="e-rec-period"
                   label="Druh období"
                   value={ePeriod}
-                  onChange={(e) =>
-                    setEPeriod(e.target.value as UpdateRecurringBudgetRequestDtoPeriodType)
-                  }
+                  onChange={(ev) => setEPeriod(ev.target.value as UpdateRecurringBudgetRequestDtoPeriodType)}
                 >
                   {PERIOD_OPTIONS.map((v) => (
                     <MenuItem key={v} value={v}>
@@ -419,30 +516,35 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
               <TextField
                 label="Interval"
                 value={eInterval}
-                onChange={(e) => setEInterval(e.target.value)}
+                onChange={(ev) => setEInterval(ev.target.value)}
                 required
                 fullWidth
-                size="small"
                 type="number"
                 inputProps={{ min: 1, step: 1 }}
                 helperText={intervalFieldHelperCs(ePeriod)}
+                size="small"
               />
               <TextField
                 label="Platnost od"
                 value={eStart}
-                onChange={(e) => setEStart(e.target.value)}
+                onChange={(ev) => setEStart(ev.target.value)}
                 required
                 fullWidth
                 size="small"
+                helperText=" "
+                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
               />
               <TextField
                 label="Platnost do (volitelné)"
                 value={eEnd}
-                onChange={(e) => setEEnd(e.target.value)}
+                onChange={(ev) => setEEnd(ev.target.value)}
                 fullWidth
                 size="small"
+                helperText=" "
+                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
+                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
               />
-              <Stack direction="row" spacing={1}>
+              <Stack direction="row" spacing={0.75} sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}>
                 <Button type="submit" variant="contained" disabled={submitting} size="small">
                   Uložit
                 </Button>
@@ -450,51 +552,60 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
                   Zrušit
                 </Button>
               </Stack>
-            </Stack>
+            </Box>
           </Box>
         </>
       )}
 
       {!editing && (
         <>
-          <Divider />
-          <Typography variant="subtitle2">Nový opakující se limit</Typography>
-          <Box component="form" onSubmit={handleCreate}>
-            <Stack spacing={2}>
+          <Divider sx={{ my: 0.5 }} />
+          <Typography variant="caption" color="text.secondary" fontWeight={600}>
+            Nový opakující se limit
+          </Typography>
+          <Box component="form" onSubmit={handleCreate} sx={{ mt: 0.25 }}>
+            <Box sx={formGridSx}>
               <TextField
                 label="Název"
                 value={cName}
-                onChange={(e) => setCName(e.target.value)}
+                onChange={(ev) => setCName(ev.target.value)}
                 required
                 fullWidth
-                size="small"
+                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
+                {...compactFieldProps}
               />
               <AmountTextFieldCs
-                label="Max. částka za období"
+                label="Max. za období"
                 canonical={cAmount}
                 setCanonical={setCAmount}
                 required
                 fullWidth
                 size="small"
+                helperText=" "
+                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
               />
-              <TextField
-                label="Měna (ISO)"
-                value={cCurrency}
-                onChange={(e) => setCCurrency(e.target.value)}
-                required
-                fullWidth
-                size="small"
-                inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
-              />
-              <FormControl fullWidth size="small">
+              <FormControl fullWidth size="small" required>
+                <InputLabel id="c-rec-asset">Aktivum</InputLabel>
+                <Select
+                  labelId="c-rec-asset"
+                  label="Aktivum"
+                  value={cAssetId || defaultAssetId}
+                  onChange={(ev) => setCAssetId(ev.target.value as string)}
+                >
+                  {assetsSorted.map((a) => (
+                    <MenuItem key={a.id} value={a.id}>
+                      {assetSelectLabel(a)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl fullWidth size="small" sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}>
                 <InputLabel id="c-rec-period">Druh období</InputLabel>
                 <Select
                   labelId="c-rec-period"
                   label="Druh období"
                   value={cPeriod}
-                  onChange={(e) =>
-                    setCPeriod(e.target.value as CreateRecurringBudgetRequestDtoPeriodType)
-                  }
+                  onChange={(ev) => setCPeriod(ev.target.value as CreateRecurringBudgetRequestDtoPeriodType)}
                 >
                   {PERIOD_OPTIONS.map((v) => (
                     <MenuItem key={v} value={v}>
@@ -506,33 +617,44 @@ export const CategoryRecurringBudgetTab: FC<Props> = ({ category, trackerId, pla
               <TextField
                 label="Interval"
                 value={cInterval}
-                onChange={(e) => setCInterval(e.target.value)}
+                onChange={(ev) => setCInterval(ev.target.value)}
                 required
                 fullWidth
-                size="small"
                 type="number"
                 inputProps={{ min: 1, step: 1 }}
                 helperText={intervalFieldHelperCs(cPeriod)}
+                size="small"
               />
               <TextField
                 label="Platnost od"
                 value={cStart}
-                onChange={(e) => setCStart(e.target.value)}
+                onChange={(ev) => setCStart(ev.target.value)}
                 required
                 fullWidth
                 size="small"
+                helperText=" "
+                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
               />
               <TextField
                 label="Platnost do (volitelné)"
                 value={cEnd}
-                onChange={(e) => setCEnd(e.target.value)}
+                onChange={(ev) => setCEnd(ev.target.value)}
                 fullWidth
                 size="small"
+                helperText=" "
+                FormHelperTextProps={{ sx: { m: 0, minHeight: 0 } }}
+                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
               />
-              <Button type="submit" variant="contained" disabled={submitting} size="small">
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={submitting || assetsSorted.length === 0}
+                size="small"
+                sx={{ gridColumn: { xs: '1', sm: 'span 2' } }}
+              >
                 Přidat opakující se limit
               </Button>
-            </Stack>
+            </Box>
           </Box>
         </>
       )}

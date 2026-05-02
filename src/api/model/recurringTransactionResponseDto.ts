@@ -16,7 +16,8 @@ export interface RecurringTransactionResponseDto {
   categoryId?: string;
   categoryName?: string;
   amount?: number;
-  currencyCode?: string;
+  assetCode?: string;
+  assetScale?: number;
   description?: string;
   note?: string;
   periodType?: RecurringTransactionResponseDtoPeriodType;

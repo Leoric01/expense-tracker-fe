@@ -35,6 +35,7 @@ import {
   Typography,
 } from '@mui/material';
 import { AmountTextFieldCs } from '@pages/home/AmountTextFieldCs';
+import { inferAssetMeta } from '@pages/home/holdingAdapter';
 import {
   formatAmountDisplayCs,
   parseAmount,
@@ -47,7 +48,7 @@ import {
   parseCsDateTime,
   startOfCurrentLocalMonthDate,
 } from '@utils/dateTimeCs';
-import { majorToMinorUnits, minorUnitsToMajor } from '@utils/moneyMinorUnits';
+import { majorToMinorUnitsForScale, minorUnitsToMajorForScale } from '@utils/moneyMinorUnits';
 import { useSnackbar } from 'notistack';
 import { FC, type SubmitEvent, useCallback, useEffect, useState } from 'react';
 import { budgetPeriodLabelCs } from './categoryBudgetPeriodLabels';
@@ -145,9 +146,11 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
   useEffect(() => {
     if (!editing) return;
     setEditName(editing.name ?? '');
-    const major = minorUnitsToMajor(editing.amount);
-    setEditAmountCanon(major !== undefined ? String(major) : '');
-    setEditCurrency((editing.currencyCode ?? 'CZK').toUpperCase());
+    const code = (editing.assetCode ?? 'CZK').trim().toUpperCase() || 'CZK';
+    const scale = editing.assetScale ?? inferAssetMeta(code).scale;
+    const major = minorUnitsToMajorForScale(editing.amount, scale);
+    setEditAmountCanon(major !== undefined && Number.isFinite(major) ? String(major) : '');
+    setEditCurrency(code);
     setEditPeriod(
       (editing.periodType as UpdateBudgetPlanRequestDtoPeriodType) ??
         UpdateBudgetPlanRequestDtoPeriodType.MONTHLY,
@@ -190,9 +193,10 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
       return;
     }
 
+    const scale = inferAssetMeta(code).scale;
     const payload: CreateBudgetPlanRequestDto = {
       name,
-      amount: majorToMinorUnits(major),
+      amount: majorToMinorUnitsForScale(major, scale),
       currencyCode: code,
       periodType: createPeriod,
       validFrom: fromIso,
@@ -251,9 +255,10 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
       return;
     }
 
+    const scale = inferAssetMeta(code).scale;
     const body: UpdateBudgetPlanRequestDto = {
       name,
-      amount: majorToMinorUnits(major),
+      amount: majorToMinorUnitsForScale(major, scale),
       currencyCode: code,
       periodType: editPeriod,
       validFrom: fromIso,
@@ -301,10 +306,10 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
   const catName = category?.name ?? '—';
 
   return (
-    <Dialog open={open} onClose={() => !submitting && onClose()} fullWidth maxWidth="md">
-      <DialogTitle>Rozpočty — {catName}</DialogTitle>
-      <DialogContent>
-        <Tabs value={budgetTab} onChange={(_, v) => setBudgetTab(v)} sx={{ mb: 2 }}>
+    <Dialog open={open} onClose={() => !submitting && onClose()} fullWidth maxWidth="sm">
+      <DialogTitle sx={{ py: 1.25, typography: 'subtitle1' }}>Rozpočty — {catName}</DialogTitle>
+      <DialogContent sx={{ pt: 0 }}>
+        <Tabs value={budgetTab} onChange={(_, v) => setBudgetTab(v)} sx={{ mb: 1, minHeight: 40 }}>
           <Tab label="Opakující se limit" id="budget-tab-recurring" aria-controls="budget-panel-recurring" />
           <Tab label="Jednorázový rozpočet" id="budget-tab-oneoff" aria-controls="budget-panel-oneoff" />
         </Tabs>
@@ -390,7 +395,7 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
                     size="small"
                   />
                   <TextField
-                    label="Měna (ISO)"
+                    label="Kód aktiva"
                     value={editCurrency}
                     onChange={(e) => setEditCurrency(e.target.value)}
                     required
@@ -469,7 +474,7 @@ export const CategoryBudgetPlansDialog: FC<Props> = ({
                     size="small"
                   />
                   <TextField
-                    label="Měna (ISO)"
+                    label="Kód aktiva"
                     value={createCurrency}
                     onChange={(e) => setCreateCurrency(e.target.value)}
                     required

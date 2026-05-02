@@ -26,7 +26,7 @@ export interface CreateAssetExchangeV2ResponseDto {
   sourceAssetScale?: number;
   targetAssetCode?: string;
   targetAssetScale?: number;
-  currencyCode?: string;
+  assetCode?: string;
   exchangeRate?: number;
   transactionDate?: string;
 }
