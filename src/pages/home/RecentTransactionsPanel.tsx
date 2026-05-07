@@ -196,6 +196,8 @@ function txTypeLabel(t?: string): string {
       return 'Výdaj';
     case TransactionPageItemResponseDtoTransactionType.BALANCE_ADJUSTMENT:
       return 'Korekce';
+    case TransactionPageItemResponseDtoTransactionType.TEST:
+      return 'Test';
     default:
       return t ?? '—';
   }
@@ -238,7 +240,7 @@ function balanceDirectionLabel(d?: string): string {
   }
 }
 
-/** Částka podle typu: příjem zeleně, výdaj červeně, převod neutrálně (na světlém pozadí text.primary), korekce oranžově. */
+/** Částka podle typu: příjem zeleně, výdaj červeně, převod neutrálně (na světlém pozadí text.primary), korekce oranžově, test modře (info). */
 function amountColorForType(t: string | undefined, theme: Theme): string {
   switch (t) {
     case TransactionPageItemResponseDtoTransactionType.INCOME:
@@ -249,6 +251,8 @@ function amountColorForType(t: string | undefined, theme: Theme): string {
       return theme.palette.mode === 'dark' ? '#ffffff' : theme.palette.text.primary;
     case TransactionPageItemResponseDtoTransactionType.BALANCE_ADJUSTMENT:
       return theme.palette.warning.main;
+    case TransactionPageItemResponseDtoTransactionType.TEST:
+      return theme.palette.info.main;
     default:
       return theme.palette.text.secondary;
   }
@@ -536,6 +540,7 @@ const TX_TYPE_ORDER = [
   TransactionFindAllPageableTransactionType.INCOME,
   TransactionFindAllPageableTransactionType.TRANSFER,
   TransactionFindAllPageableTransactionType.BALANCE_ADJUSTMENT,
+  TransactionFindAllPageableTransactionType.TEST,
 ] as const;
 
 type TypeFilterValue = '' | TransactionFindAllPageableTransactionType;

@@ -91,7 +91,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { DragEvent, FC, type SubmitEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BalanceCorrectionDialog, type BalanceCorrectionConfirmPayload } from './BalanceCorrectionDialog';
-import { TransferBetweenWalletsDialog, type TransferConfirmPayload } from './TransferBetweenWalletsDialog';
+import { TransactionsV2TransferForms } from './TransactionsV2TransferForms';
 import { assetSelectLabel, inferAssetMeta } from './holdingAdapter';
 import { InstitutionAccountsManageDialog } from './InstitutionAccountsManageDialog';
 import { ACCOUNT_TYPE_OPTIONS, formatWalletAmount } from './walletDisplay';
@@ -346,7 +346,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
   const [reorderDraggingId, setReorderDraggingId] = useState<string | null>(null);
   const [reorderDropHoverId, setReorderDropHoverId] = useState<string | null>(null);
   const [transferPair, setTransferPair] = useState<{ sourceId: string; targetId: string } | null>(null);
-  const [transferSubmitting, setTransferSubmitting] = useState(false);
+  const [transferPrefillSession, setTransferPrefillSession] = useState(0);
 
   const [correctionWallet, setCorrectionWallet] = useState<WalletResponseDto | null>(null);
   const [corrSubmitting, setCorrSubmitting] = useState(false);
@@ -740,51 +740,6 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
     }
   };
 
-  const sourceWallet = transferPair
-    ? orderedHoldingsForCategories.find((x) => x.id === transferPair.sourceId)
-    : undefined;
-  const targetWallet = transferPair
-    ? orderedHoldingsForCategories.find((x) => x.id === transferPair.targetId)
-    : undefined;
-  const transferCurrenciesOk = (() => {
-    if (!sourceWallet || !targetWallet) return false;
-    const a = sourceWallet.currencyCode?.trim().toUpperCase() ?? '';
-    const b = targetWallet.currencyCode?.trim().toUpperCase() ?? '';
-    if (!a || !b) return true;
-    return a === b;
-  })();
-
-  const handleTransferConfirm = useCallback(
-    async (payload: TransferConfirmPayload) => {
-      if (!transferPair || !transferCurrenciesOk) return;
-      setTransferSubmitting(true);
-      try {
-        const transferScale =
-          holdingScaleById.get(transferPair.sourceId) ?? DEFAULT_FIAT_SCALE;
-        const res = await transactionCreate(trackerId, {
-          transactionType: CreateTransactionRequestDtoTransactionType.TRANSFER,
-          sourceHoldingId: transferPair.sourceId,
-          targetHoldingId: transferPair.targetId,
-          amount: majorToMinorUnitsForScale(payload.amountMajor, transferScale),
-          transactionDate: payload.transactionDateIso,
-          ...(payload.description ? { description: payload.description } : {}),
-        });
-        if (res.status < 200 || res.status >= 300) {
-          enqueueSnackbar(apiErrorMessage(res.data, 'Převod se nepodařil'), { variant: 'error' });
-          return;
-        }
-        enqueueSnackbar('Převod byl zaznamenán', { variant: 'success' });
-        setTransferPair(null);
-        await invalidateFinance();
-      } catch {
-        enqueueSnackbar('Převod se nepodařil', { variant: 'error' });
-      } finally {
-        setTransferSubmitting(false);
-      }
-    },
-    [transferPair, transferCurrenciesOk, trackerId, enqueueSnackbar, invalidateFinance, holdingScaleById],
-  );
-
   const handleCorrectionConfirm = useCallback(
     async (payload: BalanceCorrectionConfirmPayload) => {
       if (!correctionWallet?.id) return;
@@ -940,6 +895,7 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
     const sourceId = e.dataTransfer.getData(WALLET_DRAG_MIME) || e.dataTransfer.getData('text/plain');
     const targetId = target.id;
     if (!sourceId || !targetId || sourceId === targetId) return;
+    setTransferPrefillSession((k) => k + 1);
     startTransition(() => setTransferPair({ sourceId, targetId }));
   };
 
@@ -1528,21 +1484,35 @@ export const TrackerHomeWallets: FC<Props> = ({ trackerId }) => {
         </Box>
       )}
 
-      <TransferBetweenWalletsDialog
+      <Dialog
         open={Boolean(transferPair)}
-        sourceWallet={sourceWallet}
-        targetWallet={targetWallet}
-        transferCurrenciesOk={transferCurrenciesOk}
-        submitting={transferSubmitting}
-        onClose={() => !transferSubmitting && setTransferPair(null)}
-        onConfirm={handleTransferConfirm}
-        onInvalidAmount={() => enqueueSnackbar('Zadej kladnou částku', { variant: 'warning' })}
-        onInvalidDate={() =>
-          enqueueSnackbar('Neplatné datum a čas — použij formát dd.MM.yyyy HH:mm', {
-            variant: 'warning',
-          })
-        }
-      />
+        onClose={() => setTransferPair(null)}
+        fullWidth
+        maxWidth="md"
+        scroll="paper"
+      >
+        <DialogTitle>Převod nebo výměna (V2)</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          {transferPair ? (
+            <TransactionsV2TransferForms
+              trackerId={trackerId}
+              variant="dialog"
+              prefillSourceHoldingId={transferPair.sourceId}
+              prefillTargetHoldingId={transferPair.targetId}
+              prefillSessionKey={transferPrefillSession}
+              onSubmitted={() => {
+                setTransferPair(null);
+                void invalidateFinance();
+              }}
+            />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setTransferPair(null)}>
+            Zavřít
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <BalanceCorrectionDialog
         open={Boolean(correctionWallet)}

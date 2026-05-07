@@ -14,4 +14,5 @@ export const TransactionResponseDtoTransactionType = {
   EXPENSE: 'EXPENSE',
   TRANSFER: 'TRANSFER',
   BALANCE_ADJUSTMENT: 'BALANCE_ADJUSTMENT',
+  TEST: 'TEST',
 } as const;
