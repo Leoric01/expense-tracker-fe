@@ -35,6 +35,7 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
   const isNutritionSection = pathname.startsWith('/nutrition');
   const isHabitSection = pathname.startsWith('/habits');
   const isTodoSection = pathname.startsWith('/todos');
+  const isKanbanSection = pathname.startsWith('/kanban');
   const isModuleHubSection = pathname === '/moduly';
   const isTrackerSection = pathname.startsWith('/trackers');
 
@@ -123,6 +124,27 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
           <>
             <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
               ToDo
+            </Typography>
+            <ListItemButton
+              onClick={openTrackerMenu}
+              sx={{ p: 0, borderRadius: 1, minHeight: 'unset', justifyContent: 'space-between', gap: 0.5 }}
+            >
+              <Typography
+                variant="subtitle1"
+                fontWeight={600}
+                sx={{ textAlign: 'left', lineHeight: 1.3, minWidth: 0 }}
+                noWrap
+                title={budgetName}
+              >
+                {budgetName}
+              </Typography>
+              <ArrowDropDownIcon fontSize="small" color="action" />
+            </ListItemButton>
+          </>
+        ) : isKanbanSection ? (
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left' }}>
+              Kanban
             </Typography>
             <ListItemButton
               onClick={openTrackerMenu}
@@ -324,6 +346,16 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
               {({ isActive }) => (
                 <ListItemButton selected={isActive} onClick={onMobileClose}>
                   <ListItemText primary="Štítky" />
+                </ListItemButton>
+              )}
+            </NavLink>
+          </>
+        ) : isKanbanSection ? (
+          <>
+            <NavLink to="/kanban/boards" end style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive || pathname.startsWith('/kanban/boards')} onClick={onMobileClose}>
+                  <ListItemText primary="Nástěnky" />
                 </ListItemButton>
               )}
             </NavLink>

@@ -1,6 +1,7 @@
 import { PageHeading } from '@components/PageHeading';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
+import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import RestaurantOutlinedIcon from '@mui/icons-material/RestaurantOutlined';
 import SelfImprovementOutlinedIcon from '@mui/icons-material/SelfImprovementOutlined';
@@ -53,6 +54,13 @@ const MODULES: ModuleCardConfig[] = [
     description: 'Úkoly, podúkoly, priority a štítky.',
     Icon: ChecklistOutlinedIcon,
     accent: (t) => ({ bg: alpha(t.palette.warning.main, 0.12), fg: t.palette.warning.main }),
+  },
+  {
+    to: '/kanban/boards',
+    title: 'Kanban',
+    description: 'Nástěnky, sloupce a karty.',
+    Icon: DashboardOutlinedIcon,
+    accent: (t) => ({ bg: alpha(t.palette.error.main, 0.10), fg: t.palette.error.main }),
   },
 ];
 

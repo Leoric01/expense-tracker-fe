@@ -28,6 +28,9 @@ import { HabitWeekOverviewPage } from '@pages/habits/HabitWeekOverviewPage';
 import { TodosModuleLayout } from '@pages/todos/TodosModuleLayout';
 import { TodoListPage } from '@pages/todos/TodoListPage';
 import { TodoTagsPage } from '@pages/todos/TodoTagsPage';
+import { KanbanModuleLayout } from '@pages/kanban/KanbanModuleLayout';
+import { KanbanBoardsPage } from '@pages/kanban/KanbanBoardsPage';
+import { KanbanBoardPage } from '@pages/kanban/KanbanBoardPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
 import { FinanceModuleLayout } from '@pages/finance/FinanceModuleLayout';
@@ -95,6 +98,15 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="list" replace /> },
           { path: 'list', element: <TodoListPage /> },
           { path: 'tags', element: <TodoTagsPage /> },
+        ],
+      },
+      {
+        path: 'kanban',
+        element: <KanbanModuleLayout />,
+        children: [
+          { index: true, element: <Navigate to="boards" replace /> },
+          { path: 'boards', element: <KanbanBoardsPage /> },
+          { path: 'boards/:boardId', element: <KanbanBoardPage /> },
         ],
       },
       { path: 'wallets', element: <Navigate to="/prehled" replace /> },
