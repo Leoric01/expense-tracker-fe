@@ -14,6 +14,7 @@ export interface TodoResponseDto {
   parentTodoId?: string;
   title?: string;
   description?: string;
+  imageUrl?: string;
   status?: TodoResponseDtoStatus;
   priority?: TodoResponseDtoPriority;
   dueDate?: string;

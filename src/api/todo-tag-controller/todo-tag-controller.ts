@@ -241,6 +241,99 @@ export const useTodoTagCreate = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getTodoTagCreateMutationOptions(options), queryClient);
 };
+export type todoTagCreateBulkResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type todoTagCreateBulkResponseSuccess = todoTagCreateBulkResponse200 & {
+  headers: Headers;
+};
+export type todoTagCreateBulkResponse = todoTagCreateBulkResponseSuccess;
+
+export const getTodoTagCreateBulkUrl = (trackerId: string) => {
+  return `/api/todo-tag/${trackerId}/bulk`;
+};
+
+export const todoTagCreateBulk = async (
+  trackerId: string,
+  todoTagUpsertRequestDto: TodoTagUpsertRequestDto[],
+  options?: RequestInit,
+): Promise<todoTagCreateBulkResponse> => {
+  const res = await fetch(getTodoTagCreateBulkUrl(trackerId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(todoTagUpsertRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: todoTagCreateBulkResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as todoTagCreateBulkResponse;
+};
+
+export const getTodoTagCreateBulkMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof todoTagCreateBulk>>,
+    TError,
+    { trackerId: string; data: TodoTagUpsertRequestDto[] },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof todoTagCreateBulk>>,
+  TError,
+  { trackerId: string; data: TodoTagUpsertRequestDto[] },
+  TContext
+> => {
+  const mutationKey = ['todoTagCreateBulk'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof todoTagCreateBulk>>,
+    { trackerId: string; data: TodoTagUpsertRequestDto[] }
+  > = (props) => {
+    const { trackerId, data } = props ?? {};
+
+    return todoTagCreateBulk(trackerId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TodoTagCreateBulkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof todoTagCreateBulk>>
+>;
+export type TodoTagCreateBulkMutationBody = TodoTagUpsertRequestDto[];
+export type TodoTagCreateBulkMutationError = unknown;
+
+export const useTodoTagCreateBulk = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof todoTagCreateBulk>>,
+      TError,
+      { trackerId: string; data: TodoTagUpsertRequestDto[] },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof todoTagCreateBulk>>,
+  TError,
+  { trackerId: string; data: TodoTagUpsertRequestDto[] },
+  TContext
+> => {
+  return useMutation(getTodoTagCreateBulkMutationOptions(options), queryClient);
+};
 export type todoTagDeleteResponse200 = {
   data: void;
   status: 200;

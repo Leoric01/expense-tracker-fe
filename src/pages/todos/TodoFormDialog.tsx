@@ -263,6 +263,31 @@ export const TodoFormDialog: FC<TodoFormDialogProps> = ({
             inputProps={{ maxLength: 1000 }}
           />
 
+          {todo?.imageUrl && (
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Obrázek
+              </Typography>
+              <Box
+                component="img"
+                src={todo.imageUrl}
+                alt="Obrázek úkolu"
+                sx={{
+                  display: 'block',
+                  maxWidth: '100%',
+                  maxHeight: 260,
+                  objectFit: 'contain',
+                  borderRadius: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </Box>
+          )}
+
           {error && (
             <Typography color="error" variant="body2">{error}</Typography>
           )}

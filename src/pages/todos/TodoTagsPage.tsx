@@ -2,6 +2,7 @@ import { PageHeading } from '@components/PageHeading';
 import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
 import {
   todoTagCreate,
+  todoTagCreateBulk,
   todoTagDelete,
   todoTagFindAll,
   todoTagUpdate,
@@ -13,11 +14,14 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import {
   Alert,
   Box,
   Button,
   Chip,
+  Divider,
   IconButton,
   Paper,
   Skeleton,
@@ -251,10 +255,126 @@ const NewTagForm: FC<NewTagFormProps> = ({ trackerId, onCreated }) => {
   );
 };
 
+type BulkRow = { name: string; color: string };
+
+const BulkTagForm: FC<{ trackerId: string; onCreated: () => void }> = ({ trackerId, onCreated }) => {
+  const queryClient = useQueryClient();
+  const [rows, setRows] = useState<BulkRow[]>([
+    { name: '', color: '' },
+    { name: '', color: '' },
+  ]);
+  const [error, setError] = useState('');
+
+  const addRow = () => setRows((r) => [...r, { name: '', color: '' }]);
+  const removeRow = (i: number) => setRows((r) => r.filter((_, idx) => idx !== i));
+  const updateRow = (i: number, field: keyof BulkRow, val: string) =>
+    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: val } : row)));
+
+  const bulkMutation = useMutation({
+    mutationFn: (data: TodoTagUpsertRequestDto[]) => todoTagCreateBulk(trackerId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getTodoTagFindAllQueryKey(trackerId) });
+      setRows([{ name: '', color: '' }, { name: '', color: '' }]);
+      setError('');
+      onCreated();
+    },
+    onError: () => setError('Nepodařilo se hromadně vytvořit štítky.'),
+  });
+
+  const handleSubmit = () => {
+    const valid = rows.filter((r) => r.name.trim());
+    if (valid.length === 0) { setError('Zadejte alespoň jeden název.'); return; }
+    bulkMutation.mutate(valid.map((r) => ({ name: r.name.trim(), color: r.color || undefined })));
+  };
+
+  return (
+    <Paper variant="outlined" sx={{ px: 2, py: 1.5 }}>
+      <Typography variant="subtitle2" gutterBottom>Hromadné přidání štítků</Typography>
+      <Stack spacing={1.5}>
+        {rows.map((row, i) => (
+          <Stack key={i} direction="row" spacing={1} alignItems="center">
+            <TextField
+              label={`Název ${i + 1}`}
+              value={row.name}
+              onChange={(e) => updateRow(i, 'name', e.target.value)}
+              size="small"
+              sx={{ flex: 1 }}
+              inputProps={{ maxLength: 50 }}
+            />
+            <TextField
+              label="Barva"
+              value={row.color}
+              onChange={(e) => updateRow(i, 'color', e.target.value)}
+              size="small"
+              sx={{ width: 110 }}
+              inputProps={{ maxLength: 20 }}
+              InputProps={{
+                startAdornment: row.color ? (
+                  <Box
+                    sx={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: '50%',
+                      bgcolor: row.color,
+                      mr: 0.5,
+                      flexShrink: 0,
+                    }}
+                  />
+                ) : undefined,
+              }}
+            />
+            <Stack direction="row" spacing={0.5} flexWrap="wrap">
+              {COLOR_PRESETS.slice(0, 5).map((c) => (
+                <Box
+                  key={c}
+                  onClick={() => updateRow(i, 'color', c)}
+                  sx={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    bgcolor: c,
+                    cursor: 'pointer',
+                    border: row.color === c ? '2px solid' : '1px solid transparent',
+                    borderColor: row.color === c ? 'text.primary' : 'transparent',
+                  }}
+                />
+              ))}
+            </Stack>
+            <IconButton size="small" color="error" onClick={() => removeRow(i)} disabled={rows.length <= 1}>
+              <RemoveCircleOutlineIcon fontSize="small" />
+            </IconButton>
+          </Stack>
+        ))}
+
+        <Stack direction="row" spacing={1}>
+          <Button size="small" startIcon={<AddIcon />} onClick={addRow} variant="text">
+            Přidat řádek
+          </Button>
+        </Stack>
+
+        {error && <Typography color="error" variant="caption">{error}</Typography>}
+
+        <Box>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<CheckIcon />}
+            onClick={handleSubmit}
+            disabled={bulkMutation.isPending}
+          >
+            Vytvořit vše ({rows.filter((r) => r.name.trim()).length})
+          </Button>
+        </Box>
+      </Stack>
+    </Paper>
+  );
+};
+
 export const TodoTagsPage: FC = () => {
   const { selectedExpenseTracker } = useSelectedExpenseTracker();
   const trackerId = selectedExpenseTracker?.id;
   const [showForm, setShowForm] = useState(false);
+  const [formMode, setFormMode] = useState<'single' | 'bulk'>('single');
 
   const tagsQuery = useQuery({
     queryKey: getTodoTagFindAllQueryKey(trackerId ?? ''),
@@ -284,16 +404,44 @@ export const TodoTagsPage: FC = () => {
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
         <PageHeading component="h1">Štítky</PageHeading>
         {!showForm && (
-          <Button variant="outlined" startIcon={<AddIcon />} onClick={() => setShowForm(true)}>
-            Nový štítek
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" startIcon={<AddIcon />} onClick={() => { setFormMode('single'); setShowForm(true); }}>
+              Nový štítek
+            </Button>
+            <Button variant="outlined" startIcon={<PlaylistAddIcon />} onClick={() => { setFormMode('bulk'); setShowForm(true); }}>
+              Hromadně
+            </Button>
+          </Stack>
         )}
       </Stack>
 
       {showForm && (
         <Box mb={2} maxWidth={520}>
-          <NewTagForm trackerId={trackerId} onCreated={() => setShowForm(false)} />
-          <Button size="small" onClick={() => setShowForm(false)} sx={{ mt: 1 }}>
+          <Stack direction="row" spacing={1} mb={1.5}>
+            <Button
+              size="small"
+              variant={formMode === 'single' ? 'contained' : 'outlined'}
+              onClick={() => setFormMode('single')}
+            >
+              Jeden štítek
+            </Button>
+            <Button
+              size="small"
+              variant={formMode === 'bulk' ? 'contained' : 'outlined'}
+              onClick={() => setFormMode('bulk')}
+            >
+              Hromadně
+            </Button>
+          </Stack>
+
+          {formMode === 'single' ? (
+            <NewTagForm trackerId={trackerId} onCreated={() => setShowForm(false)} />
+          ) : (
+            <BulkTagForm trackerId={trackerId} onCreated={() => setShowForm(false)} />
+          )}
+
+          <Divider sx={{ my: 1.5 }} />
+          <Button size="small" onClick={() => setShowForm(false)}>
             Skrýt formulář
           </Button>
         </Box>

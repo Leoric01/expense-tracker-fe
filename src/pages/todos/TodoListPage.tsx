@@ -27,6 +27,8 @@ import {
   Checkbox,
   Chip,
   Collapse,
+  Dialog,
+  DialogContent,
   FormControl,
   IconButton,
   InputLabel,
@@ -49,6 +51,19 @@ import {
   TODO_STATUS_LABELS,
 } from './todoUiConstants';
 
+const ImagePreviewDialog: FC<{ url: string; onClose: () => void }> = ({ url, onClose }) => (
+  <Dialog open onClose={onClose} maxWidth="md">
+    <DialogContent sx={{ p: 1 }}>
+      <Box
+        component="img"
+        src={url}
+        alt="Náhled"
+        sx={{ display: 'block', maxWidth: '100%', maxHeight: '80vh', borderRadius: 1 }}
+      />
+    </DialogContent>
+  </Dialog>
+);
+
 type TodoItemProps = {
   todo: TodoFindTree200Item;
   trackerId: string;
@@ -61,6 +76,7 @@ type TodoItemProps = {
 const TodoItem: FC<TodoItemProps> = ({ todo, trackerId, depth = 0, filterParams, onEdit, onAddChild }) => {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(true);
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
 
   const children = (todo.children ?? []) as TodoFindTree200Item[];
   const isDone = todo.status === TodoResponseDtoStatus.DONE;
@@ -174,7 +190,31 @@ const TodoItem: FC<TodoItemProps> = ({ todo, trackerId, depth = 0, filterParams,
             )}
           </Box>
 
-          <Stack direction="row" alignItems="center" spacing={0}>
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+            {todo.imageUrl && (
+              <Tooltip title="Zobrazit obrázek">
+                <Box
+                  component="img"
+                  src={todo.imageUrl}
+                  alt="náhled"
+                  onClick={() => setImagePreviewOpen(true)}
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    objectFit: 'cover',
+                    borderRadius: 1,
+                    cursor: 'pointer',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    flexShrink: 0,
+                    '&:hover': { opacity: 0.85 },
+                  }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </Tooltip>
+            )}
             <Tooltip title="Přidat podúkol">
               <IconButton size="small" onClick={() => onAddChild(todo.id!)}>
                 <AddIcon fontSize="small" />
@@ -203,6 +243,10 @@ const TodoItem: FC<TodoItemProps> = ({ todo, trackerId, depth = 0, filterParams,
           </Stack>
         </Stack>
       </Paper>
+
+      {imagePreviewOpen && todo.imageUrl && (
+        <ImagePreviewDialog url={todo.imageUrl} onClose={() => setImagePreviewOpen(false)} />
+      )}
 
       {children.length > 0 && (
         <Collapse in={expanded}>

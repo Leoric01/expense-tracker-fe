@@ -14,6 +14,7 @@ export type TodoFindTree200Item = {
   parentTodoId?: string;
   title?: string;
   description?: string;
+  imageUrl?: string;
   status?: TodoFindTree200ItemStatus;
   priority?: TodoFindTree200ItemPriority;
   dueDate?: string;

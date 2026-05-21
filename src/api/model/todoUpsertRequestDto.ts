@@ -20,6 +20,8 @@ export interface TodoUpsertRequestDto {
    * @maxLength 1000
    */
   description?: string;
+  /** @pattern ^(https?://res\.cloudinary\.com/.+)?$ */
+  imageUrl?: string;
   status?: TodoUpsertRequestDtoStatus;
   priority?: TodoUpsertRequestDtoPriority;
   dueDate?: string;
