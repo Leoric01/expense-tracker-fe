@@ -25,6 +25,9 @@ import { HabitFormPage } from '@pages/habits/HabitFormPage';
 import { HabitsListPage } from '@pages/habits/HabitsListPage';
 import { HabitsModuleLayout } from '@pages/habits/HabitsModuleLayout';
 import { HabitWeekOverviewPage } from '@pages/habits/HabitWeekOverviewPage';
+import { TodosModuleLayout } from '@pages/todos/TodosModuleLayout';
+import { TodoListPage } from '@pages/todos/TodoListPage';
+import { TodoTagsPage } from '@pages/todos/TodoTagsPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
 import { FinanceModuleLayout } from '@pages/finance/FinanceModuleLayout';
@@ -83,6 +86,15 @@ export const router = createBrowserRouter([
           { path: 'new', element: <HabitFormPage /> },
           { path: ':habitId/edit', element: <HabitFormPage /> },
           { path: ':habitId', element: <HabitDetailPage /> },
+        ],
+      },
+      {
+        path: 'todos',
+        element: <TodosModuleLayout />,
+        children: [
+          { index: true, element: <Navigate to="list" replace /> },
+          { path: 'list', element: <TodoListPage /> },
+          { path: 'tags', element: <TodoTagsPage /> },
         ],
       },
       { path: 'wallets', element: <Navigate to="/prehled" replace /> },

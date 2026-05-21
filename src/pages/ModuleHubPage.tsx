@@ -1,5 +1,6 @@
 import { PageHeading } from '@components/PageHeading';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
+import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import RestaurantOutlinedIcon from '@mui/icons-material/RestaurantOutlined';
 import SelfImprovementOutlinedIcon from '@mui/icons-material/SelfImprovementOutlined';
@@ -45,6 +46,13 @@ const MODULES: ModuleCardConfig[] = [
     description: 'Dashboard, check-iny, plány a profil.',
     Icon: RestaurantOutlinedIcon,
     accent: (t) => ({ bg: alpha(t.palette.success.main, 0.12), fg: t.palette.success.main }),
+  },
+  {
+    to: '/todos/list',
+    title: 'ToDo',
+    description: 'Úkoly, podúkoly, priority a štítky.',
+    Icon: ChecklistOutlinedIcon,
+    accent: (t) => ({ bg: alpha(t.palette.warning.main, 0.12), fg: t.palette.warning.main }),
   },
 ];
 
