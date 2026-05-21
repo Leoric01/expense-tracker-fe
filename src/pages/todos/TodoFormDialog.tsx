@@ -15,14 +15,18 @@ import type {
 } from '@api/model';
 import { TodoUpsertRequestDtoPriority as PriorityEnum, TodoUpsertRequestDtoStatus as StatusEnum } from '@api/model';
 import CloseIcon from '@mui/icons-material/Close';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   IconButton,
   InputLabel,
@@ -31,10 +35,12 @@ import {
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
+import { deleteTodoImage, uploadTodoImageWithFile } from './todoImageApi';
 import { TODO_PRIORITY_LABELS, TODO_STATUS_LABELS } from './todoUiConstants';
 
 type TodoFormDialogProps = {
@@ -56,6 +62,7 @@ export const TodoFormDialog: FC<TodoFormDialogProps> = ({
 }) => {
   const queryClient = useQueryClient();
   const isEdit = Boolean(todo?.id);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -66,6 +73,8 @@ export const TodoFormDialog: FC<TodoFormDialogProps> = ({
   const [note, setNote] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
+  const [imageError, setImageError] = useState('');
 
   const tagsQuery = useQuery({
     queryKey: getTodoTagFindAllQueryKey(trackerId),
@@ -90,6 +99,8 @@ export const TodoFormDialog: FC<TodoFormDialogProps> = ({
       setNote(todo?.note ?? '');
       setSelectedTagIds(todo?.tags?.map((t) => t.id).filter(Boolean) as string[] ?? []);
       setError('');
+      setImageUrl(todo?.imageUrl ?? undefined);
+      setImageError('');
     }
   }, [open, todo]);
 
@@ -108,6 +119,34 @@ export const TodoFormDialog: FC<TodoFormDialogProps> = ({
     onSuccess: () => { invalidate(); onClose(); },
     onError: () => setError('Nepodařilo se uložit změny.'),
   });
+
+  const uploadImageMutation = useMutation({
+    mutationFn: (file: File) => uploadTodoImageWithFile(trackerId, todo!.id!, file),
+    onSuccess: (result) => {
+      setImageUrl(result.imageUrl);
+      setImageError('');
+      invalidate();
+    },
+    onError: () => setImageError('Nahrání obrázku se nepodařilo.'),
+  });
+
+  const deleteImageMutation = useMutation({
+    mutationFn: () => deleteTodoImage(trackerId, todo!.id!),
+    onSuccess: () => {
+      setImageUrl(undefined);
+      setImageError('');
+      invalidate();
+    },
+    onError: () => setImageError('Smazání obrázku se nepodařilo.'),
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageError('');
+    uploadImageMutation.mutate(file);
+    e.target.value = '';
+  };
 
   const handleSubmit = () => {
     if (!title.trim()) {
@@ -263,29 +302,97 @@ export const TodoFormDialog: FC<TodoFormDialogProps> = ({
             inputProps={{ maxLength: 1000 }}
           />
 
-          {todo?.imageUrl && (
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Obrázek
-              </Typography>
-              <Box
-                component="img"
-                src={todo.imageUrl}
-                alt="Obrázek úkolu"
-                sx={{
-                  display: 'block',
-                  maxWidth: '100%',
-                  maxHeight: 260,
-                  objectFit: 'contain',
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                }}
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            </Box>
+          {isEdit && (
+            <>
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Obrázek
+                </Typography>
+
+                {imageUrl ? (
+                  <Stack spacing={1}>
+                    <Box
+                      component="img"
+                      src={imageUrl}
+                      alt="Obrázek úkolu"
+                      sx={{
+                        display: 'block',
+                        maxWidth: '100%',
+                        maxHeight: 240,
+                        objectFit: 'contain',
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={
+                          uploadImageMutation.isPending
+                            ? <CircularProgress size={14} />
+                            : <FileUploadOutlinedIcon fontSize="small" />
+                        }
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadImageMutation.isPending || deleteImageMutation.isPending}
+                      >
+                        Nahradit
+                      </Button>
+                      <Tooltip title="Smazat obrázek">
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          startIcon={
+                            deleteImageMutation.isPending
+                              ? <CircularProgress size={14} color="error" />
+                              : <DeleteOutlineIcon fontSize="small" />
+                          }
+                          onClick={() => deleteImageMutation.mutate()}
+                          disabled={uploadImageMutation.isPending || deleteImageMutation.isPending}
+                        >
+                          Smazat
+                        </Button>
+                      </Tooltip>
+                    </Stack>
+                  </Stack>
+                ) : (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={
+                      uploadImageMutation.isPending
+                        ? <CircularProgress size={14} />
+                        : <FileUploadOutlinedIcon fontSize="small" />
+                    }
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadImageMutation.isPending}
+                  >
+                    Nahrát obrázek
+                  </Button>
+                )}
+
+                <Box
+                  component="input"
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  sx={{ display: 'none' }}
+                />
+
+                {imageError && (
+                  <Typography color="error" variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                    {imageError}
+                  </Typography>
+                )}
+              </Box>
+            </>
           )}
 
           {error && (

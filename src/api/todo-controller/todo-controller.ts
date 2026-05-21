@@ -26,6 +26,7 @@ import type {
   TodoFindTreeParams,
   TodoStatusUpdateRequestDto,
   TodoTagReplaceRequestDto,
+  TodoUploadImageBody,
   TodoUpsertRequestDto,
 } from '../model';
 
@@ -207,6 +208,185 @@ export const useTodoCreate = <TError = unknown, TContext = unknown>(
   TContext
 > => {
   return useMutation(getTodoCreateMutationOptions(options), queryClient);
+};
+export type todoUploadImageResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type todoUploadImageResponseSuccess = todoUploadImageResponse200 & {
+  headers: Headers;
+};
+export type todoUploadImageResponse = todoUploadImageResponseSuccess;
+
+export const getTodoUploadImageUrl = (trackerId: string, todoId: string) => {
+  return `/api/todo/${trackerId}/${todoId}/image`;
+};
+
+export const todoUploadImage = async (
+  trackerId: string,
+  todoId: string,
+  todoUploadImageBody: TodoUploadImageBody,
+  options?: RequestInit,
+): Promise<todoUploadImageResponse> => {
+  const res = await fetch(getTodoUploadImageUrl(trackerId, todoId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(todoUploadImageBody),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: todoUploadImageResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as todoUploadImageResponse;
+};
+
+export const getTodoUploadImageMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof todoUploadImage>>,
+    TError,
+    { trackerId: string; todoId: string; data: TodoUploadImageBody },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof todoUploadImage>>,
+  TError,
+  { trackerId: string; todoId: string; data: TodoUploadImageBody },
+  TContext
+> => {
+  const mutationKey = ['todoUploadImage'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof todoUploadImage>>,
+    { trackerId: string; todoId: string; data: TodoUploadImageBody }
+  > = (props) => {
+    const { trackerId, todoId, data } = props ?? {};
+
+    return todoUploadImage(trackerId, todoId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TodoUploadImageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof todoUploadImage>>
+>;
+export type TodoUploadImageMutationBody = TodoUploadImageBody;
+export type TodoUploadImageMutationError = unknown;
+
+export const useTodoUploadImage = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof todoUploadImage>>,
+      TError,
+      { trackerId: string; todoId: string; data: TodoUploadImageBody },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof todoUploadImage>>,
+  TError,
+  { trackerId: string; todoId: string; data: TodoUploadImageBody },
+  TContext
+> => {
+  return useMutation(getTodoUploadImageMutationOptions(options), queryClient);
+};
+export type todoDeleteImageResponse200 = {
+  data: void;
+  status: 200;
+};
+
+export type todoDeleteImageResponseSuccess = todoDeleteImageResponse200 & {
+  headers: Headers;
+};
+export type todoDeleteImageResponse = todoDeleteImageResponseSuccess;
+
+export const getTodoDeleteImageUrl = (trackerId: string, todoId: string) => {
+  return `/api/todo/${trackerId}/${todoId}/image`;
+};
+
+export const todoDeleteImage = async (
+  trackerId: string,
+  todoId: string,
+  options?: RequestInit,
+): Promise<todoDeleteImageResponse> => {
+  const res = await fetch(getTodoDeleteImageUrl(trackerId, todoId), {
+    ...options,
+    method: 'DELETE',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: todoDeleteImageResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as todoDeleteImageResponse;
+};
+
+export const getTodoDeleteImageMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof todoDeleteImage>>,
+    TError,
+    { trackerId: string; todoId: string },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof todoDeleteImage>>,
+  TError,
+  { trackerId: string; todoId: string },
+  TContext
+> => {
+  const mutationKey = ['todoDeleteImage'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof todoDeleteImage>>,
+    { trackerId: string; todoId: string }
+  > = (props) => {
+    const { trackerId, todoId } = props ?? {};
+
+    return todoDeleteImage(trackerId, todoId, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TodoDeleteImageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof todoDeleteImage>>
+>;
+
+export type TodoDeleteImageMutationError = unknown;
+
+export const useTodoDeleteImage = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof todoDeleteImage>>,
+      TError,
+      { trackerId: string; todoId: string },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof todoDeleteImage>>,
+  TError,
+  { trackerId: string; todoId: string },
+  TContext
+> => {
+  return useMutation(getTodoDeleteImageMutationOptions(options), queryClient);
 };
 export type todoFindByIdResponse200 = {
   data: Blob;

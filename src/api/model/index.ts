@@ -246,6 +246,7 @@ export * from './todoStatusUpdateRequestDtoStatus';
 export * from './todoTagReplaceRequestDto';
 export * from './todoTagResponseDto';
 export * from './todoTagUpsertRequestDto';
+export * from './todoUploadImageBody';
 export * from './todoUpsertRequestDto';
 export * from './todoUpsertRequestDtoPriority';
 export * from './todoUpsertRequestDtoStatus';
