@@ -10,6 +10,7 @@ export interface KanbanStageResponseDto {
   id?: string;
   name?: string;
   stageOrder?: number;
+  color?: string;
   visibleOnBoard?: boolean;
   active?: boolean;
   createdDate?: string;

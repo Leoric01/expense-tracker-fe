@@ -9,6 +9,7 @@ import {
   kanbanStageCreate,
   kanbanStageDelete,
   kanbanStageUpdate,
+  kanbanStageReorder,
   getKanbanBoardFindByIdQueryKey,
 } from '@api/kanban-board-controller/kanban-board-controller';
 import { kanbanCardDelete } from '@api/kanban-card-controller/kanban-card-controller';
@@ -17,6 +18,7 @@ import type {
   KanbanCardMoveStageRequestDto,
   KanbanCardResponseDto,
   KanbanStageCardsResponseDto,
+  KanbanStageReorderRequestDto,
   KanbanStageUpsertRequestDto,
 } from '@api/model';
 import AddIcon from '@mui/icons-material/Add';
@@ -57,6 +59,86 @@ import { DragEvent, FC, KeyboardEvent, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { KanbanCardDialog } from './KanbanCardDialog';
 
+// ─── Color picker ────────────────────────────────────────────────────────────
+
+const STAGE_COLOR_PRESETS = [
+  '#b71c1c',
+  '#880e4f',
+  '#4a148c',
+  '#1a237e',
+  '#006064',
+  '#1b5e20',
+  '#e65100',
+  '#f57f17',
+  '#37474f',
+  '#263238',
+];
+
+type ColorPickerRowProps = { value: string; onChange: (c: string) => void };
+
+const ColorPickerRow: FC<ColorPickerRowProps> = ({ value, onChange }) => (
+  <Stack direction="row" alignItems="center" spacing={0.75} flexWrap="wrap">
+    <Tooltip title="Bez barvy">
+      <Box
+        onClick={() => onChange('')}
+        sx={{
+          width: 22,
+          height: 22,
+          borderRadius: '50%',
+          border: '1px dashed',
+          borderColor: 'text.disabled',
+          cursor: 'pointer',
+          flexShrink: 0,
+          outline: !value ? '2px solid' : '2px solid transparent',
+          outlineColor: !value ? 'text.primary' : 'transparent',
+          outlineOffset: '1px',
+        }}
+      />
+    </Tooltip>
+    {STAGE_COLOR_PRESETS.map((c) => (
+      <Box
+        key={c}
+        onClick={() => onChange(c)}
+        sx={{
+          width: 22,
+          height: 22,
+          borderRadius: '50%',
+          bgcolor: c,
+          cursor: 'pointer',
+          flexShrink: 0,
+          outline: value === c ? '2px solid' : '2px solid transparent',
+          outlineColor: value === c ? 'text.primary' : 'transparent',
+          outlineOffset: '1px',
+          '&:hover': { opacity: 0.8 },
+        }}
+      />
+    ))}
+    <Tooltip title="Vlastní barva">
+      <Box
+        component="input"
+        type="color"
+        value={value && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#ffffff'}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
+        sx={{
+          width: 22,
+          height: 22,
+          borderRadius: '50%',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          flexShrink: 0,
+          outline: value && !STAGE_COLOR_PRESETS.includes(value) ? '2px solid' : '2px solid transparent',
+          outlineColor: value && !STAGE_COLOR_PRESETS.includes(value) ? 'text.primary' : 'transparent',
+          outlineOffset: '1px',
+          backgroundColor: 'transparent',
+          '&::-webkit-color-swatch-wrapper': { padding: 0 },
+          '&::-webkit-color-swatch': { borderRadius: '50%', border: 'none' },
+        }}
+      />
+    </Tooltip>
+  </Stack>
+);
+
 // ─── Priority color helper ────────────────────────────────────────────────────
 
 function priorityColor(p: number | undefined): string {
@@ -79,11 +161,12 @@ type KanbanCardProps = {
   card: KanbanCardResponseDto;
   trackerId: string;
   boardId: string;
+  stageColor?: string;
   onEdit: (card: KanbanCardResponseDto) => void;
   onDragStart: (e: DragEvent, card: KanbanCardResponseDto) => void;
 };
 
-const KanbanCard: FC<KanbanCardProps> = ({ card, trackerId, boardId, onEdit, onDragStart }) => {
+const KanbanCard: FC<KanbanCardProps> = ({ card, trackerId, boardId, stageColor, onEdit, onDragStart }) => {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
@@ -111,7 +194,9 @@ const KanbanCard: FC<KanbanCardProps> = ({ card, trackerId, boardId, onEdit, onD
           cursor: 'grab',
           userSelect: 'none',
           transition: 'box-shadow 0.15s',
-          '&:hover': { boxShadow: 3, borderColor: 'primary.main' },
+          bgcolor: stageColor ? alpha(stageColor, 0.18) : undefined,
+          borderColor: stageColor ? alpha(stageColor, 0.5) : undefined,
+          '&:hover': { boxShadow: 3, borderColor: stageColor ? alpha(stageColor, 0.9) : 'primary.main' },
           '&:hover .card-actions': { opacity: 1 },
           '&:active': { cursor: 'grabbing' },
         }}
@@ -254,14 +339,19 @@ type StageHeaderProps = {
   stage: KanbanStageCardsResponseDto;
   trackerId: string;
   boardId: string;
+  onDragStart: (e: DragEvent) => void;
 };
 
-const StageHeader: FC<StageHeaderProps> = ({ stage, trackerId, boardId }) => {
+const StageHeader: FC<StageHeaderProps> = ({ stage, trackerId, boardId, onDragStart }) => {
   const queryClient = useQueryClient();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [name, setStageName] = useState(stage.name ?? '');
   const [visibleOnBoard, setVisibleOnBoard] = useState(stage.visibleOnBoard ?? true);
+  const [stageOrder, setStageOrder] = useState<string>(
+    stage.stageOrder != null ? String(stage.stageOrder) : '',
+  );
+  const [color, setColor] = useState(stage.color ?? '');
 
   const invalidateSnapshot = () =>
     queryClient.invalidateQueries({
@@ -287,12 +377,19 @@ const StageHeader: FC<StageHeaderProps> = ({ stage, trackerId, boardId }) => {
     setMenuAnchor(null);
     setStageName(stage.name ?? '');
     setVisibleOnBoard(stage.visibleOnBoard ?? true);
+    setStageOrder(stage.stageOrder != null ? String(stage.stageOrder) : '');
+    setColor(stage.color ?? '');
     setEditOpen(true);
   };
 
   const submitEdit = () => {
     if (!name.trim()) return;
-    updateMutation.mutate({ name: name.trim(), visibleOnBoard });
+    updateMutation.mutate({
+      name: name.trim(),
+      visibleOnBoard,
+      stageOrder: stageOrder !== '' ? Number(stageOrder) : undefined,
+      color: color || undefined,
+    });
   };
 
   if (editOpen) {
@@ -316,6 +413,31 @@ const StageHeader: FC<StageHeaderProps> = ({ stage, trackerId, boardId }) => {
           }}
           fullWidth
         />
+        <TextField
+          size="small"
+          label="Pořadí"
+          type="number"
+          value={stageOrder}
+          onChange={(e) => setStageOrder(e.target.value)}
+          fullWidth
+          inputProps={{ min: 0, step: 1 }}
+          helperText="Nechte prázdné pro automatické"
+        />
+        <Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+            Barva sloupce
+          </Typography>
+          <ColorPickerRow value={color} onChange={setColor} />
+          {color && (
+            <Box sx={{ mt: 0.75 }}>
+              <Chip
+                label={name || 'Náhled'}
+                size="small"
+                sx={{ bgcolor: color, color: '#fff' }}
+              />
+            </Box>
+          )}
+        </Box>
         <FormControlLabel
           control={
             <Checkbox
@@ -344,6 +466,22 @@ const StageHeader: FC<StageHeaderProps> = ({ stage, trackerId, boardId }) => {
 
   return (
     <Stack direction="row" alignItems="center" mb={1.5}>
+      <Box
+        draggable
+        onDragStart={(e) => onDragStart(e as unknown as DragEvent)}
+        sx={{
+          cursor: 'grab',
+          color: 'text.disabled',
+          display: 'flex',
+          alignItems: 'center',
+          flexShrink: 0,
+          mr: 0.5,
+          '&:hover': { color: 'text.secondary' },
+          '&:active': { cursor: 'grabbing' },
+        }}
+      >
+        <DragIndicatorIcon sx={{ fontSize: 16 }} />
+      </Box>
       <Stack sx={{ flex: 1, minWidth: 0 }}>
         <Typography variant="subtitle2" fontWeight={700} noWrap>
           {stage.name}
@@ -390,14 +528,20 @@ export const KanbanBoardPage: FC = () => {
     card?: KanbanCardResponseDto | null;
   }>({ open: false });
 
-  // Drag state
+  // Card drag state
   const dragCardRef = useRef<KanbanCardResponseDto | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
+
+  // Stage column drag state
+  const dragStageRef = useRef<KanbanStageCardsResponseDto | null>(null);
+  const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
 
   // Add stage
   const [addStageOpen, setAddStageOpen] = useState(false);
   const [newStageName, setNewStageName] = useState('');
   const [newStageVisible, setNewStageVisible] = useState(true);
+  const [newStageOrder, setNewStageOrder] = useState<string>('');
+  const [newStageColor, setNewStageColor] = useState('');
 
   // Snapshot query (all cards by stage)
   const snapshotQuery = useQuery({
@@ -422,6 +566,13 @@ export const KanbanBoardPage: FC = () => {
     onSuccess: invalidate,
   });
 
+  // Reorder stages mutation
+  const reorderStageMutation = useMutation({
+    mutationFn: (data: KanbanStageReorderRequestDto) =>
+      kanbanStageReorder(trackerId!, boardId!, data),
+    onSuccess: invalidate,
+  });
+
   // Add stage mutation
   const addStageMutation = useMutation({
     mutationFn: (data: KanbanStageUpsertRequestDto) =>
@@ -431,37 +582,78 @@ export const KanbanBoardPage: FC = () => {
       setAddStageOpen(false);
       setNewStageName('');
       setNewStageVisible(true);
+      setNewStageOrder('');
+      setNewStageColor('');
     },
   });
 
   // ─── DnD handlers ────────────────────────────────────────────────────────────
 
-  const handleDragStart = (
-    e: DragEvent,
-    card: KanbanCardResponseDto,
-  ) => {
+  // Card drag
+  const handleDragStart = (e: DragEvent, card: KanbanCardResponseDto) => {
     dragCardRef.current = card;
+    dragStageRef.current = null;
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('kanban/card', card.id ?? '');
+  };
+
+  // Stage column drag (called from the drag handle)
+  const handleColumnDragStart = (e: DragEvent, stage: KanbanStageCardsResponseDto) => {
+    dragStageRef.current = stage;
+    dragCardRef.current = null;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('kanban/stage', stage.id ?? '');
+    e.stopPropagation();
   };
 
   const handleDragOver = (e: DragEvent, stageId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    setDragOverStageId(stageId);
+    if (dragStageRef.current) {
+      setDragOverColumnId(stageId);
+      setDragOverStageId(null);
+    } else {
+      setDragOverStageId(stageId);
+      setDragOverColumnId(null);
+    }
   };
 
   const handleDrop = (e: DragEvent, targetStageId: string) => {
     e.preventDefault();
     setDragOverStageId(null);
-    const card = dragCardRef.current;
-    if (!card || card.stageId === targetStageId) return;
-    moveMutation.mutate({ cardId: card.id!, data: { targetStageId } });
-    dragCardRef.current = null;
+    setDragOverColumnId(null);
+
+    if (dragStageRef.current) {
+      // Stage reorder
+      const dragged = dragStageRef.current;
+      dragStageRef.current = null;
+      if (dragged.id === targetStageId) return;
+
+      const fromIdx = stages.findIndex((s) => s.id === dragged.id);
+      const toIdx = stages.findIndex((s) => s.id === targetStageId);
+      if (fromIdx === -1 || toIdx === -1) return;
+
+      const reordered = [...stages];
+      const [removed] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, removed);
+
+      reorderStageMutation.mutate({
+        items: reordered.map((s, idx) => ({ stageId: s.id!, stageOrder: idx })),
+      });
+    } else if (dragCardRef.current) {
+      // Card move between stages
+      const card = dragCardRef.current;
+      dragCardRef.current = null;
+      if (card.stageId === targetStageId) return;
+      moveMutation.mutate({ cardId: card.id!, data: { targetStageId } });
+    }
   };
 
   const handleDragEnd = () => {
     setDragOverStageId(null);
+    setDragOverColumnId(null);
     dragCardRef.current = null;
+    dragStageRef.current = null;
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────────
@@ -492,6 +684,15 @@ export const KanbanBoardPage: FC = () => {
             snapshot?.boardName ?? 'Nástěnka'
           )}
         </PageHeading>
+        <Button
+          variant="text"
+          size="small"
+          component={Link}
+          to={`/kanban/boards/${boardId}/tags`}
+          sx={{ color: 'text.secondary' }}
+        >
+          Štítky
+        </Button>
         <Button
           variant="outlined"
           size="small"
@@ -526,7 +727,8 @@ export const KanbanBoardPage: FC = () => {
             ))}
 
           {stages.map((stage) => {
-            const isDropTarget = dragOverStageId === stage.id;
+            const isCardDropTarget = dragOverStageId === stage.id;
+            const isColumnDropTarget = dragOverColumnId === stage.id && dragStageRef.current?.id !== stage.id;
             const cards = stage.cards ?? [];
 
             return (
@@ -534,13 +736,21 @@ export const KanbanBoardPage: FC = () => {
                 key={stage.id}
                 onDragOver={(e) => handleDragOver(e, stage.id!)}
                 onDrop={(e) => handleDrop(e, stage.id!)}
-                onDragLeave={() => setDragOverStageId(null)}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDragOverStageId(null);
+                    setDragOverColumnId(null);
+                  }
+                }}
+                onDragEnd={handleDragEnd}
                 sx={{
                   width: 280,
                   flexShrink: 0,
                   display: 'flex',
                   flexDirection: 'column',
                   maxHeight: '100%',
+                  opacity: dragStageRef.current?.id === stage.id ? 0.45 : 1,
+                  transition: 'opacity 0.15s',
                 }}
               >
                 <Paper
@@ -549,17 +759,26 @@ export const KanbanBoardPage: FC = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     maxHeight: '100%',
-                    bgcolor: isDropTarget
+                    bgcolor: isCardDropTarget
                       ? alpha(theme.palette.primary.main, 0.06)
-                      : alpha(theme.palette.action.hover, 0.04),
-                    borderColor: isDropTarget ? 'primary.main' : undefined,
-                    borderWidth: isDropTarget ? 2 : 1,
+                      : '#222a3c',
+                    borderColor: isColumnDropTarget
+                      ? 'secondary.main'
+                      : isCardDropTarget
+                        ? 'primary.main'
+                        : undefined,
+                    borderWidth: isColumnDropTarget || isCardDropTarget ? 2 : 1,
                     transition: 'border-color 0.15s, background 0.15s',
                   }}
                 >
                   {/* Stage header */}
                   <Box sx={{ px: 1.5, pt: 1.5, flexShrink: 0 }}>
-                    <StageHeader stage={stage} trackerId={trackerId} boardId={boardId!} />
+                    <StageHeader
+                      stage={stage}
+                      trackerId={trackerId}
+                      boardId={boardId!}
+                      onDragStart={(e) => handleColumnDragStart(e, stage)}
+                    />
                   </Box>
 
                   {/* Cards list */}
@@ -580,12 +799,13 @@ export const KanbanBoardPage: FC = () => {
                         card={card}
                         trackerId={trackerId}
                         boardId={boardId!}
+                        stageColor={stage.color}
                         onEdit={(c) => setCardDialog({ open: true, card: c })}
                         onDragStart={handleDragStart}
                       />
                     ))}
 
-                    {isDropTarget && (
+                    {isCardDropTarget && (
                       <Box
                         sx={{
                           height: 40,
@@ -604,7 +824,7 @@ export const KanbanBoardPage: FC = () => {
                       </Box>
                     )}
 
-                    {cards.length === 0 && !isDropTarget && (
+                    {cards.length === 0 && !isCardDropTarget && (
                       <Box
                         sx={{
                           py: 2,
@@ -653,17 +873,41 @@ export const KanbanBoardPage: FC = () => {
                     autoFocus
                     inputProps={{ maxLength: 80 }}
                     onKeyDown={(e: KeyboardEvent) => {
-                      if (e.key === 'Enter' && newStageName.trim()) {
-                        addStageMutation.mutate({ name: newStageName.trim(), visibleOnBoard: newStageVisible });
-                      }
                       if (e.key === 'Escape') {
                         setAddStageOpen(false);
                         setNewStageName('');
                         setNewStageVisible(true);
+                        setNewStageOrder('');
                       }
                     }}
                     disabled={addStageMutation.isPending}
                   />
+                  <TextField
+                    size="small"
+                    label="Pořadí"
+                    type="number"
+                    value={newStageOrder}
+                    onChange={(e) => setNewStageOrder(e.target.value)}
+                    fullWidth
+                    inputProps={{ min: 0, step: 1 }}
+                    disabled={addStageMutation.isPending}
+                    helperText="Nechte prázdné pro automatické"
+                  />
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                      Barva sloupce
+                    </Typography>
+                    <ColorPickerRow value={newStageColor} onChange={setNewStageColor} />
+                    {newStageColor && (
+                      <Box sx={{ mt: 0.75 }}>
+                        <Chip
+                          label={newStageName || 'Náhled'}
+                          size="small"
+                          sx={{ bgcolor: newStageColor, color: '#fff' }}
+                        />
+                      </Box>
+                    )}
+                  </Box>
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -681,7 +925,12 @@ export const KanbanBoardPage: FC = () => {
                       variant="contained"
                       onClick={() => {
                         if (newStageName.trim())
-                          addStageMutation.mutate({ name: newStageName.trim(), visibleOnBoard: newStageVisible });
+                          addStageMutation.mutate({
+                            name: newStageName.trim(),
+                            visibleOnBoard: newStageVisible,
+                            stageOrder: newStageOrder !== '' ? Number(newStageOrder) : undefined,
+                            color: newStageColor || undefined,
+                          });
                       }}
                       disabled={addStageMutation.isPending || !newStageName.trim()}
                     >
@@ -689,7 +938,13 @@ export const KanbanBoardPage: FC = () => {
                     </Button>
                     <Button
                       size="small"
-                      onClick={() => { setAddStageOpen(false); setNewStageName(''); setNewStageVisible(true); }}
+                      onClick={() => {
+                        setAddStageOpen(false);
+                        setNewStageName('');
+                        setNewStageVisible(true);
+                        setNewStageOrder('');
+                        setNewStageColor('');
+                      }}
                     >
                       Zrušit
                     </Button>

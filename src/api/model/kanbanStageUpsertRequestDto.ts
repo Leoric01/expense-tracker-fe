@@ -13,6 +13,8 @@ export interface KanbanStageUpsertRequestDto {
    */
   name: string;
   stageOrder?: number;
+  /** @pattern ^#([A-Fa-f0-9]{6})$ */
+  color?: string;
   visibleOnBoard?: boolean;
   active?: boolean;
 }

@@ -10,6 +10,7 @@ export interface KanbanTagResponseDto {
   id?: string;
   name?: string;
   color?: string;
+  tagOrder?: number;
   active?: boolean;
   createdDate?: string;
   lastModifiedDate?: string;

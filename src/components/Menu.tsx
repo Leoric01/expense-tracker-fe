@@ -36,6 +36,7 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
   const isHabitSection = pathname.startsWith('/habits');
   const isTodoSection = pathname.startsWith('/todos');
   const isKanbanSection = pathname.startsWith('/kanban');
+  const kanbanBoardId = pathname.match(/^\/kanban\/boards\/([^/]+)/)?.[1] ?? null;
   const isModuleHubSection = pathname === '/moduly';
   const isTrackerSection = pathname.startsWith('/trackers');
 
@@ -354,11 +355,29 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
           <>
             <NavLink to="/kanban/boards" end style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
               {({ isActive }) => (
-                <ListItemButton selected={isActive || pathname.startsWith('/kanban/boards')} onClick={onMobileClose}>
+                <ListItemButton selected={isActive && !kanbanBoardId} onClick={onMobileClose}>
                   <ListItemText primary="Nástěnky" />
                 </ListItemButton>
               )}
             </NavLink>
+            {kanbanBoardId && (
+              <NavLink to={`/kanban/boards/${kanbanBoardId}`} end style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+                {({ isActive }) => (
+                  <ListItemButton selected={isActive} onClick={onMobileClose}>
+                    <ListItemText primary="Nástěnka" />
+                  </ListItemButton>
+                )}
+              </NavLink>
+            )}
+            {kanbanBoardId && (
+              <NavLink to={`/kanban/boards/${kanbanBoardId}/tags`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+                {({ isActive }) => (
+                  <ListItemButton selected={isActive} onClick={onMobileClose}>
+                    <ListItemText primary="Štítky" />
+                  </ListItemButton>
+                )}
+              </NavLink>
+            )}
           </>
         ) : isModuleHubSection ? null : isTrackerSection ? (
           <>

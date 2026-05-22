@@ -11,6 +11,7 @@ export interface KanbanStageCardsResponseDto {
   id?: string;
   name?: string;
   stageOrder?: number;
+  color?: string;
   visibleOnBoard?: boolean;
   cards?: KanbanCardResponseDto[];
 }

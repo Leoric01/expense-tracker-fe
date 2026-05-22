@@ -14,5 +14,6 @@ export interface KanbanTagUpsertRequestDto {
   name: string;
   /** @pattern ^#([A-Fa-f0-9]{6})$ */
   color?: string;
+  tagOrder?: number;
   active?: boolean;
 }
