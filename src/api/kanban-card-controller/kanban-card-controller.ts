@@ -23,7 +23,7 @@ import type {
 
 import type {
   KanbanCardFindBoardSnapshotParams,
-  KanbanCardMoveRequestDto,
+  KanbanCardMoveStageRequestDto,
   KanbanCardUploadImageBody,
   KanbanCardUpsertRequestDto,
 } from '../model';
@@ -490,6 +490,95 @@ export const useKanbanCardDeleteImage = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getKanbanCardDeleteImageMutationOptions(options), queryClient);
 };
+export type kanbanCardMoveResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type kanbanCardMoveResponseSuccess = kanbanCardMoveResponse200 & {
+  headers: Headers;
+};
+export type kanbanCardMoveResponse = kanbanCardMoveResponseSuccess;
+
+export const getKanbanCardMoveUrl = (trackerId: string, cardId: string) => {
+  return `/api/kanban-card/${trackerId}/${cardId}/move`;
+};
+
+export const kanbanCardMove = async (
+  trackerId: string,
+  cardId: string,
+  kanbanCardMoveStageRequestDto: KanbanCardMoveStageRequestDto,
+  options?: RequestInit,
+): Promise<kanbanCardMoveResponse> => {
+  const res = await fetch(getKanbanCardMoveUrl(trackerId, cardId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(kanbanCardMoveStageRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: kanbanCardMoveResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as kanbanCardMoveResponse;
+};
+
+export const getKanbanCardMoveMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof kanbanCardMove>>,
+    TError,
+    { trackerId: string; cardId: string; data: KanbanCardMoveStageRequestDto },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof kanbanCardMove>>,
+  TError,
+  { trackerId: string; cardId: string; data: KanbanCardMoveStageRequestDto },
+  TContext
+> => {
+  const mutationKey = ['kanbanCardMove'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof kanbanCardMove>>,
+    { trackerId: string; cardId: string; data: KanbanCardMoveStageRequestDto }
+  > = (props) => {
+    const { trackerId, cardId, data } = props ?? {};
+
+    return kanbanCardMove(trackerId, cardId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type KanbanCardMoveMutationResult = NonNullable<Awaited<ReturnType<typeof kanbanCardMove>>>;
+export type KanbanCardMoveMutationBody = KanbanCardMoveStageRequestDto;
+export type KanbanCardMoveMutationError = unknown;
+
+export const useKanbanCardMove = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof kanbanCardMove>>,
+      TError,
+      { trackerId: string; cardId: string; data: KanbanCardMoveStageRequestDto },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof kanbanCardMove>>,
+  TError,
+  { trackerId: string; cardId: string; data: KanbanCardMoveStageRequestDto },
+  TContext
+> => {
+  return useMutation(getKanbanCardMoveMutationOptions(options), queryClient);
+};
 export type kanbanCardFindByIdResponse200 = {
   data: Blob;
   status: 200;
@@ -824,94 +913,4 @@ export const useKanbanCardUpdate = <TError = unknown, TContext = unknown>(
   TContext
 > => {
   return useMutation(getKanbanCardUpdateMutationOptions(options), queryClient);
-};
-export type kanbanCardMoveResponse200 = {
-  data: Blob;
-  status: 200;
-};
-
-export type kanbanCardMoveResponseSuccess = kanbanCardMoveResponse200 & {
-  headers: Headers;
-};
-export type kanbanCardMoveResponse = kanbanCardMoveResponseSuccess;
-
-export const getKanbanCardMoveUrl = (trackerId: string, boardId: string, cardId: string) => {
-  return `/api/kanban-card/${trackerId}/${boardId}/${cardId}/move`;
-};
-
-export const kanbanCardMove = async (
-  trackerId: string,
-  boardId: string,
-  cardId: string,
-  kanbanCardMoveRequestDto: KanbanCardMoveRequestDto,
-  options?: RequestInit,
-): Promise<kanbanCardMoveResponse> => {
-  const res = await fetch(getKanbanCardMoveUrl(trackerId, boardId, cardId), {
-    ...options,
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(kanbanCardMoveRequestDto),
-  });
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-  const data: kanbanCardMoveResponse['data'] = body ? JSON.parse(body) : {};
-  return { data, status: res.status, headers: res.headers } as kanbanCardMoveResponse;
-};
-
-export const getKanbanCardMoveMutationOptions = <TError = unknown, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof kanbanCardMove>>,
-    TError,
-    { trackerId: string; boardId: string; cardId: string; data: KanbanCardMoveRequestDto },
-    TContext
-  >;
-  fetch?: RequestInit;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof kanbanCardMove>>,
-  TError,
-  { trackerId: string; boardId: string; cardId: string; data: KanbanCardMoveRequestDto },
-  TContext
-> => {
-  const mutationKey = ['kanbanCardMove'];
-  const { mutation: mutationOptions, fetch: fetchOptions } = options
-    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, fetch: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof kanbanCardMove>>,
-    { trackerId: string; boardId: string; cardId: string; data: KanbanCardMoveRequestDto }
-  > = (props) => {
-    const { trackerId, boardId, cardId, data } = props ?? {};
-
-    return kanbanCardMove(trackerId, boardId, cardId, data, fetchOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type KanbanCardMoveMutationResult = NonNullable<Awaited<ReturnType<typeof kanbanCardMove>>>;
-export type KanbanCardMoveMutationBody = KanbanCardMoveRequestDto;
-export type KanbanCardMoveMutationError = unknown;
-
-export const useKanbanCardMove = <TError = unknown, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof kanbanCardMove>>,
-      TError,
-      { trackerId: string; boardId: string; cardId: string; data: KanbanCardMoveRequestDto },
-      TContext
-    >;
-    fetch?: RequestInit;
-  },
-  queryClient?: QueryClient,
-): UseMutationResult<
-  Awaited<ReturnType<typeof kanbanCardMove>>,
-  TError,
-  { trackerId: string; boardId: string; cardId: string; data: KanbanCardMoveRequestDto },
-  TContext
-> => {
-  return useMutation(getKanbanCardMoveMutationOptions(options), queryClient);
 };

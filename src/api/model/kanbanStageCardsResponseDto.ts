@@ -5,12 +5,12 @@
  * Swagger dokumentace pro ExpenseTracker backend
  * OpenAPI spec version: 1.0
  */
-import type { KanbanStageCardsResponseDtoCardsItem } from './kanbanStageCardsResponseDtoCardsItem';
+import type { KanbanCardResponseDto } from './kanbanCardResponseDto';
 
 export interface KanbanStageCardsResponseDto {
   id?: string;
   name?: string;
   stageOrder?: number;
   visibleOnBoard?: boolean;
-  cards?: KanbanStageCardsResponseDtoCardsItem[];
+  cards?: KanbanCardResponseDto[];
 }

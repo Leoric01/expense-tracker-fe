@@ -14,9 +14,9 @@ import {
 import { kanbanCardDelete } from '@api/kanban-card-controller/kanban-card-controller';
 import type {
   KanbanBoardSnapshotResponseDto,
-  KanbanCardMoveRequestDto,
+  KanbanCardMoveStageRequestDto,
+  KanbanCardResponseDto,
   KanbanStageCardsResponseDto,
-  KanbanStageCardsResponseDtoCardsItem,
   KanbanStageUpsertRequestDto,
 } from '@api/model';
 import AddIcon from '@mui/icons-material/Add';
@@ -31,12 +31,14 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   Menu,
@@ -74,11 +76,11 @@ function priorityLabel(p: number | undefined): string {
 // ─── Kanban card component ────────────────────────────────────────────────────
 
 type KanbanCardProps = {
-  card: KanbanStageCardsResponseDtoCardsItem;
+  card: KanbanCardResponseDto;
   trackerId: string;
   boardId: string;
-  onEdit: (card: KanbanStageCardsResponseDtoCardsItem) => void;
-  onDragStart: (e: DragEvent, card: KanbanStageCardsResponseDtoCardsItem) => void;
+  onEdit: (card: KanbanCardResponseDto) => void;
+  onDragStart: (e: DragEvent, card: KanbanCardResponseDto) => void;
 };
 
 const KanbanCard: FC<KanbanCardProps> = ({ card, trackerId, boardId, onEdit, onDragStart }) => {
@@ -259,6 +261,7 @@ const StageHeader: FC<StageHeaderProps> = ({ stage, trackerId, boardId }) => {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [name, setStageName] = useState(stage.name ?? '');
+  const [visibleOnBoard, setVisibleOnBoard] = useState(stage.visibleOnBoard ?? true);
 
   const invalidateSnapshot = () =>
     queryClient.invalidateQueries({
@@ -280,16 +283,30 @@ const StageHeader: FC<StageHeaderProps> = ({ stage, trackerId, boardId }) => {
     onSuccess: () => { invalidateSnapshot(); invalidateBoard(); },
   });
 
+  const openEdit = () => {
+    setMenuAnchor(null);
+    setStageName(stage.name ?? '');
+    setVisibleOnBoard(stage.visibleOnBoard ?? true);
+    setEditOpen(true);
+  };
+
+  const submitEdit = () => {
+    if (!name.trim()) return;
+    updateMutation.mutate({ name: name.trim(), visibleOnBoard });
+  };
+
   if (editOpen) {
     return (
-      <Stack direction="row" spacing={0.5} alignItems="center" mb={1.5}>
+      <Stack spacing={1} mb={1.5}>
         <TextField
           size="small"
+          label="Název sloupce"
           value={name}
           onChange={(e) => setStageName(e.target.value)}
           autoFocus
+          inputProps={{ maxLength: 80 }}
           onKeyDown={(e: KeyboardEvent) => {
-            if (e.key === 'Enter') updateMutation.mutate({ name: name.trim(), visibleOnBoard: stage.visibleOnBoard });
+            if (e.key === 'Enter') submitEdit();
             if (e.key === 'Escape') setEditOpen(false);
           }}
           InputProps={{
@@ -297,18 +314,46 @@ const StageHeader: FC<StageHeaderProps> = ({ stage, trackerId, boardId }) => {
               <InputAdornment position="end"><CircularProgress size={14} /></InputAdornment>
             ) : undefined,
           }}
-          sx={{ flex: 1 }}
+          fullWidth
         />
-        <IconButton size="small" onClick={() => setEditOpen(false)}><DeleteOutlineIcon fontSize="small" /></IconButton>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={visibleOnBoard}
+              onChange={(e) => setVisibleOnBoard(e.target.checked)}
+              size="small"
+            />
+          }
+          label={<Typography variant="caption">Zobrazovat na nástěnce</Typography>}
+          sx={{ m: 0 }}
+        />
+        <Stack direction="row" spacing={0.75}>
+          <Button
+            size="small"
+            variant="contained"
+            onClick={submitEdit}
+            disabled={updateMutation.isPending || !name.trim()}
+          >
+            Uložit
+          </Button>
+          <Button size="small" onClick={() => setEditOpen(false)}>Zrušit</Button>
+        </Stack>
       </Stack>
     );
   }
 
   return (
     <Stack direction="row" alignItems="center" mb={1.5}>
-      <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }} noWrap>
-        {stage.name}
-      </Typography>
+      <Stack sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="subtitle2" fontWeight={700} noWrap>
+          {stage.name}
+        </Typography>
+        {stage.visibleOnBoard === false && (
+          <Typography variant="caption" color="text.disabled" sx={{ lineHeight: 1 }}>
+            skrytý
+          </Typography>
+        )}
+      </Stack>
       <Typography variant="caption" color="text.disabled" sx={{ mr: 0.5 }}>
         {stage.cards?.length ?? 0}
       </Typography>
@@ -316,8 +361,8 @@ const StageHeader: FC<StageHeaderProps> = ({ stage, trackerId, boardId }) => {
         <MoreHorizIcon fontSize="small" />
       </IconButton>
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-        <MenuItem onClick={() => { setMenuAnchor(null); setStageName(stage.name ?? ''); setEditOpen(true); }}>
-          <EditOutlinedIcon fontSize="small" sx={{ mr: 1 }} /> Přejmenovat
+        <MenuItem onClick={openEdit}>
+          <EditOutlinedIcon fontSize="small" sx={{ mr: 1 }} /> Upravit sloupec
         </MenuItem>
         <MenuItem
           onClick={() => { setMenuAnchor(null); deleteMutation.mutate(); }}
@@ -342,16 +387,17 @@ export const KanbanBoardPage: FC = () => {
   const [cardDialog, setCardDialog] = useState<{
     open: boolean;
     stageId?: string;
-    card?: KanbanStageCardsResponseDtoCardsItem | null;
+    card?: KanbanCardResponseDto | null;
   }>({ open: false });
 
   // Drag state
-  const dragCardRef = useRef<KanbanStageCardsResponseDtoCardsItem | null>(null);
+  const dragCardRef = useRef<KanbanCardResponseDto | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
 
   // Add stage
   const [addStageOpen, setAddStageOpen] = useState(false);
   const [newStageName, setNewStageName] = useState('');
+  const [newStageVisible, setNewStageVisible] = useState(true);
 
   // Snapshot query (all cards by stage)
   const snapshotQuery = useQuery({
@@ -371,8 +417,8 @@ export const KanbanBoardPage: FC = () => {
 
   // Move card mutation
   const moveMutation = useMutation({
-    mutationFn: ({ cardId, data }: { cardId: string; data: KanbanCardMoveRequestDto }) =>
-      kanbanCardMove(trackerId!, boardId!, cardId, data),
+    mutationFn: ({ cardId, data }: { cardId: string; data: KanbanCardMoveStageRequestDto }) =>
+      kanbanCardMove(trackerId!, cardId, data),
     onSuccess: invalidate,
   });
 
@@ -384,6 +430,7 @@ export const KanbanBoardPage: FC = () => {
       invalidate();
       setAddStageOpen(false);
       setNewStageName('');
+      setNewStageVisible(true);
     },
   });
 
@@ -391,7 +438,7 @@ export const KanbanBoardPage: FC = () => {
 
   const handleDragStart = (
     e: DragEvent,
-    card: KanbanStageCardsResponseDtoCardsItem,
+    card: KanbanCardResponseDto,
   ) => {
     dragCardRef.current = card;
     e.dataTransfer.effectAllowed = 'move';
@@ -408,7 +455,7 @@ export const KanbanBoardPage: FC = () => {
     setDragOverStageId(null);
     const card = dragCardRef.current;
     if (!card || card.stageId === targetStageId) return;
-    moveMutation.mutate({ cardId: card.id!, data: { stageId: targetStageId } });
+    moveMutation.mutate({ cardId: card.id!, data: { targetStageId } });
     dragCardRef.current = null;
   };
 
@@ -596,43 +643,57 @@ export const KanbanBoardPage: FC = () => {
           {addStageOpen && (
             <Box sx={{ width: 280, flexShrink: 0 }}>
               <Paper variant="outlined" sx={{ p: 1.5 }}>
-                <TextField
-                  size="small"
-                  label="Název sloupce"
-                  value={newStageName}
-                  onChange={(e) => setNewStageName(e.target.value)}
-                  fullWidth
-                  autoFocus
-                  inputProps={{ maxLength: 80 }}
-                  onKeyDown={(e: KeyboardEvent) => {
-                    if (e.key === 'Enter' && newStageName.trim()) {
-                      addStageMutation.mutate({ name: newStageName.trim(), visibleOnBoard: true });
-                    }
-                    if (e.key === 'Escape') {
-                      setAddStageOpen(false);
-                      setNewStageName('');
-                    }
-                  }}
-                  disabled={addStageMutation.isPending}
-                />
-                <Stack direction="row" spacing={1} mt={1}>
-                  <Button
+                <Stack spacing={1.25}>
+                  <TextField
                     size="small"
-                    variant="contained"
-                    onClick={() => {
-                      if (newStageName.trim())
-                        addStageMutation.mutate({ name: newStageName.trim(), visibleOnBoard: true });
+                    label="Název sloupce"
+                    value={newStageName}
+                    onChange={(e) => setNewStageName(e.target.value)}
+                    fullWidth
+                    autoFocus
+                    inputProps={{ maxLength: 80 }}
+                    onKeyDown={(e: KeyboardEvent) => {
+                      if (e.key === 'Enter' && newStageName.trim()) {
+                        addStageMutation.mutate({ name: newStageName.trim(), visibleOnBoard: newStageVisible });
+                      }
+                      if (e.key === 'Escape') {
+                        setAddStageOpen(false);
+                        setNewStageName('');
+                        setNewStageVisible(true);
+                      }
                     }}
-                    disabled={addStageMutation.isPending || !newStageName.trim()}
-                  >
-                    Přidat
-                  </Button>
-                  <Button
-                    size="small"
-                    onClick={() => { setAddStageOpen(false); setNewStageName(''); }}
-                  >
-                    Zrušit
-                  </Button>
+                    disabled={addStageMutation.isPending}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={newStageVisible}
+                        onChange={(e) => setNewStageVisible(e.target.checked)}
+                        size="small"
+                      />
+                    }
+                    label={<Typography variant="caption">Zobrazovat na nástěnce</Typography>}
+                    sx={{ m: 0 }}
+                  />
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => {
+                        if (newStageName.trim())
+                          addStageMutation.mutate({ name: newStageName.trim(), visibleOnBoard: newStageVisible });
+                      }}
+                      disabled={addStageMutation.isPending || !newStageName.trim()}
+                    >
+                      Přidat
+                    </Button>
+                    <Button
+                      size="small"
+                      onClick={() => { setAddStageOpen(false); setNewStageName(''); setNewStageVisible(true); }}
+                    >
+                      Zrušit
+                    </Button>
+                  </Stack>
                 </Stack>
               </Paper>
             </Box>

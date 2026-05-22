@@ -8,8 +8,8 @@ import {
   getKanbanTagFindAllQueryKey,
 } from '@api/kanban-tag-controller/kanban-tag-controller';
 import type {
+  KanbanCardResponseDto,
   KanbanCardUpsertRequestDto,
-  KanbanStageCardsResponseDtoCardsItem,
   KanbanTagResponseDto,
 } from '@api/model';
 import CloseIcon from '@mui/icons-material/Close';
@@ -41,7 +41,7 @@ type KanbanCardDialogProps = {
   trackerId: string;
   boardId: string;
   stageId?: string;
-  card?: KanbanStageCardsResponseDtoCardsItem | null;
+  card?: KanbanCardResponseDto | null;
 };
 
 export const KanbanCardDialog: FC<KanbanCardDialogProps> = ({
@@ -110,7 +110,6 @@ export const KanbanCardDialog: FC<KanbanCardDialogProps> = ({
       priority: priority !== 5 ? priority : undefined,
       dueDate: dueDate || undefined,
       tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
-      active: true,
     };
     if (isEdit) updateMutation.mutate(payload);
     else createMutation.mutate(payload);

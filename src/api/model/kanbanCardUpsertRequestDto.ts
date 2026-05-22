@@ -8,7 +8,6 @@
 
 export interface KanbanCardUpsertRequestDto {
   stageId?: string;
-  parentCardId?: string;
   /**
    * @minLength 0
    * @maxLength 180
@@ -26,5 +25,4 @@ export interface KanbanCardUpsertRequestDto {
   dueDate?: string;
   cardOrder?: number;
   tagIds?: string[];
-  active?: boolean;
 }

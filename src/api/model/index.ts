@@ -184,6 +184,7 @@ export * from './kanbanBoardSnapshotResponseDto';
 export * from './kanbanBoardUpsertRequestDto';
 export * from './kanbanCardFindBoardSnapshotParams';
 export * from './kanbanCardMoveRequestDto';
+export * from './kanbanCardMoveStageRequestDto';
 export * from './kanbanCardResponseDto';
 export * from './kanbanCardUploadImageBody';
 export * from './kanbanCardUpsertRequestDto';

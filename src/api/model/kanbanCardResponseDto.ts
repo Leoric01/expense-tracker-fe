@@ -10,16 +10,13 @@ import type { KanbanTagResponseDto } from './kanbanTagResponseDto';
 export interface KanbanCardResponseDto {
   id?: string;
   stageId?: string;
-  parentCardId?: string;
   title?: string;
   description?: string;
   imageUrl?: string;
   priority?: number;
   dueDate?: string;
   cardOrder?: number;
-  active?: boolean;
   tags?: KanbanTagResponseDto[];
-  children?: unknown[];
   createdDate?: string;
   lastModifiedDate?: string;
 }
