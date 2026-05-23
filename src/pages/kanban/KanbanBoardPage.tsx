@@ -688,7 +688,7 @@ export const KanbanBoardPage: FC = () => {
           variant="text"
           size="small"
           component={Link}
-          to={`/kanban/boards/${boardId}/tags`}
+          to="/kanban/tags"
           sx={{ color: 'text.secondary' }}
         >
           Štítky

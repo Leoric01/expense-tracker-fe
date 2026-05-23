@@ -369,15 +369,13 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
                 )}
               </NavLink>
             )}
-            {kanbanBoardId && (
-              <NavLink to={`/kanban/boards/${kanbanBoardId}/tags`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-                {({ isActive }) => (
-                  <ListItemButton selected={isActive} onClick={onMobileClose}>
-                    <ListItemText primary="Štítky" />
-                  </ListItemButton>
-                )}
-              </NavLink>
-            )}
+            <NavLink to="/kanban/tags" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {({ isActive }) => (
+                <ListItemButton selected={isActive} onClick={onMobileClose}>
+                  <ListItemText primary="Štítky" />
+                </ListItemButton>
+              )}
+            </NavLink>
           </>
         ) : isModuleHubSection ? null : isTrackerSection ? (
           <>

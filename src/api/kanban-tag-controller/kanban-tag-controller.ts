@@ -33,16 +33,15 @@ export type kanbanTagFindAllResponseSuccess = kanbanTagFindAllResponse200 & {
 };
 export type kanbanTagFindAllResponse = kanbanTagFindAllResponseSuccess;
 
-export const getKanbanTagFindAllUrl = (trackerId: string, boardId: string) => {
-  return `/api/kanban-tag/${trackerId}/${boardId}`;
+export const getKanbanTagFindAllUrl = (trackerId: string) => {
+  return `/api/kanban-tag/${trackerId}`;
 };
 
 export const kanbanTagFindAll = async (
   trackerId: string,
-  boardId: string,
   options?: RequestInit,
 ): Promise<kanbanTagFindAllResponse> => {
-  const res = await fetch(getKanbanTagFindAllUrl(trackerId, boardId), {
+  const res = await fetch(getKanbanTagFindAllUrl(trackerId), {
     ...options,
     method: 'GET',
   });
@@ -53,8 +52,8 @@ export const kanbanTagFindAll = async (
   return { data, status: res.status, headers: res.headers } as kanbanTagFindAllResponse;
 };
 
-export const getKanbanTagFindAllQueryKey = (trackerId: string, boardId: string) => {
-  return [`/api/kanban-tag/${trackerId}/${boardId}`] as const;
+export const getKanbanTagFindAllQueryKey = (trackerId: string) => {
+  return [`/api/kanban-tag/${trackerId}`] as const;
 };
 
 export const getKanbanTagFindAllQueryOptions = <
@@ -62,7 +61,6 @@ export const getKanbanTagFindAllQueryOptions = <
   TError = unknown,
 >(
   trackerId: string,
-  boardId: string,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof kanbanTagFindAll>>, TError, TData>>;
     fetch?: RequestInit;
@@ -70,19 +68,16 @@ export const getKanbanTagFindAllQueryOptions = <
 ) => {
   const { query: queryOptions, fetch: fetchOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getKanbanTagFindAllQueryKey(trackerId, boardId);
+  const queryKey = queryOptions?.queryKey ?? getKanbanTagFindAllQueryKey(trackerId);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof kanbanTagFindAll>>> = ({ signal }) =>
-    kanbanTagFindAll(trackerId, boardId, { signal, ...fetchOptions });
+    kanbanTagFindAll(trackerId, { signal, ...fetchOptions });
 
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!(trackerId && boardId),
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof kanbanTagFindAll>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
+  return { queryKey, queryFn, enabled: !!trackerId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof kanbanTagFindAll>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
 };
 
 export type KanbanTagFindAllQueryResult = NonNullable<Awaited<ReturnType<typeof kanbanTagFindAll>>>;
@@ -93,7 +88,6 @@ export function useKanbanTagFindAll<
   TError = unknown,
 >(
   trackerId: string,
-  boardId: string,
   options: {
     query: Partial<UseQueryOptions<Awaited<ReturnType<typeof kanbanTagFindAll>>, TError, TData>> &
       Pick<
@@ -113,7 +107,6 @@ export function useKanbanTagFindAll<
   TError = unknown,
 >(
   trackerId: string,
-  boardId: string,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof kanbanTagFindAll>>, TError, TData>> &
       Pick<
@@ -133,7 +126,6 @@ export function useKanbanTagFindAll<
   TError = unknown,
 >(
   trackerId: string,
-  boardId: string,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof kanbanTagFindAll>>, TError, TData>>;
     fetch?: RequestInit;
@@ -146,14 +138,13 @@ export function useKanbanTagFindAll<
   TError = unknown,
 >(
   trackerId: string,
-  boardId: string,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof kanbanTagFindAll>>, TError, TData>>;
     fetch?: RequestInit;
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getKanbanTagFindAllQueryOptions(trackerId, boardId, options);
+  const queryOptions = getKanbanTagFindAllQueryOptions(trackerId, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
@@ -172,17 +163,16 @@ export type kanbanTagCreateResponseSuccess = kanbanTagCreateResponse200 & {
 };
 export type kanbanTagCreateResponse = kanbanTagCreateResponseSuccess;
 
-export const getKanbanTagCreateUrl = (trackerId: string, boardId: string) => {
-  return `/api/kanban-tag/${trackerId}/${boardId}`;
+export const getKanbanTagCreateUrl = (trackerId: string) => {
+  return `/api/kanban-tag/${trackerId}`;
 };
 
 export const kanbanTagCreate = async (
   trackerId: string,
-  boardId: string,
   kanbanTagUpsertRequestDto: KanbanTagUpsertRequestDto,
   options?: RequestInit,
 ): Promise<kanbanTagCreateResponse> => {
-  const res = await fetch(getKanbanTagCreateUrl(trackerId, boardId), {
+  const res = await fetch(getKanbanTagCreateUrl(trackerId), {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -199,14 +189,14 @@ export const getKanbanTagCreateMutationOptions = <TError = unknown, TContext = u
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof kanbanTagCreate>>,
     TError,
-    { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto },
+    { trackerId: string; data: KanbanTagUpsertRequestDto },
     TContext
   >;
   fetch?: RequestInit;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof kanbanTagCreate>>,
   TError,
-  { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto },
+  { trackerId: string; data: KanbanTagUpsertRequestDto },
   TContext
 > => {
   const mutationKey = ['kanbanTagCreate'];
@@ -218,11 +208,11 @@ export const getKanbanTagCreateMutationOptions = <TError = unknown, TContext = u
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof kanbanTagCreate>>,
-    { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto }
+    { trackerId: string; data: KanbanTagUpsertRequestDto }
   > = (props) => {
-    const { trackerId, boardId, data } = props ?? {};
+    const { trackerId, data } = props ?? {};
 
-    return kanbanTagCreate(trackerId, boardId, data, fetchOptions);
+    return kanbanTagCreate(trackerId, data, fetchOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -239,7 +229,7 @@ export const useKanbanTagCreate = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof kanbanTagCreate>>,
       TError,
-      { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto },
+      { trackerId: string; data: KanbanTagUpsertRequestDto },
       TContext
     >;
     fetch?: RequestInit;
@@ -248,7 +238,7 @@ export const useKanbanTagCreate = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof kanbanTagCreate>>,
   TError,
-  { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto },
+  { trackerId: string; data: KanbanTagUpsertRequestDto },
   TContext
 > => {
   return useMutation(getKanbanTagCreateMutationOptions(options), queryClient);
@@ -263,17 +253,16 @@ export type kanbanTagCreateBulkResponseSuccess = kanbanTagCreateBulkResponse200 
 };
 export type kanbanTagCreateBulkResponse = kanbanTagCreateBulkResponseSuccess;
 
-export const getKanbanTagCreateBulkUrl = (trackerId: string, boardId: string) => {
-  return `/api/kanban-tag/${trackerId}/${boardId}/bulk`;
+export const getKanbanTagCreateBulkUrl = (trackerId: string) => {
+  return `/api/kanban-tag/${trackerId}/bulk`;
 };
 
 export const kanbanTagCreateBulk = async (
   trackerId: string,
-  boardId: string,
   kanbanTagUpsertRequestDto: KanbanTagUpsertRequestDto[],
   options?: RequestInit,
 ): Promise<kanbanTagCreateBulkResponse> => {
-  const res = await fetch(getKanbanTagCreateBulkUrl(trackerId, boardId), {
+  const res = await fetch(getKanbanTagCreateBulkUrl(trackerId), {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -293,14 +282,14 @@ export const getKanbanTagCreateBulkMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof kanbanTagCreateBulk>>,
     TError,
-    { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto[] },
+    { trackerId: string; data: KanbanTagUpsertRequestDto[] },
     TContext
   >;
   fetch?: RequestInit;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof kanbanTagCreateBulk>>,
   TError,
-  { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto[] },
+  { trackerId: string; data: KanbanTagUpsertRequestDto[] },
   TContext
 > => {
   const mutationKey = ['kanbanTagCreateBulk'];
@@ -312,11 +301,11 @@ export const getKanbanTagCreateBulkMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof kanbanTagCreateBulk>>,
-    { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto[] }
+    { trackerId: string; data: KanbanTagUpsertRequestDto[] }
   > = (props) => {
-    const { trackerId, boardId, data } = props ?? {};
+    const { trackerId, data } = props ?? {};
 
-    return kanbanTagCreateBulk(trackerId, boardId, data, fetchOptions);
+    return kanbanTagCreateBulk(trackerId, data, fetchOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -333,7 +322,7 @@ export const useKanbanTagCreateBulk = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof kanbanTagCreateBulk>>,
       TError,
-      { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto[] },
+      { trackerId: string; data: KanbanTagUpsertRequestDto[] },
       TContext
     >;
     fetch?: RequestInit;
@@ -342,7 +331,7 @@ export const useKanbanTagCreateBulk = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof kanbanTagCreateBulk>>,
   TError,
-  { trackerId: string; boardId: string; data: KanbanTagUpsertRequestDto[] },
+  { trackerId: string; data: KanbanTagUpsertRequestDto[] },
   TContext
 > => {
   return useMutation(getKanbanTagCreateBulkMutationOptions(options), queryClient);
@@ -357,17 +346,16 @@ export type kanbanTagDeleteResponseSuccess = kanbanTagDeleteResponse200 & {
 };
 export type kanbanTagDeleteResponse = kanbanTagDeleteResponseSuccess;
 
-export const getKanbanTagDeleteUrl = (trackerId: string, boardId: string, tagId: string) => {
-  return `/api/kanban-tag/${trackerId}/${boardId}/${tagId}`;
+export const getKanbanTagDeleteUrl = (trackerId: string, tagId: string) => {
+  return `/api/kanban-tag/${trackerId}/${tagId}`;
 };
 
 export const kanbanTagDelete = async (
   trackerId: string,
-  boardId: string,
   tagId: string,
   options?: RequestInit,
 ): Promise<kanbanTagDeleteResponse> => {
-  const res = await fetch(getKanbanTagDeleteUrl(trackerId, boardId, tagId), {
+  const res = await fetch(getKanbanTagDeleteUrl(trackerId, tagId), {
     ...options,
     method: 'DELETE',
   });
@@ -382,14 +370,14 @@ export const getKanbanTagDeleteMutationOptions = <TError = unknown, TContext = u
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof kanbanTagDelete>>,
     TError,
-    { trackerId: string; boardId: string; tagId: string },
+    { trackerId: string; tagId: string },
     TContext
   >;
   fetch?: RequestInit;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof kanbanTagDelete>>,
   TError,
-  { trackerId: string; boardId: string; tagId: string },
+  { trackerId: string; tagId: string },
   TContext
 > => {
   const mutationKey = ['kanbanTagDelete'];
@@ -401,11 +389,11 @@ export const getKanbanTagDeleteMutationOptions = <TError = unknown, TContext = u
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof kanbanTagDelete>>,
-    { trackerId: string; boardId: string; tagId: string }
+    { trackerId: string; tagId: string }
   > = (props) => {
-    const { trackerId, boardId, tagId } = props ?? {};
+    const { trackerId, tagId } = props ?? {};
 
-    return kanbanTagDelete(trackerId, boardId, tagId, fetchOptions);
+    return kanbanTagDelete(trackerId, tagId, fetchOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -422,7 +410,7 @@ export const useKanbanTagDelete = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof kanbanTagDelete>>,
       TError,
-      { trackerId: string; boardId: string; tagId: string },
+      { trackerId: string; tagId: string },
       TContext
     >;
     fetch?: RequestInit;
@@ -431,7 +419,7 @@ export const useKanbanTagDelete = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof kanbanTagDelete>>,
   TError,
-  { trackerId: string; boardId: string; tagId: string },
+  { trackerId: string; tagId: string },
   TContext
 > => {
   return useMutation(getKanbanTagDeleteMutationOptions(options), queryClient);
@@ -446,18 +434,17 @@ export type kanbanTagUpdateResponseSuccess = kanbanTagUpdateResponse200 & {
 };
 export type kanbanTagUpdateResponse = kanbanTagUpdateResponseSuccess;
 
-export const getKanbanTagUpdateUrl = (trackerId: string, boardId: string, tagId: string) => {
-  return `/api/kanban-tag/${trackerId}/${boardId}/${tagId}`;
+export const getKanbanTagUpdateUrl = (trackerId: string, tagId: string) => {
+  return `/api/kanban-tag/${trackerId}/${tagId}`;
 };
 
 export const kanbanTagUpdate = async (
   trackerId: string,
-  boardId: string,
   tagId: string,
   kanbanTagUpsertRequestDto: KanbanTagUpsertRequestDto,
   options?: RequestInit,
 ): Promise<kanbanTagUpdateResponse> => {
-  const res = await fetch(getKanbanTagUpdateUrl(trackerId, boardId, tagId), {
+  const res = await fetch(getKanbanTagUpdateUrl(trackerId, tagId), {
     ...options,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -474,14 +461,14 @@ export const getKanbanTagUpdateMutationOptions = <TError = unknown, TContext = u
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof kanbanTagUpdate>>,
     TError,
-    { trackerId: string; boardId: string; tagId: string; data: KanbanTagUpsertRequestDto },
+    { trackerId: string; tagId: string; data: KanbanTagUpsertRequestDto },
     TContext
   >;
   fetch?: RequestInit;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof kanbanTagUpdate>>,
   TError,
-  { trackerId: string; boardId: string; tagId: string; data: KanbanTagUpsertRequestDto },
+  { trackerId: string; tagId: string; data: KanbanTagUpsertRequestDto },
   TContext
 > => {
   const mutationKey = ['kanbanTagUpdate'];
@@ -493,11 +480,11 @@ export const getKanbanTagUpdateMutationOptions = <TError = unknown, TContext = u
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof kanbanTagUpdate>>,
-    { trackerId: string; boardId: string; tagId: string; data: KanbanTagUpsertRequestDto }
+    { trackerId: string; tagId: string; data: KanbanTagUpsertRequestDto }
   > = (props) => {
-    const { trackerId, boardId, tagId, data } = props ?? {};
+    const { trackerId, tagId, data } = props ?? {};
 
-    return kanbanTagUpdate(trackerId, boardId, tagId, data, fetchOptions);
+    return kanbanTagUpdate(trackerId, tagId, data, fetchOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -514,7 +501,7 @@ export const useKanbanTagUpdate = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof kanbanTagUpdate>>,
       TError,
-      { trackerId: string; boardId: string; tagId: string; data: KanbanTagUpsertRequestDto },
+      { trackerId: string; tagId: string; data: KanbanTagUpsertRequestDto },
       TContext
     >;
     fetch?: RequestInit;
@@ -523,7 +510,7 @@ export const useKanbanTagUpdate = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof kanbanTagUpdate>>,
   TError,
-  { trackerId: string; boardId: string; tagId: string; data: KanbanTagUpsertRequestDto },
+  { trackerId: string; tagId: string; data: KanbanTagUpsertRequestDto },
   TContext
 > => {
   return useMutation(getKanbanTagUpdateMutationOptions(options), queryClient);

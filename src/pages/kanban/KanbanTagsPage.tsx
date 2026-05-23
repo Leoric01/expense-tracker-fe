@@ -9,7 +9,6 @@ import {
 } from '@api/kanban-tag-controller/kanban-tag-controller';
 import type { KanbanTagResponseDto, KanbanTagUpsertRequestDto } from '@api/model';
 import AddIcon from '@mui/icons-material/Add';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -30,27 +29,16 @@ import {
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FC, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
 
 // ─── Color picker ────────────────────────────────────────────────────────────
 
 const COLOR_PRESETS = [
-  '#e53935',
-  '#8e24aa',
-  '#1e88e5',
-  '#00897b',
-  '#43a047',
-  '#f4511e',
-  '#fb8c00',
-  '#fdd835',
-  '#6d4c41',
-  '#546e7a',
+  '#e53935', '#8e24aa', '#1e88e5', '#00897b',
+  '#43a047', '#f4511e', '#fb8c00', '#fdd835',
+  '#6d4c41', '#546e7a',
 ];
 
-type ColorPickerRowProps = {
-  value: string;
-  onChange: (color: string) => void;
-};
+type ColorPickerRowProps = { value: string; onChange: (color: string) => void };
 
 const ColorPickerRow: FC<ColorPickerRowProps> = ({ value, onChange }) => (
   <Stack direction="row" alignItems="center" spacing={0.75} flexWrap="wrap">
@@ -59,12 +47,8 @@ const ColorPickerRow: FC<ColorPickerRowProps> = ({ value, onChange }) => (
         key={c}
         onClick={() => onChange(c)}
         sx={{
-          width: 22,
-          height: 22,
-          borderRadius: '50%',
-          bgcolor: c,
-          cursor: 'pointer',
-          flexShrink: 0,
+          width: 22, height: 22, borderRadius: '50%', bgcolor: c,
+          cursor: 'pointer', flexShrink: 0,
           outline: value === c ? '2px solid' : '2px solid transparent',
           outlineColor: value === c ? 'text.primary' : 'transparent',
           outlineOffset: '1px',
@@ -79,18 +63,11 @@ const ColorPickerRow: FC<ColorPickerRowProps> = ({ value, onChange }) => (
         value={value && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#ffffff'}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
         sx={{
-          width: 22,
-          height: 22,
-          borderRadius: '50%',
-          border: 'none',
-          padding: 0,
-          cursor: 'pointer',
-          flexShrink: 0,
+          width: 22, height: 22, borderRadius: '50%', border: 'none',
+          padding: 0, cursor: 'pointer', flexShrink: 0,
           outline: value && !COLOR_PRESETS.includes(value) ? '2px solid' : '2px solid transparent',
-          outlineColor:
-            value && !COLOR_PRESETS.includes(value) ? 'text.primary' : 'transparent',
-          outlineOffset: '1px',
-          backgroundColor: 'transparent',
+          outlineColor: value && !COLOR_PRESETS.includes(value) ? 'text.primary' : 'transparent',
+          outlineOffset: '1px', backgroundColor: 'transparent',
           '&::-webkit-color-swatch-wrapper': { padding: 0 },
           '&::-webkit-color-swatch': { borderRadius: '50%', border: 'none' },
         }}
@@ -101,29 +78,24 @@ const ColorPickerRow: FC<ColorPickerRowProps> = ({ value, onChange }) => (
 
 // ─── Tag row (edit / delete) ─────────────────────────────────────────────────
 
-type TagRowProps = {
-  tag: KanbanTagResponseDto;
-  trackerId: string;
-  boardId: string;
-};
+type TagRowProps = { tag: KanbanTagResponseDto; trackerId: string };
 
-const TagRow: FC<TagRowProps> = ({ tag, trackerId, boardId }) => {
+const TagRow: FC<TagRowProps> = ({ tag, trackerId }) => {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(tag.name ?? '');
   const [color, setColor] = useState(tag.color ?? '');
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: getKanbanTagFindAllQueryKey(trackerId, boardId) });
+    queryClient.invalidateQueries({ queryKey: getKanbanTagFindAllQueryKey(trackerId) });
 
   const updateMutation = useMutation({
-    mutationFn: (data: KanbanTagUpsertRequestDto) =>
-      kanbanTagUpdate(trackerId, boardId, tag.id!, data),
+    mutationFn: (data: KanbanTagUpsertRequestDto) => kanbanTagUpdate(trackerId, tag.id!, data),
     onSuccess: () => { invalidate(); setEditing(false); },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => kanbanTagDelete(trackerId, boardId, tag.id!),
+    mutationFn: () => kanbanTagDelete(trackerId, tag.id!),
     onSuccess: invalidate,
   });
 
@@ -143,12 +115,9 @@ const TagRow: FC<TagRowProps> = ({ tag, trackerId, boardId }) => {
       <Paper variant="outlined" sx={{ px: 2, py: 1.5 }}>
         <Stack spacing={1.5}>
           <TextField
-            label="Název"
-            value={name}
+            label="Název" value={name}
             onChange={(e) => setName(e.target.value)}
-            size="small"
-            fullWidth
-            autoFocus
+            size="small" fullWidth autoFocus
           />
           <ColorPickerRow value={color} onChange={setColor} />
           {color && (
@@ -157,18 +126,11 @@ const TagRow: FC<TagRowProps> = ({ tag, trackerId, boardId }) => {
             </Box>
           )}
           <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<CheckIcon />}
-              onClick={handleSave}
-              disabled={updateMutation.isPending}
-            >
+            <Button size="small" variant="contained" startIcon={<CheckIcon />}
+              onClick={handleSave} disabled={updateMutation.isPending}>
               Uložit
             </Button>
-            <Button size="small" startIcon={<CloseIcon />} onClick={handleCancel}>
-              Zrušit
-            </Button>
+            <Button size="small" startIcon={<CloseIcon />} onClick={handleCancel}>Zrušit</Button>
           </Stack>
         </Stack>
       </Paper>
@@ -178,8 +140,7 @@ const TagRow: FC<TagRowProps> = ({ tag, trackerId, boardId }) => {
   return (
     <Paper variant="outlined" sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center' }}>
       <Chip
-        label={tag.name}
-        size="small"
+        label={tag.name} size="small"
         sx={tag.color ? { bgcolor: tag.color, color: '#fff', mr: 1 } : { mr: 1 }}
       />
       <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
@@ -191,12 +152,8 @@ const TagRow: FC<TagRowProps> = ({ tag, trackerId, boardId }) => {
         </IconButton>
       </Tooltip>
       <Tooltip title="Smazat">
-        <IconButton
-          size="small"
-          color="error"
-          onClick={() => deleteMutation.mutate()}
-          disabled={deleteMutation.isPending}
-        >
+        <IconButton size="small" color="error"
+          onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
           <DeleteOutlineIcon fontSize="small" />
         </IconButton>
       </Tooltip>
@@ -208,9 +165,7 @@ const TagRow: FC<TagRowProps> = ({ tag, trackerId, boardId }) => {
 
 type BulkRow = { name: string; color: string };
 
-type BulkTagFormProps = { trackerId: string; boardId: string };
-
-const BulkTagForm: FC<BulkTagFormProps> = ({ trackerId, boardId }) => {
+const BulkTagForm: FC<{ trackerId: string }> = ({ trackerId }) => {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<BulkRow[]>([{ name: '', color: '' }, { name: '', color: '' }]);
   const [error, setError] = useState('');
@@ -221,12 +176,9 @@ const BulkTagForm: FC<BulkTagFormProps> = ({ trackerId, boardId }) => {
     setRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: val } : row)));
 
   const bulkMutation = useMutation({
-    mutationFn: (data: KanbanTagUpsertRequestDto[]) =>
-      kanbanTagCreateBulk(trackerId, boardId, data),
+    mutationFn: (data: KanbanTagUpsertRequestDto[]) => kanbanTagCreateBulk(trackerId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: getKanbanTagFindAllQueryKey(trackerId, boardId),
-      });
+      queryClient.invalidateQueries({ queryKey: getKanbanTagFindAllQueryKey(trackerId) });
       setRows([{ name: '', color: '' }, { name: '', color: '' }]);
       setError('');
     },
@@ -245,26 +197,16 @@ const BulkTagForm: FC<BulkTagFormProps> = ({ trackerId, boardId }) => {
         <Stack key={i} spacing={0.75}>
           <Stack direction="row" spacing={1} alignItems="center">
             <TextField
-              label={`Název ${i + 1}`}
-              value={row.name}
+              label={`Název ${i + 1}`} value={row.name}
               onChange={(e) => updateRow(i, 'name', e.target.value)}
-              size="small"
-              sx={{ flex: 1 }}
-              inputProps={{ maxLength: 50 }}
+              size="small" sx={{ flex: 1 }} inputProps={{ maxLength: 50 }}
             />
             {row.color && (
-              <Chip
-                label={row.name || '·'}
-                size="small"
-                sx={{ bgcolor: row.color, color: '#fff', flexShrink: 0 }}
-              />
+              <Chip label={row.name || '·'} size="small"
+                sx={{ bgcolor: row.color, color: '#fff', flexShrink: 0 }} />
             )}
-            <IconButton
-              size="small"
-              color="error"
-              onClick={() => removeRow(i)}
-              disabled={rows.length <= 1}
-            >
+            <IconButton size="small" color="error"
+              onClick={() => removeRow(i)} disabled={rows.length <= 1}>
               <RemoveCircleOutlineIcon fontSize="small" />
             </IconButton>
           </Stack>
@@ -281,13 +223,8 @@ const BulkTagForm: FC<BulkTagFormProps> = ({ trackerId, boardId }) => {
       {error && <Typography color="error" variant="caption">{error}</Typography>}
 
       <Box>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<CheckIcon />}
-          onClick={handleSubmit}
-          disabled={bulkMutation.isPending}
-        >
+        <Button variant="contained" size="small" startIcon={<CheckIcon />}
+          onClick={handleSubmit} disabled={bulkMutation.isPending}>
           Vytvořit vše ({rows.filter((r) => r.name.trim()).length})
         </Button>
       </Box>
@@ -298,16 +235,15 @@ const BulkTagForm: FC<BulkTagFormProps> = ({ trackerId, boardId }) => {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export const KanbanTagsPage: FC = () => {
-  const { boardId } = useParams<{ boardId: string }>();
   const { selectedExpenseTracker } = useSelectedExpenseTracker();
   const trackerId = selectedExpenseTracker?.id;
   const [showForm, setShowForm] = useState(false);
 
   const tagsQuery = useQuery({
-    queryKey: getKanbanTagFindAllQueryKey(trackerId ?? '', boardId ?? ''),
-    enabled: !!trackerId && !!boardId,
+    queryKey: getKanbanTagFindAllQueryKey(trackerId ?? ''),
+    enabled: !!trackerId,
     queryFn: async ({ signal }) => {
-      const res = await kanbanTagFindAll(trackerId!, boardId!, { signal });
+      const res = await kanbanTagFindAll(trackerId!, { signal });
       if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
       return res.data as unknown as KanbanTagResponseDto[];
     },
@@ -316,20 +252,9 @@ export const KanbanTagsPage: FC = () => {
   if (!trackerId) {
     return (
       <Box>
-        <PageHeading component="h1" gutterBottom>Štítky nástěnky</PageHeading>
+        <PageHeading component="h1" gutterBottom>Štítky</PageHeading>
         <Alert severity="info" sx={{ maxWidth: 480 }}>
           Nejprve vyberte tracker v levém menu.
-        </Alert>
-      </Box>
-    );
-  }
-
-  if (!boardId) {
-    return (
-      <Box>
-        <PageHeading component="h1" gutterBottom>Štítky nástěnky</PageHeading>
-        <Alert severity="warning" sx={{ maxWidth: 480 }}>
-          Stránka musí být otevřena v kontextu konkrétní nástěnky.
         </Alert>
       </Box>
     );
@@ -339,11 +264,8 @@ export const KanbanTagsPage: FC = () => {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" mb={2} spacing={1} flexWrap="wrap">
-        <IconButton component={Link} to={`/kanban/boards/${boardId}`} size="small">
-          <ArrowBackIcon />
-        </IconButton>
-        <PageHeading component="h1" sx={{ flex: 1 }}>Štítky nástěnky</PageHeading>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
+        <PageHeading component="h1">Štítky</PageHeading>
         <Button
           variant={showForm ? 'outlined' : 'contained'}
           startIcon={showForm ? <CloseIcon /> : <AddIcon />}
@@ -358,7 +280,7 @@ export const KanbanTagsPage: FC = () => {
           <Typography variant="subtitle1" fontWeight={600} gutterBottom>
             Nový štítek
           </Typography>
-          <BulkTagForm trackerId={trackerId} boardId={boardId} />
+          <BulkTagForm trackerId={trackerId} />
         </Paper>
       )}
 
@@ -367,11 +289,7 @@ export const KanbanTagsPage: FC = () => {
           {[1, 2, 3].map((i) => <Skeleton key={i} variant="rounded" height={48} />)}
         </Stack>
       )}
-
-      {tagsQuery.isError && (
-        <Alert severity="error">Nepodařilo se načíst štítky.</Alert>
-      )}
-
+      {tagsQuery.isError && <Alert severity="error">Nepodařilo se načíst štítky.</Alert>}
       {!tagsQuery.isLoading && !tagsQuery.isError && tags.length === 0 && !showForm && (
         <Alert severity="info" sx={{ maxWidth: 480 }}>
           Zatím žádné štítky. Vytvořte první pomocí tlačítka výše.
@@ -380,7 +298,7 @@ export const KanbanTagsPage: FC = () => {
 
       <Stack spacing={1} maxWidth={520}>
         {tags.map((tag) => (
-          <TagRow key={tag.id} tag={tag} trackerId={trackerId} boardId={boardId} />
+          <TagRow key={tag.id} tag={tag} trackerId={trackerId} />
         ))}
       </Stack>
     </Box>

@@ -108,7 +108,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="boards" replace /> },
           { path: 'boards', element: <KanbanBoardsPage /> },
           { path: 'boards/:boardId', element: <KanbanBoardPage /> },
-          { path: 'boards/:boardId/tags', element: <KanbanTagsPage /> },
+          { path: 'tags', element: <KanbanTagsPage /> },
         ],
       },
       { path: 'wallets', element: <Navigate to="/prehled" replace /> },

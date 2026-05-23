@@ -63,10 +63,10 @@ export const KanbanCardDialog: FC<KanbanCardDialogProps> = ({
   const [error, setError] = useState('');
 
   const tagsQuery = useQuery({
-    queryKey: getKanbanTagFindAllQueryKey(trackerId, boardId),
-    enabled: !!trackerId && !!boardId && open,
+    queryKey: getKanbanTagFindAllQueryKey(trackerId),
+    enabled: !!trackerId && open,
     queryFn: async ({ signal }) => {
-      const res = await kanbanTagFindAll(trackerId, boardId, { signal });
+      const res = await kanbanTagFindAll(trackerId, { signal });
       if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
       return res.data as unknown as KanbanTagResponseDto[];
     },
