@@ -63,7 +63,7 @@ export const Header: FC<HeaderProps> = ({ onMenuToggle, showMenuToggle }) => {
 
   return (
     <AppBar position="sticky" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-      <Toolbar>
+      <Toolbar sx={{ px: { xs: 2, md: 6 } }}>
         {showMenuToggle && (
           <IconButton color="inherit" edge="start" onClick={onMenuToggle} sx={{ mr: 2 }} aria-label="menu">
             <MenuIcon />

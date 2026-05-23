@@ -3,29 +3,43 @@ import { expenseTrackerFindAllMine } from '@api/expense-tracker-controller/expen
 import type { PagedModelExpenseTrackerMineResponseDto } from '@api/model';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import CheckIcon from '@mui/icons-material/Check';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import {
   Box,
   Drawer,
+  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
   Menu as MuiMenu,
   Toolbar,
+  Tooltip,
   Typography,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { useQuery } from '@tanstack/react-query';
 import { FC, MouseEvent, useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 
 const drawerWidth = 260;
+const collapsedDrawerWidth = 0;
 
 type MenuProps = {
   mobileOpen: boolean;
   onMobileClose: () => void;
+  desktopCollapsed?: boolean;
+  onDesktopCollapseToggle?: () => void;
 };
 
-export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
+export const Menu: FC<MenuProps> = ({
+  mobileOpen,
+  onMobileClose,
+  desktopCollapsed = false,
+  onDesktopCollapseToggle,
+}) => {
+  const theme = useTheme();
   const location = useLocation();
   const { selectedExpenseTracker, setSelectedExpenseTracker } = useSelectedExpenseTracker();
   const budgetName = selectedExpenseTracker?.name ?? '—';
@@ -484,8 +498,26 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
     </Box>
   );
 
+  const desktopDrawerWidth = desktopCollapsed ? collapsedDrawerWidth : drawerWidth;
+  const drawerWidthTransition = theme.transitions.create('width', {
+    easing: theme.transitions.easing.sharp,
+    duration: theme.transitions.duration.enteringScreen,
+  });
+  const toolbarMinHeight =
+    typeof theme.mixins.toolbar.minHeight === 'number'
+      ? theme.mixins.toolbar.minHeight
+      : 64;
+
   return (
-    <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
+    <Box
+      component="nav"
+      sx={{
+        width: { md: desktopDrawerWidth },
+        flexShrink: { md: 0 },
+        position: 'relative',
+        transition: drawerWidthTransition,
+      }}
+    >
       <Drawer
         variant="temporary"
         open={mobileOpen}
@@ -502,11 +534,45 @@ export const Menu: FC<MenuProps> = ({ mobileOpen, onMobileClose }) => {
         variant="permanent"
         sx={{
           display: { xs: 'none', md: 'block' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+          '& .MuiDrawer-paper': {
+            boxSizing: 'border-box',
+            width: desktopDrawerWidth,
+            overflowX: 'hidden',
+            transition: drawerWidthTransition,
+            borderRight: desktopCollapsed ? 0 : undefined,
+          },
         }}
       >
         {drawer}
       </Drawer>
+      {onDesktopCollapseToggle && (
+        <Tooltip title={desktopCollapsed ? 'Rozbalit menu' : 'Sbalit menu'} placement="right">
+          <IconButton
+            onClick={onDesktopCollapseToggle}
+            size="small"
+            aria-label={desktopCollapsed ? 'Rozbalit menu' : 'Sbalit menu'}
+            sx={{
+              display: { xs: 'none', md: 'inline-flex' },
+              position: 'absolute',
+              top: toolbarMinHeight / 2,
+              transform: 'translateY(-50%)',
+              zIndex: theme.zIndex.drawer + 1,
+              bgcolor: 'background.paper',
+              border: 1,
+              borderColor: 'divider',
+              boxShadow: 1,
+              ...(desktopCollapsed
+                ? { left: 8, right: 'auto' }
+                : { right: -16, left: 'auto' }),
+              '&:hover': {
+                bgcolor: 'background.paper',
+              },
+            }}
+          >
+            {desktopCollapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   );
 };

@@ -4,10 +4,15 @@ import { useTheme } from '@mui/material/styles';
 import { FC, useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 
+const SIDEBAR_COLLAPSED_KEY = 'sidebarCollapsed';
+
 export const LayoutWrapper: FC = () => {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(
+    () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
+  );
 
   useEffect(() => {
     if (isDesktop) {
@@ -23,14 +28,24 @@ export const LayoutWrapper: FC = () => {
     setMobileOpen(false);
   };
 
+  const handleDesktopSidebarToggle = () => {
+    setDesktopSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
+      return next;
+    });
+  };
+
   return (
     <Root>
-      <Menu mobileOpen={mobileOpen} onMobileClose={handleMenuClose} />
+      <Menu
+        mobileOpen={mobileOpen}
+        onMobileClose={handleMenuClose}
+        desktopCollapsed={desktopSidebarCollapsed}
+        onDesktopCollapseToggle={handleDesktopSidebarToggle}
+      />
       <Box width="100%">
-        <Header
-          onMenuToggle={handleMenuToggle}
-          showMenuToggle={!isDesktop}
-        />
+        <Header onMenuToggle={handleMenuToggle} showMenuToggle={!isDesktop} />
         <Box
           sx={{
             px: { xs: 2, md: 6 },
