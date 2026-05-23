@@ -22,6 +22,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  KanbanBoardReorderRequestDto,
   KanbanBoardUpsertRequestDto,
   KanbanStageReorderRequestDto,
   KanbanStageUpsertRequestDto,
@@ -1107,4 +1108,97 @@ export const useKanbanStageReorder = <TError = unknown, TContext = unknown>(
   TContext
 > => {
   return useMutation(getKanbanStageReorderMutationOptions(options), queryClient);
+};
+export type kanbanBoardReorderResponse200 = {
+  data: void;
+  status: 200;
+};
+
+export type kanbanBoardReorderResponseSuccess = kanbanBoardReorderResponse200 & {
+  headers: Headers;
+};
+export type kanbanBoardReorderResponse = kanbanBoardReorderResponseSuccess;
+
+export const getKanbanBoardReorderUrl = (trackerId: string) => {
+  return `/api/kanban-board/${trackerId}/reorder`;
+};
+
+export const kanbanBoardReorder = async (
+  trackerId: string,
+  kanbanBoardReorderRequestDto: KanbanBoardReorderRequestDto,
+  options?: RequestInit,
+): Promise<kanbanBoardReorderResponse> => {
+  const res = await fetch(getKanbanBoardReorderUrl(trackerId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(kanbanBoardReorderRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: kanbanBoardReorderResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as kanbanBoardReorderResponse;
+};
+
+export const getKanbanBoardReorderMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof kanbanBoardReorder>>,
+    TError,
+    { trackerId: string; data: KanbanBoardReorderRequestDto },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof kanbanBoardReorder>>,
+  TError,
+  { trackerId: string; data: KanbanBoardReorderRequestDto },
+  TContext
+> => {
+  const mutationKey = ['kanbanBoardReorder'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof kanbanBoardReorder>>,
+    { trackerId: string; data: KanbanBoardReorderRequestDto }
+  > = (props) => {
+    const { trackerId, data } = props ?? {};
+
+    return kanbanBoardReorder(trackerId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type KanbanBoardReorderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof kanbanBoardReorder>>
+>;
+export type KanbanBoardReorderMutationBody = KanbanBoardReorderRequestDto;
+export type KanbanBoardReorderMutationError = unknown;
+
+export const useKanbanBoardReorder = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof kanbanBoardReorder>>,
+      TError,
+      { trackerId: string; data: KanbanBoardReorderRequestDto },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof kanbanBoardReorder>>,
+  TError,
+  { trackerId: string; data: KanbanBoardReorderRequestDto },
+  TContext
+> => {
+  return useMutation(getKanbanBoardReorderMutationOptions(options), queryClient);
 };

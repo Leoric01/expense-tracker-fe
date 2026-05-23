@@ -6,12 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
-export interface KanbanBoardResponseDto {
-  id?: string;
-  name?: string;
-  description?: string;
+export interface KanbanBoardReorderItemDto {
+  boardId: string;
   boardOrder?: number;
-  active?: boolean;
-  createdDate?: string;
-  lastModifiedDate?: string;
 }

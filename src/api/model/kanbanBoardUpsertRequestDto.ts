@@ -17,5 +17,6 @@ export interface KanbanBoardUpsertRequestDto {
    * @maxLength 500
    */
   description?: string;
+  boardOrder?: number;
   active?: boolean;
 }

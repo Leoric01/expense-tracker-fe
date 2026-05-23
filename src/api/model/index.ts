@@ -179,6 +179,8 @@ export * from './institutionUploadIconBody';
 export * from './institutionUploadIconParams';
 export * from './inviteUserRequestDto';
 export * from './kanbanBoardDetailResponseDto';
+export * from './kanbanBoardReorderItemDto';
+export * from './kanbanBoardReorderRequestDto';
 export * from './kanbanBoardResponseDto';
 export * from './kanbanBoardSnapshotResponseDto';
 export * from './kanbanBoardUpsertRequestDto';

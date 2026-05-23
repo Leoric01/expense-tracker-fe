@@ -11,6 +11,7 @@ export interface KanbanBoardDetailResponseDto {
   id?: string;
   name?: string;
   description?: string;
+  boardOrder?: number;
   active?: boolean;
   stages?: KanbanStageResponseDto[];
   createdDate?: string;

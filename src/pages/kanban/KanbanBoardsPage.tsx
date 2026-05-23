@@ -5,13 +5,19 @@ import {
   kanbanBoardDelete,
   kanbanBoardFindAll,
   kanbanBoardUpdate,
+  kanbanBoardReorder,
   getKanbanBoardFindAllQueryKey,
 } from '@api/kanban-board-controller/kanban-board-controller';
-import type { KanbanBoardResponseDto, KanbanBoardUpsertRequestDto } from '@api/model';
+import type {
+  KanbanBoardReorderRequestDto,
+  KanbanBoardResponseDto,
+  KanbanBoardUpsertRequestDto,
+} from '@api/model';
 import AddIcon from '@mui/icons-material/Add';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import {
   Alert,
   Box,
@@ -30,9 +36,10 @@ import {
   Tooltip,
   Typography,
   alpha,
+  useTheme,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FC, useState } from 'react';
+import { DragEvent, FC, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 // ─── Board form dialog ────────────────────────────────────────────────────────
@@ -49,6 +56,9 @@ const BoardFormDialog: FC<BoardFormDialogProps> = ({ open, onClose, trackerId, b
   const isEdit = Boolean(board?.id);
   const [name, setName] = useState(board?.name ?? '');
   const [description, setDescription] = useState(board?.description ?? '');
+  const [boardOrder, setBoardOrder] = useState<string>(
+    board?.boardOrder != null ? String(board.boardOrder) : '',
+  );
   const [error, setError] = useState('');
 
   const invalidate = () =>
@@ -71,7 +81,7 @@ const BoardFormDialog: FC<BoardFormDialogProps> = ({ open, onClose, trackerId, b
     const payload: KanbanBoardUpsertRequestDto = {
       name: name.trim(),
       description: description.trim() || undefined,
-      active: true,
+      boardOrder: boardOrder !== '' ? Number(boardOrder) : undefined,
     };
     if (isEdit) updateMutation.mutate(payload);
     else createMutation.mutate(payload);
@@ -79,10 +89,10 @@ const BoardFormDialog: FC<BoardFormDialogProps> = ({ open, onClose, trackerId, b
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
-  // Reset on open
   const handleEnter = () => {
     setName(board?.name ?? '');
     setDescription(board?.description ?? '');
+    setBoardOrder(board?.boardOrder != null ? String(board.boardOrder) : '');
     setError('');
   };
 
@@ -109,6 +119,15 @@ const BoardFormDialog: FC<BoardFormDialogProps> = ({ open, onClose, trackerId, b
             minRows={2}
             inputProps={{ maxLength: 500 }}
           />
+          <TextField
+            label="Pořadí"
+            type="number"
+            value={boardOrder}
+            onChange={(e) => setBoardOrder(e.target.value)}
+            fullWidth
+            inputProps={{ min: 0, step: 1 }}
+            helperText="Nechte prázdné pro automatické"
+          />
           {error && <Typography color="error" variant="caption">{error}</Typography>}
         </Stack>
       </DialogContent>
@@ -125,12 +144,17 @@ const BoardFormDialog: FC<BoardFormDialogProps> = ({ open, onClose, trackerId, b
 // ─── Boards page ──────────────────────────────────────────────────────────────
 
 export const KanbanBoardsPage: FC = () => {
+  const theme = useTheme();
   const { selectedExpenseTracker } = useSelectedExpenseTracker();
   const trackerId = selectedExpenseTracker?.id;
   const queryClient = useQueryClient();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editBoard, setEditBoard] = useState<KanbanBoardResponseDto | null>(null);
+
+  // Drag state
+  const dragBoardRef = useRef<KanbanBoardResponseDto | null>(null);
+  const [dragOverBoardId, setDragOverBoardId] = useState<string | null>(null);
 
   const boardsQuery = useQuery({
     queryKey: getKanbanBoardFindAllQueryKey(trackerId ?? ''),
@@ -142,11 +166,58 @@ export const KanbanBoardsPage: FC = () => {
     },
   });
 
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: getKanbanBoardFindAllQueryKey(trackerId!) });
+
   const deleteMutation = useMutation({
     mutationFn: (boardId: string) => kanbanBoardDelete(trackerId!, boardId),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: getKanbanBoardFindAllQueryKey(trackerId!) }),
+    onSuccess: invalidate,
   });
+
+  const reorderMutation = useMutation({
+    mutationFn: (data: KanbanBoardReorderRequestDto) => kanbanBoardReorder(trackerId!, data),
+    onSuccess: invalidate,
+  });
+
+  // ─── DnD handlers ────────────────────────────────────────────────────────────
+
+  const handleDragStart = (e: DragEvent, board: KanbanBoardResponseDto) => {
+    dragBoardRef.current = board;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('kanban/board', board.id ?? '');
+  };
+
+  const handleDragOver = (e: DragEvent, boardId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverBoardId(boardId);
+  };
+
+  const handleDrop = (e: DragEvent, targetBoardId: string) => {
+    e.preventDefault();
+    setDragOverBoardId(null);
+    const dragged = dragBoardRef.current;
+    dragBoardRef.current = null;
+    if (!dragged || dragged.id === targetBoardId) return;
+
+    const currentBoards = boardsQuery.data ?? [];
+    const fromIdx = currentBoards.findIndex((b) => b.id === dragged.id);
+    const toIdx = currentBoards.findIndex((b) => b.id === targetBoardId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const reordered = [...currentBoards];
+    const [removed] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, removed);
+
+    reorderMutation.mutate({
+      items: reordered.map((b, idx) => ({ boardId: b.id!, boardOrder: idx })),
+    });
+  };
+
+  const handleDragEnd = () => {
+    setDragOverBoardId(null);
+    dragBoardRef.current = null;
+  };
 
   const openCreate = () => { setEditBoard(null); setFormOpen(true); };
   const openEdit = (board: KanbanBoardResponseDto) => { setEditBoard(board); setFormOpen(true); };
@@ -195,88 +266,130 @@ export const KanbanBoardsPage: FC = () => {
           maxWidth: 900,
         }}
       >
-        {boards.map((board) => (
-          <Card
-            key={board.id}
-            variant="outlined"
-            sx={{
-              position: 'relative',
-              transition: (t) => t.transitions.create(['box-shadow', 'border-color']),
-              '&:hover': { borderColor: 'primary.main', boxShadow: 2 },
-              '&:hover .board-actions': { opacity: 1 },
-            }}
-          >
-            <CardActionArea component={Link} to={`/kanban/boards/${board.id}`} sx={{ p: 0 }}>
-              <CardContent sx={{ pb: '16px !important' }}>
-                <Stack direction="row" alignItems="flex-start" spacing={1.5}>
-                  <Box
-                    sx={(t) => ({
-                      flexShrink: 0,
-                      width: 44,
-                      height: 44,
-                      borderRadius: 2,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      bgcolor: alpha(t.palette.error.main, 0.1),
-                      color: t.palette.error.main,
-                    })}
-                  >
-                    <DashboardOutlinedIcon />
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="subtitle1" fontWeight={700} noWrap>
-                      {board.name}
-                    </Typography>
-                    {board.description && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }} noWrap>
-                        {board.description}
-                      </Typography>
-                    )}
-                    <Typography variant="caption" color="primary" fontWeight={600} sx={{ mt: 0.5, display: 'block' }}>
-                      Otevřít →
-                    </Typography>
-                  </Box>
-                </Stack>
-              </CardContent>
-            </CardActionArea>
+        {boards.map((board) => {
+          const isDragSource = dragBoardRef.current?.id === board.id;
+          const isDropTarget = dragOverBoardId === board.id && !isDragSource;
 
-            {/* Hover actions */}
-            <Stack
-              className="board-actions"
-              direction="row"
+          return (
+            <Card
+              key={board.id}
+              variant="outlined"
+              draggable
+              onDragStart={(e) => handleDragStart(e, board)}
+              onDragOver={(e) => handleDragOver(e, board.id!)}
+              onDrop={(e) => handleDrop(e, board.id!)}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node))
+                  setDragOverBoardId(null);
+              }}
+              onDragEnd={handleDragEnd}
               sx={{
-                position: 'absolute',
-                top: 6,
-                right: 6,
-                opacity: 0,
-                transition: 'opacity 0.15s',
-                bgcolor: 'background.paper',
-                borderRadius: 1,
-                boxShadow: 1,
+                position: 'relative',
+                cursor: 'grab',
+                transition: (t) => t.transitions.create(['box-shadow', 'border-color', 'opacity']),
+                opacity: isDragSource ? 0.45 : 1,
+                borderColor: isDropTarget ? 'primary.main' : undefined,
+                borderWidth: isDropTarget ? 2 : 1,
+                bgcolor: isDropTarget ? alpha(theme.palette.primary.main, 0.06) : undefined,
+                '&:hover': { borderColor: isDropTarget ? 'primary.main' : 'primary.light', boxShadow: 2 },
+                '&:hover .board-actions': { opacity: 1 },
+                '&:active': { cursor: 'grabbing' },
               }}
             >
-              <Tooltip title="Upravit">
-                <IconButton
-                  size="small"
-                  onClick={(e) => { e.preventDefault(); openEdit(board); }}
-                >
-                  <EditOutlinedIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Smazat">
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={(e) => { e.preventDefault(); deleteMutation.mutate(board.id!); }}
-                  disabled={deleteMutation.isPending}
-                >
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Stack>
-          </Card>
-        ))}
+              {/* Drag handle */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 8,
+                  left: 8,
+                  color: 'text.disabled',
+                  display: 'flex',
+                  alignItems: 'center',
+                  zIndex: 1,
+                  pointerEvents: 'none',
+                }}
+              >
+                <DragIndicatorIcon sx={{ fontSize: 16 }} />
+              </Box>
+
+              <CardActionArea
+                component={Link}
+                to={`/kanban/boards/${board.id}`}
+                sx={{ p: 0 }}
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
+              >
+                <CardContent sx={{ pb: '16px !important', pl: 4 }}>
+                  <Stack direction="row" alignItems="flex-start" spacing={1.5}>
+                    <Box
+                      sx={(t) => ({
+                        flexShrink: 0,
+                        width: 44,
+                        height: 44,
+                        borderRadius: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: alpha(t.palette.error.main, 0.1),
+                        color: t.palette.error.main,
+                      })}
+                    >
+                      <DashboardOutlinedIcon />
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="subtitle1" fontWeight={700} noWrap>
+                        {board.name}
+                      </Typography>
+                      {board.description && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }} noWrap>
+                          {board.description}
+                        </Typography>
+                      )}
+                      <Typography variant="caption" color="primary" fontWeight={600} sx={{ mt: 0.5, display: 'block' }}>
+                        Otevřít →
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </CardContent>
+              </CardActionArea>
+
+              {/* Hover actions */}
+              <Stack
+                className="board-actions"
+                direction="row"
+                sx={{
+                  position: 'absolute',
+                  top: 6,
+                  right: 6,
+                  opacity: 0,
+                  transition: 'opacity 0.15s',
+                  bgcolor: 'background.paper',
+                  borderRadius: 1,
+                  boxShadow: 1,
+                }}
+              >
+                <Tooltip title="Upravit">
+                  <IconButton
+                    size="small"
+                    onClick={(e) => { e.preventDefault(); openEdit(board); }}
+                  >
+                    <EditOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Smazat">
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={(e) => { e.preventDefault(); deleteMutation.mutate(board.id!); }}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </Card>
+          );
+        })}
       </Box>
 
       <BoardFormDialog
