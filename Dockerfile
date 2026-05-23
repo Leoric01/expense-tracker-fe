@@ -15,6 +15,8 @@ RUN npm run build
 
 FROM nginx:alpine
 
+ARG BACKEND_PORT=8980
+
 RUN rm -f /etc/nginx/conf.d/default.conf && \
   printf '%s\n' \
   'server {' \
@@ -25,7 +27,7 @@ RUN rm -f /etc/nginx/conf.d/default.conf && \
   '' \
   '  # API routes -> backend' \
   '  location ^~ /api/ {' \
-  '    proxy_pass http://backend:8080;' \
+  "    proxy_pass http://backend:${BACKEND_PORT};" \
   '    proxy_http_version 1.1;' \
   '    proxy_set_header Host $host;' \
   '    proxy_set_header X-Real-IP $remote_addr;' \
@@ -34,7 +36,7 @@ RUN rm -f /etc/nginx/conf.d/default.conf && \
   '  }' \
   '' \
   '  location ^~ /auth/ {' \
-  '    proxy_pass http://backend:8080;' \
+  "    proxy_pass http://backend:${BACKEND_PORT};" \
   '    proxy_http_version 1.1;' \
   '    proxy_set_header Host $host;' \
   '    proxy_set_header X-Real-IP $remote_addr;' \
@@ -43,7 +45,7 @@ RUN rm -f /etc/nginx/conf.d/default.conf && \
   '  }' \
   '' \
   '  location ^~ /profile {' \
-  '    proxy_pass http://backend:8080;' \
+  "    proxy_pass http://backend:${BACKEND_PORT};" \
   '    proxy_http_version 1.1;' \
   '    proxy_set_header Host $host;' \
   '    proxy_set_header X-Real-IP $remote_addr;' \
@@ -53,7 +55,7 @@ RUN rm -f /etc/nginx/conf.d/default.conf && \
   '' \
   '  # Admin API (PATCH /admin/users/...) — nesmí spadnout do SPA static location' \
   '  location ^~ /admin/users/ {' \
-  '    proxy_pass http://backend:8080;' \
+  "    proxy_pass http://backend:${BACKEND_PORT};" \
   '    proxy_http_version 1.1;' \
   '    proxy_set_header Host $host;' \
   '    proxy_set_header X-Real-IP $remote_addr;' \

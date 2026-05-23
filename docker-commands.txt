@@ -1,5 +1,8 @@
+# VITE_API_URL is baked into the JS bundle (axios). API fetch calls use relative /api paths
+# and are proxied by nginx in this image to backend:8980 — VITE_API_URL does not affect those.
 docker build \
-  --build-arg VITE_API_URL=http://localhost:8080 \
+  --build-arg BACKEND_PORT=8980 \
+  --build-arg VITE_API_URL=http://localhost:3000 \
   -t leorickk/expense-tracker-fe:latest .
 
 docker push leorickk/expense-tracker-fe:latest
