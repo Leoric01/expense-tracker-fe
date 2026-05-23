@@ -5,6 +5,7 @@
  * Swagger dokumentace pro ExpenseTracker backend
  * OpenAPI spec version: 1.0
  */
+import type { KanbanChecklistItemResponseDto } from './kanbanChecklistItemResponseDto';
 import type { KanbanTagResponseDto } from './kanbanTagResponseDto';
 
 export interface KanbanCardResponseDto {
@@ -17,6 +18,7 @@ export interface KanbanCardResponseDto {
   dueDate?: string;
   cardOrder?: number;
   tags?: KanbanTagResponseDto[];
+  checklistItems?: KanbanChecklistItemResponseDto[];
   createdDate?: string;
   lastModifiedDate?: string;
 }

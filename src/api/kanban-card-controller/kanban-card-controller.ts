@@ -24,8 +24,12 @@ import type {
 import type {
   KanbanCardFindBoardSnapshotParams,
   KanbanCardMoveStageRequestDto,
+  KanbanCardReorderRequestDto,
   KanbanCardUploadImageBody,
   KanbanCardUpsertRequestDto,
+  KanbanChecklistItemReorderRequestDto,
+  KanbanChecklistItemToggleRequestDto,
+  KanbanChecklistItemUpsertRequestDto,
 } from '../model';
 
 export type kanbanCardFindBoardSnapshotResponse200 = {
@@ -490,6 +494,120 @@ export const useKanbanCardDeleteImage = <TError = unknown, TContext = unknown>(
 > => {
   return useMutation(getKanbanCardDeleteImageMutationOptions(options), queryClient);
 };
+export type kanbanChecklistItemCreateResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type kanbanChecklistItemCreateResponseSuccess = kanbanChecklistItemCreateResponse200 & {
+  headers: Headers;
+};
+export type kanbanChecklistItemCreateResponse = kanbanChecklistItemCreateResponseSuccess;
+
+export const getKanbanChecklistItemCreateUrl = (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+) => {
+  return `/api/kanban-card/${trackerId}/${boardId}/${cardId}/checklist`;
+};
+
+export const kanbanChecklistItemCreate = async (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+  kanbanChecklistItemUpsertRequestDto: KanbanChecklistItemUpsertRequestDto,
+  options?: RequestInit,
+): Promise<kanbanChecklistItemCreateResponse> => {
+  const res = await fetch(getKanbanChecklistItemCreateUrl(trackerId, boardId, cardId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(kanbanChecklistItemUpsertRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: kanbanChecklistItemCreateResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as kanbanChecklistItemCreateResponse;
+};
+
+export const getKanbanChecklistItemCreateMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof kanbanChecklistItemCreate>>,
+    TError,
+    {
+      trackerId: string;
+      boardId: string;
+      cardId: string;
+      data: KanbanChecklistItemUpsertRequestDto;
+    },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof kanbanChecklistItemCreate>>,
+  TError,
+  { trackerId: string; boardId: string; cardId: string; data: KanbanChecklistItemUpsertRequestDto },
+  TContext
+> => {
+  const mutationKey = ['kanbanChecklistItemCreate'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof kanbanChecklistItemCreate>>,
+    {
+      trackerId: string;
+      boardId: string;
+      cardId: string;
+      data: KanbanChecklistItemUpsertRequestDto;
+    }
+  > = (props) => {
+    const { trackerId, boardId, cardId, data } = props ?? {};
+
+    return kanbanChecklistItemCreate(trackerId, boardId, cardId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type KanbanChecklistItemCreateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof kanbanChecklistItemCreate>>
+>;
+export type KanbanChecklistItemCreateMutationBody = KanbanChecklistItemUpsertRequestDto;
+export type KanbanChecklistItemCreateMutationError = unknown;
+
+export const useKanbanChecklistItemCreate = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof kanbanChecklistItemCreate>>,
+      TError,
+      {
+        trackerId: string;
+        boardId: string;
+        cardId: string;
+        data: KanbanChecklistItemUpsertRequestDto;
+      },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof kanbanChecklistItemCreate>>,
+  TError,
+  { trackerId: string; boardId: string; cardId: string; data: KanbanChecklistItemUpsertRequestDto },
+  TContext
+> => {
+  return useMutation(getKanbanChecklistItemCreateMutationOptions(options), queryClient);
+};
 export type kanbanCardMoveResponse200 = {
   data: Blob;
   status: 200;
@@ -913,4 +1031,582 @@ export const useKanbanCardUpdate = <TError = unknown, TContext = unknown>(
   TContext
 > => {
   return useMutation(getKanbanCardUpdateMutationOptions(options), queryClient);
+};
+export type kanbanChecklistItemDeleteResponse200 = {
+  data: void;
+  status: 200;
+};
+
+export type kanbanChecklistItemDeleteResponseSuccess = kanbanChecklistItemDeleteResponse200 & {
+  headers: Headers;
+};
+export type kanbanChecklistItemDeleteResponse = kanbanChecklistItemDeleteResponseSuccess;
+
+export const getKanbanChecklistItemDeleteUrl = (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+  itemId: string,
+) => {
+  return `/api/kanban-card/${trackerId}/${boardId}/${cardId}/checklist/${itemId}`;
+};
+
+export const kanbanChecklistItemDelete = async (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+  itemId: string,
+  options?: RequestInit,
+): Promise<kanbanChecklistItemDeleteResponse> => {
+  const res = await fetch(getKanbanChecklistItemDeleteUrl(trackerId, boardId, cardId, itemId), {
+    ...options,
+    method: 'DELETE',
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: kanbanChecklistItemDeleteResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as kanbanChecklistItemDeleteResponse;
+};
+
+export const getKanbanChecklistItemDeleteMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof kanbanChecklistItemDelete>>,
+    TError,
+    { trackerId: string; boardId: string; cardId: string; itemId: string },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof kanbanChecklistItemDelete>>,
+  TError,
+  { trackerId: string; boardId: string; cardId: string; itemId: string },
+  TContext
+> => {
+  const mutationKey = ['kanbanChecklistItemDelete'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof kanbanChecklistItemDelete>>,
+    { trackerId: string; boardId: string; cardId: string; itemId: string }
+  > = (props) => {
+    const { trackerId, boardId, cardId, itemId } = props ?? {};
+
+    return kanbanChecklistItemDelete(trackerId, boardId, cardId, itemId, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type KanbanChecklistItemDeleteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof kanbanChecklistItemDelete>>
+>;
+
+export type KanbanChecklistItemDeleteMutationError = unknown;
+
+export const useKanbanChecklistItemDelete = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof kanbanChecklistItemDelete>>,
+      TError,
+      { trackerId: string; boardId: string; cardId: string; itemId: string },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof kanbanChecklistItemDelete>>,
+  TError,
+  { trackerId: string; boardId: string; cardId: string; itemId: string },
+  TContext
+> => {
+  return useMutation(getKanbanChecklistItemDeleteMutationOptions(options), queryClient);
+};
+export type kanbanChecklistItemUpdateResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type kanbanChecklistItemUpdateResponseSuccess = kanbanChecklistItemUpdateResponse200 & {
+  headers: Headers;
+};
+export type kanbanChecklistItemUpdateResponse = kanbanChecklistItemUpdateResponseSuccess;
+
+export const getKanbanChecklistItemUpdateUrl = (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+  itemId: string,
+) => {
+  return `/api/kanban-card/${trackerId}/${boardId}/${cardId}/checklist/${itemId}`;
+};
+
+export const kanbanChecklistItemUpdate = async (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+  itemId: string,
+  kanbanChecklistItemUpsertRequestDto: KanbanChecklistItemUpsertRequestDto,
+  options?: RequestInit,
+): Promise<kanbanChecklistItemUpdateResponse> => {
+  const res = await fetch(getKanbanChecklistItemUpdateUrl(trackerId, boardId, cardId, itemId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(kanbanChecklistItemUpsertRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: kanbanChecklistItemUpdateResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as kanbanChecklistItemUpdateResponse;
+};
+
+export const getKanbanChecklistItemUpdateMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof kanbanChecklistItemUpdate>>,
+    TError,
+    {
+      trackerId: string;
+      boardId: string;
+      cardId: string;
+      itemId: string;
+      data: KanbanChecklistItemUpsertRequestDto;
+    },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof kanbanChecklistItemUpdate>>,
+  TError,
+  {
+    trackerId: string;
+    boardId: string;
+    cardId: string;
+    itemId: string;
+    data: KanbanChecklistItemUpsertRequestDto;
+  },
+  TContext
+> => {
+  const mutationKey = ['kanbanChecklistItemUpdate'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof kanbanChecklistItemUpdate>>,
+    {
+      trackerId: string;
+      boardId: string;
+      cardId: string;
+      itemId: string;
+      data: KanbanChecklistItemUpsertRequestDto;
+    }
+  > = (props) => {
+    const { trackerId, boardId, cardId, itemId, data } = props ?? {};
+
+    return kanbanChecklistItemUpdate(trackerId, boardId, cardId, itemId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type KanbanChecklistItemUpdateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof kanbanChecklistItemUpdate>>
+>;
+export type KanbanChecklistItemUpdateMutationBody = KanbanChecklistItemUpsertRequestDto;
+export type KanbanChecklistItemUpdateMutationError = unknown;
+
+export const useKanbanChecklistItemUpdate = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof kanbanChecklistItemUpdate>>,
+      TError,
+      {
+        trackerId: string;
+        boardId: string;
+        cardId: string;
+        itemId: string;
+        data: KanbanChecklistItemUpsertRequestDto;
+      },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof kanbanChecklistItemUpdate>>,
+  TError,
+  {
+    trackerId: string;
+    boardId: string;
+    cardId: string;
+    itemId: string;
+    data: KanbanChecklistItemUpsertRequestDto;
+  },
+  TContext
+> => {
+  return useMutation(getKanbanChecklistItemUpdateMutationOptions(options), queryClient);
+};
+export type kanbanChecklistItemToggleResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type kanbanChecklistItemToggleResponseSuccess = kanbanChecklistItemToggleResponse200 & {
+  headers: Headers;
+};
+export type kanbanChecklistItemToggleResponse = kanbanChecklistItemToggleResponseSuccess;
+
+export const getKanbanChecklistItemToggleUrl = (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+  itemId: string,
+) => {
+  return `/api/kanban-card/${trackerId}/${boardId}/${cardId}/checklist/${itemId}/toggle`;
+};
+
+export const kanbanChecklistItemToggle = async (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+  itemId: string,
+  kanbanChecklistItemToggleRequestDto: KanbanChecklistItemToggleRequestDto,
+  options?: RequestInit,
+): Promise<kanbanChecklistItemToggleResponse> => {
+  const res = await fetch(getKanbanChecklistItemToggleUrl(trackerId, boardId, cardId, itemId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(kanbanChecklistItemToggleRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: kanbanChecklistItemToggleResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as kanbanChecklistItemToggleResponse;
+};
+
+export const getKanbanChecklistItemToggleMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof kanbanChecklistItemToggle>>,
+    TError,
+    {
+      trackerId: string;
+      boardId: string;
+      cardId: string;
+      itemId: string;
+      data: KanbanChecklistItemToggleRequestDto;
+    },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof kanbanChecklistItemToggle>>,
+  TError,
+  {
+    trackerId: string;
+    boardId: string;
+    cardId: string;
+    itemId: string;
+    data: KanbanChecklistItemToggleRequestDto;
+  },
+  TContext
+> => {
+  const mutationKey = ['kanbanChecklistItemToggle'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof kanbanChecklistItemToggle>>,
+    {
+      trackerId: string;
+      boardId: string;
+      cardId: string;
+      itemId: string;
+      data: KanbanChecklistItemToggleRequestDto;
+    }
+  > = (props) => {
+    const { trackerId, boardId, cardId, itemId, data } = props ?? {};
+
+    return kanbanChecklistItemToggle(trackerId, boardId, cardId, itemId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type KanbanChecklistItemToggleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof kanbanChecklistItemToggle>>
+>;
+export type KanbanChecklistItemToggleMutationBody = KanbanChecklistItemToggleRequestDto;
+export type KanbanChecklistItemToggleMutationError = unknown;
+
+export const useKanbanChecklistItemToggle = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof kanbanChecklistItemToggle>>,
+      TError,
+      {
+        trackerId: string;
+        boardId: string;
+        cardId: string;
+        itemId: string;
+        data: KanbanChecklistItemToggleRequestDto;
+      },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof kanbanChecklistItemToggle>>,
+  TError,
+  {
+    trackerId: string;
+    boardId: string;
+    cardId: string;
+    itemId: string;
+    data: KanbanChecklistItemToggleRequestDto;
+  },
+  TContext
+> => {
+  return useMutation(getKanbanChecklistItemToggleMutationOptions(options), queryClient);
+};
+export type kanbanChecklistItemReorderResponse200 = {
+  data: Blob;
+  status: 200;
+};
+
+export type kanbanChecklistItemReorderResponseSuccess = kanbanChecklistItemReorderResponse200 & {
+  headers: Headers;
+};
+export type kanbanChecklistItemReorderResponse = kanbanChecklistItemReorderResponseSuccess;
+
+export const getKanbanChecklistItemReorderUrl = (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+) => {
+  return `/api/kanban-card/${trackerId}/${boardId}/${cardId}/checklist/reorder`;
+};
+
+export const kanbanChecklistItemReorder = async (
+  trackerId: string,
+  boardId: string,
+  cardId: string,
+  kanbanChecklistItemReorderRequestDto: KanbanChecklistItemReorderRequestDto,
+  options?: RequestInit,
+): Promise<kanbanChecklistItemReorderResponse> => {
+  const res = await fetch(getKanbanChecklistItemReorderUrl(trackerId, boardId, cardId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(kanbanChecklistItemReorderRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: kanbanChecklistItemReorderResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as kanbanChecklistItemReorderResponse;
+};
+
+export const getKanbanChecklistItemReorderMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof kanbanChecklistItemReorder>>,
+    TError,
+    {
+      trackerId: string;
+      boardId: string;
+      cardId: string;
+      data: KanbanChecklistItemReorderRequestDto;
+    },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof kanbanChecklistItemReorder>>,
+  TError,
+  {
+    trackerId: string;
+    boardId: string;
+    cardId: string;
+    data: KanbanChecklistItemReorderRequestDto;
+  },
+  TContext
+> => {
+  const mutationKey = ['kanbanChecklistItemReorder'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof kanbanChecklistItemReorder>>,
+    {
+      trackerId: string;
+      boardId: string;
+      cardId: string;
+      data: KanbanChecklistItemReorderRequestDto;
+    }
+  > = (props) => {
+    const { trackerId, boardId, cardId, data } = props ?? {};
+
+    return kanbanChecklistItemReorder(trackerId, boardId, cardId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type KanbanChecklistItemReorderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof kanbanChecklistItemReorder>>
+>;
+export type KanbanChecklistItemReorderMutationBody = KanbanChecklistItemReorderRequestDto;
+export type KanbanChecklistItemReorderMutationError = unknown;
+
+export const useKanbanChecklistItemReorder = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof kanbanChecklistItemReorder>>,
+      TError,
+      {
+        trackerId: string;
+        boardId: string;
+        cardId: string;
+        data: KanbanChecklistItemReorderRequestDto;
+      },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof kanbanChecklistItemReorder>>,
+  TError,
+  {
+    trackerId: string;
+    boardId: string;
+    cardId: string;
+    data: KanbanChecklistItemReorderRequestDto;
+  },
+  TContext
+> => {
+  return useMutation(getKanbanChecklistItemReorderMutationOptions(options), queryClient);
+};
+export type kanbanCardReorderResponse200 = {
+  data: void;
+  status: 200;
+};
+
+export type kanbanCardReorderResponseSuccess = kanbanCardReorderResponse200 & {
+  headers: Headers;
+};
+export type kanbanCardReorderResponse = kanbanCardReorderResponseSuccess;
+
+export const getKanbanCardReorderUrl = (trackerId: string, boardId: string) => {
+  return `/api/kanban-card/${trackerId}/${boardId}/reorder`;
+};
+
+export const kanbanCardReorder = async (
+  trackerId: string,
+  boardId: string,
+  kanbanCardReorderRequestDto: KanbanCardReorderRequestDto,
+  options?: RequestInit,
+): Promise<kanbanCardReorderResponse> => {
+  const res = await fetch(getKanbanCardReorderUrl(trackerId, boardId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(kanbanCardReorderRequestDto),
+  });
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: kanbanCardReorderResponse['data'] = body ? JSON.parse(body) : {};
+  return { data, status: res.status, headers: res.headers } as kanbanCardReorderResponse;
+};
+
+export const getKanbanCardReorderMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof kanbanCardReorder>>,
+    TError,
+    { trackerId: string; boardId: string; data: KanbanCardReorderRequestDto },
+    TContext
+  >;
+  fetch?: RequestInit;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof kanbanCardReorder>>,
+  TError,
+  { trackerId: string; boardId: string; data: KanbanCardReorderRequestDto },
+  TContext
+> => {
+  const mutationKey = ['kanbanCardReorder'];
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof kanbanCardReorder>>,
+    { trackerId: string; boardId: string; data: KanbanCardReorderRequestDto }
+  > = (props) => {
+    const { trackerId, boardId, data } = props ?? {};
+
+    return kanbanCardReorder(trackerId, boardId, data, fetchOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type KanbanCardReorderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof kanbanCardReorder>>
+>;
+export type KanbanCardReorderMutationBody = KanbanCardReorderRequestDto;
+export type KanbanCardReorderMutationError = unknown;
+
+export const useKanbanCardReorder = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof kanbanCardReorder>>,
+      TError,
+      { trackerId: string; boardId: string; data: KanbanCardReorderRequestDto },
+      TContext
+    >;
+    fetch?: RequestInit;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof kanbanCardReorder>>,
+  TError,
+  { trackerId: string; boardId: string; data: KanbanCardReorderRequestDto },
+  TContext
+> => {
+  return useMutation(getKanbanCardReorderMutationOptions(options), queryClient);
 };

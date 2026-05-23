@@ -3,6 +3,8 @@ import { useSelectedExpenseTracker } from '@hooks/useSelectedExpenseTracker';
 import {
   kanbanCardFindBoardSnapshot,
   kanbanCardMove,
+  kanbanCardReorder,
+  kanbanChecklistItemToggle,
   getKanbanCardFindBoardSnapshotQueryKey,
 } from '@api/kanban-card-controller/kanban-card-controller';
 import {
@@ -16,13 +18,16 @@ import { kanbanCardDelete } from '@api/kanban-card-controller/kanban-card-contro
 import type {
   KanbanBoardSnapshotResponseDto,
   KanbanCardMoveStageRequestDto,
+  KanbanCardReorderRequestDto,
   KanbanCardResponseDto,
+  KanbanChecklistItemResponseDto,
   KanbanStageCardsResponseDto,
   KanbanStageReorderRequestDto,
   KanbanStageUpsertRequestDto,
 } from '@api/model';
 import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -155,6 +160,57 @@ function priorityLabel(p: number | undefined): string {
   return 'Nízká';
 }
 
+// ─── Card-view checklist item (toggle only) ───────────────────────────────────
+
+type CardChecklistItemProps = {
+  item: KanbanChecklistItemResponseDto;
+  trackerId: string;
+  boardId: string;
+  cardId: string;
+  onInvalidate: () => void;
+};
+
+const CardChecklistItem: FC<CardChecklistItemProps> = ({
+  item, trackerId, boardId, cardId, onInvalidate,
+}) => {
+  const toggleMutation = useMutation({
+    mutationFn: (completed: boolean) =>
+      kanbanChecklistItemToggle(trackerId, boardId, cardId, item.id!, { completed }),
+    onSuccess: onInvalidate,
+  });
+
+  return (
+    <Stack direction="row" alignItems="flex-start" spacing={0.5}>
+      <IconButton
+        size="small"
+        onClick={(e) => { e.stopPropagation(); toggleMutation.mutate(!item.completed); }}
+        disabled={toggleMutation.isPending}
+        sx={{ p: 0, flexShrink: 0, mt: '1px' }}
+      >
+        {toggleMutation.isPending ? (
+          <CircularProgress size={14} />
+        ) : item.completed ? (
+          <CheckBoxIcon sx={{ fontSize: 16, color: 'success.main' }} />
+        ) : (
+          <CheckBoxOutlineBlankIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+        )}
+      </IconButton>
+      <Typography
+        variant="caption"
+        sx={{
+          flex: 1,
+          lineHeight: 1.4,
+          textDecoration: item.completed ? 'line-through' : 'none',
+          color: item.completed ? 'text.disabled' : 'text.primary',
+          wordBreak: 'break-word',
+        }}
+      >
+        {item.title}
+      </Typography>
+    </Stack>
+  );
+};
+
 // ─── Kanban card component ────────────────────────────────────────────────────
 
 type KanbanCardProps = {
@@ -162,11 +218,24 @@ type KanbanCardProps = {
   trackerId: string;
   boardId: string;
   stageColor?: string;
+  isDragTarget?: boolean;
   onEdit: (card: KanbanCardResponseDto) => void;
   onDragStart: (e: DragEvent, card: KanbanCardResponseDto) => void;
+  onCardDragOver: (e: DragEvent, card: KanbanCardResponseDto) => void;
+  onCardDrop: (e: DragEvent, card: KanbanCardResponseDto) => void;
 };
 
-const KanbanCard: FC<KanbanCardProps> = ({ card, trackerId, boardId, stageColor, onEdit, onDragStart }) => {
+const KanbanCard: FC<KanbanCardProps> = ({
+  card,
+  trackerId,
+  boardId,
+  stageColor,
+  isDragTarget,
+  onEdit,
+  onDragStart,
+  onCardDragOver,
+  onCardDrop,
+}) => {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
@@ -185,17 +254,37 @@ const KanbanCard: FC<KanbanCardProps> = ({ card, trackerId, boardId, stageColor,
 
   return (
     <>
+      <Box
+        onDragOver={(e) => onCardDragOver(e as unknown as DragEvent, card)}
+        onDrop={(e) => onCardDrop(e as unknown as DragEvent, card)}
+        sx={{
+          position: 'relative',
+          '&::before': isDragTarget
+            ? {
+                content: '""',
+                position: 'absolute',
+                top: -5,
+                left: 0,
+                right: 0,
+                height: 3,
+                bgcolor: 'primary.main',
+                borderRadius: 0.5,
+                zIndex: 2,
+              }
+            : {},
+        }}
+      >
       <Paper
         variant="outlined"
         draggable
         onDragStart={(e) => onDragStart(e, card)}
         sx={{
-          p: 1.5,
+          p: 2,
           cursor: 'grab',
           userSelect: 'none',
           transition: 'box-shadow 0.15s',
           bgcolor: stageColor ? alpha(stageColor, 0.18) : undefined,
-          borderColor: stageColor ? alpha(stageColor, 0.5) : undefined,
+          borderColor: isDragTarget ? 'primary.main' : stageColor ? alpha(stageColor, 0.5) : undefined,
           '&:hover': { boxShadow: 3, borderColor: stageColor ? alpha(stageColor, 0.9) : 'primary.main' },
           '&:hover .card-actions': { opacity: 1 },
           '&:active': { cursor: 'grabbing' },
@@ -270,9 +359,27 @@ const KanbanCard: FC<KanbanCardProps> = ({ card, trackerId, boardId, stageColor,
           />
         )}
 
+        {/* Checklist items */}
+        {(card.checklistItems?.length ?? 0) > 0 && (
+          <Stack spacing={0.5} mt={1.25}>
+            {[...(card.checklistItems ?? [])]
+              .sort((a, b) => (a.itemOrder ?? 0) - (b.itemOrder ?? 0))
+              .map((item) => (
+                <CardChecklistItem
+                  key={item.id}
+                  item={item}
+                  trackerId={trackerId}
+                  boardId={boardId}
+                  cardId={card.id!}
+                  onInvalidate={invalidate}
+                />
+              ))}
+          </Stack>
+        )}
+
         {/* Meta row */}
-        <Stack direction="row" alignItems="center" spacing={0.75} mt={1} flexWrap="wrap">
-          {card.priority && card.priority !== 5 && (
+        <Stack direction="row" alignItems="center" spacing={0.75} mt={1.25} flexWrap="wrap">
+          {!!card.priority && card.priority !== 5 && (
             <Chip
               label={priorityLabel(card.priority)}
               size="small"
@@ -315,6 +422,7 @@ const KanbanCard: FC<KanbanCardProps> = ({ card, trackerId, boardId, stageColor,
           )}
         </Stack>
       </Paper>
+      </Box>
 
       {/* Image preview */}
       {imagePreviewOpen && card.imageUrl && (
@@ -531,6 +639,7 @@ export const KanbanBoardPage: FC = () => {
   // Card drag state
   const dragCardRef = useRef<KanbanCardResponseDto | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
+  const [dragOverCardId, setDragOverCardId] = useState<string | null>(null);
 
   // Stage column drag state
   const dragStageRef = useRef<KanbanStageCardsResponseDto | null>(null);
@@ -570,6 +679,13 @@ export const KanbanBoardPage: FC = () => {
   const reorderStageMutation = useMutation({
     mutationFn: (data: KanbanStageReorderRequestDto) =>
       kanbanStageReorder(trackerId!, boardId!, data),
+    onSuccess: invalidate,
+  });
+
+  // Reorder cards within a stage mutation
+  const reorderCardMutation = useMutation({
+    mutationFn: (data: KanbanCardReorderRequestDto) =>
+      kanbanCardReorder(trackerId!, boardId!, data),
     onSuccess: invalidate,
   });
 
@@ -622,6 +738,7 @@ export const KanbanBoardPage: FC = () => {
     e.preventDefault();
     setDragOverStageId(null);
     setDragOverColumnId(null);
+    setDragOverCardId(null);
 
     if (dragStageRef.current) {
       // Stage reorder
@@ -641,7 +758,7 @@ export const KanbanBoardPage: FC = () => {
         items: reordered.map((s, idx) => ({ stageId: s.id!, stageOrder: idx })),
       });
     } else if (dragCardRef.current) {
-      // Card move between stages
+      // Card dropped on empty stage area → move to that stage (append)
       const card = dragCardRef.current;
       dragCardRef.current = null;
       if (card.stageId === targetStageId) return;
@@ -649,9 +766,56 @@ export const KanbanBoardPage: FC = () => {
     }
   };
 
+  // Card dropped on another card → reorder within stage or move to stage
+  const handleCardDrop = (e: DragEvent, targetCard: KanbanCardResponseDto) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverStageId(null);
+    setDragOverColumnId(null);
+    setDragOverCardId(null);
+
+    const dragged = dragCardRef.current;
+    dragCardRef.current = null;
+    if (!dragged || dragged.id === targetCard.id) return;
+
+    if (dragged.stageId === targetCard.stageId) {
+      // Same stage: reorder
+      const stage = stages.find((s) => s.id === dragged.stageId);
+      const stageCards = [...(stage?.cards ?? [])].sort(
+        (a, b) => (a.cardOrder ?? 0) - (b.cardOrder ?? 0),
+      );
+      const fromIdx = stageCards.findIndex((c) => c.id === dragged.id);
+      const toIdx = stageCards.findIndex((c) => c.id === targetCard.id);
+      if (fromIdx === -1 || toIdx === -1) return;
+
+      const reordered = [...stageCards];
+      const [removed] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, removed);
+
+      reorderCardMutation.mutate({
+        stageId: dragged.stageId!,
+        items: reordered.map((c, idx) => ({ cardId: c.id!, cardOrder: idx })),
+      });
+    } else {
+      // Different stage: move card to target stage
+      moveMutation.mutate({ cardId: dragged.id!, data: { targetStageId: targetCard.stageId! } });
+    }
+  };
+
+  // Card dragged over another card → show insert indicator
+  const handleCardDragOver = (e: DragEvent, card: KanbanCardResponseDto) => {
+    if (!dragCardRef.current || dragCardRef.current.id === card.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverCardId(card.id ?? null);
+    setDragOverStageId(null);
+  };
+
   const handleDragEnd = () => {
     setDragOverStageId(null);
     setDragOverColumnId(null);
+    setDragOverCardId(null);
     dragCardRef.current = null;
     dragStageRef.current = null;
   };
@@ -800,8 +964,11 @@ export const KanbanBoardPage: FC = () => {
                         trackerId={trackerId}
                         boardId={boardId!}
                         stageColor={stage.color}
+                        isDragTarget={dragOverCardId === card.id}
                         onEdit={(c) => setCardDialog({ open: true, card: c })}
                         onDragStart={handleDragStart}
+                        onCardDragOver={handleCardDragOver}
+                        onCardDrop={handleCardDrop}
                       />
                     ))}
 
