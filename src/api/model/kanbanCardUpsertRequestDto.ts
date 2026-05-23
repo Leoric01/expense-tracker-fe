@@ -23,6 +23,7 @@ export interface KanbanCardUpsertRequestDto {
   /** @maximum 10 */
   priority?: number;
   dueDate?: string;
+  completed?: boolean;
   cardOrder?: number;
   tagIds?: string[];
 }

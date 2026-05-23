@@ -31,6 +31,7 @@ import { TodoTagsPage } from '@pages/todos/TodoTagsPage';
 import { KanbanModuleLayout } from '@pages/kanban/KanbanModuleLayout';
 import { KanbanBoardsPage } from '@pages/kanban/KanbanBoardsPage';
 import { KanbanBoardPage } from '@pages/kanban/KanbanBoardPage';
+import { KanbanCardDetailPage } from '@pages/kanban/KanbanCardDetailPage';
 import { KanbanTagsPage } from '@pages/kanban/KanbanTagsPage';
 import { Profile } from '@pages/Profile';
 import { Register } from '@pages/Register';
@@ -108,6 +109,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="boards" replace /> },
           { path: 'boards', element: <KanbanBoardsPage /> },
           { path: 'boards/:boardId', element: <KanbanBoardPage /> },
+          { path: 'boards/:boardId/cards/:cardId', element: <KanbanCardDetailPage /> },
           { path: 'tags', element: <KanbanTagsPage /> },
         ],
       },

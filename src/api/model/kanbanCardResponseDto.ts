@@ -16,6 +16,7 @@ export interface KanbanCardResponseDto {
   imageUrl?: string;
   priority?: number;
   dueDate?: string;
+  completedDate?: string;
   cardOrder?: number;
   tags?: KanbanTagResponseDto[];
   checklistItems?: KanbanChecklistItemResponseDto[];

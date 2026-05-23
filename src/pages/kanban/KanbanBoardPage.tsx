@@ -4,6 +4,7 @@ import {
   kanbanCardFindBoardSnapshot,
   kanbanCardMove,
   kanbanCardReorder,
+  kanbanCardUpdate,
   kanbanChecklistItemToggle,
   getKanbanCardFindBoardSnapshotQueryKey,
 } from '@api/kanban-card-controller/kanban-card-controller';
@@ -20,6 +21,7 @@ import type {
   KanbanCardMoveStageRequestDto,
   KanbanCardReorderRequestDto,
   KanbanCardResponseDto,
+  KanbanCardUpsertRequestDto,
   KanbanChecklistItemResponseDto,
   KanbanStageCardsResponseDto,
   KanbanStageReorderRequestDto,
@@ -29,6 +31,8 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -61,8 +65,9 @@ import {
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragEvent, FC, KeyboardEvent, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { KanbanCardDialog } from './KanbanCardDialog';
+import { priorityColor, priorityLabel } from './kanbanUiHelpers';
 
 // ─── Color picker ────────────────────────────────────────────────────────────
 
@@ -146,20 +151,6 @@ const ColorPickerRow: FC<ColorPickerRowProps> = ({ value, onChange }) => (
 
 // ─── Priority color helper ────────────────────────────────────────────────────
 
-function priorityColor(p: number | undefined): string {
-  if (!p) return 'text.disabled';
-  if (p >= 8) return 'error.main';
-  if (p >= 5) return 'warning.main';
-  return 'success.main';
-}
-
-function priorityLabel(p: number | undefined): string {
-  if (!p) return '';
-  if (p >= 8) return 'Vysoká';
-  if (p >= 5) return 'Střední';
-  return 'Nízká';
-}
-
 // ─── Card-view checklist item (toggle only) ───────────────────────────────────
 
 type CardChecklistItemProps = {
@@ -237,20 +228,54 @@ const KanbanCard: FC<KanbanCardProps> = ({
   onCardDrop,
 }) => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const didDragRef = useRef(false);
 
   const invalidate = () =>
     queryClient.invalidateQueries({
       queryKey: getKanbanCardFindBoardSnapshotQueryKey(trackerId, boardId),
     });
 
+  const isCompleted = Boolean(card.completedDate);
+
   const deleteMutation = useMutation({
     mutationFn: () => kanbanCardDelete(trackerId, boardId, card.id!),
     onSuccess: invalidate,
   });
 
-  const isOverdue = card.dueDate && new Date(card.dueDate) < new Date();
+  const completeMutation = useMutation({
+    mutationFn: (completed: boolean) => {
+      const payload: KanbanCardUpsertRequestDto = {
+        title: card.title!,
+        stageId: card.stageId,
+        description: card.description,
+        priority: card.priority,
+        dueDate: card.dueDate,
+        tagIds: card.tags?.map((t) => t.id!).filter(Boolean),
+        completed,
+      };
+      return kanbanCardUpdate(trackerId, boardId, card.id!, payload);
+    },
+    onSuccess: invalidate,
+  });
+
+  const isOverdue = !isCompleted && card.dueDate && new Date(card.dueDate) < new Date();
+
+  const openDetail = () => {
+    if (!card.id) return;
+    navigate(`/kanban/boards/${boardId}/cards/${card.id}`);
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (didDragRef.current) {
+      didDragRef.current = false;
+      return;
+    }
+    if ((e.target as HTMLElement).closest('button, a, img, [data-no-navigate]')) return;
+    openDetail();
+  };
 
   return (
     <>
@@ -277,15 +302,34 @@ const KanbanCard: FC<KanbanCardProps> = ({
       <Paper
         variant="outlined"
         draggable
-        onDragStart={(e) => onDragStart(e, card)}
+        onDragStart={(e) => {
+          didDragRef.current = true;
+          onDragStart(e, card);
+        }}
+        onDragEnd={() => {
+          window.setTimeout(() => { didDragRef.current = false; }, 0);
+        }}
+        onClick={handleCardClick}
         sx={{
           p: 2,
-          cursor: 'grab',
+          cursor: 'pointer',
           userSelect: 'none',
-          transition: 'box-shadow 0.15s',
-          bgcolor: stageColor ? alpha(stageColor, 0.18) : undefined,
-          borderColor: isDragTarget ? 'primary.main' : stageColor ? alpha(stageColor, 0.5) : undefined,
-          '&:hover': { boxShadow: 3, borderColor: stageColor ? alpha(stageColor, 0.9) : 'primary.main' },
+          transition: 'box-shadow 0.15s, opacity 0.2s',
+          opacity: isCompleted ? 0.6 : 1,
+          bgcolor: isCompleted
+            ? 'action.hover'
+            : stageColor ? alpha(stageColor, 0.18) : undefined,
+          borderColor: isDragTarget
+            ? 'primary.main'
+            : isCompleted
+              ? 'success.main'
+              : stageColor ? alpha(stageColor, 0.5) : undefined,
+          '&:hover': {
+            boxShadow: 3,
+            borderColor: isCompleted
+              ? 'success.main'
+              : stageColor ? alpha(stageColor, 0.9) : 'primary.main',
+          },
           '&:hover .card-actions': { opacity: 1 },
           '&:active': { cursor: 'grabbing' },
         }}
@@ -293,36 +337,66 @@ const KanbanCard: FC<KanbanCardProps> = ({
         {/* Top row: drag handle + title + actions */}
         <Stack direction="row" alignItems="flex-start" spacing={0.5}>
           <DragIndicatorIcon
-            sx={{ fontSize: 16, color: 'text.disabled', mt: 0.25, flexShrink: 0 }}
+            sx={{ fontSize: 16, color: 'text.disabled', mt: 0.25, flexShrink: 0, cursor: 'grab' }}
           />
-          <Typography variant="body2" fontWeight={500} sx={{ flex: 1, minWidth: 0, wordBreak: 'break-word' }}>
+          <Typography
+            variant="body2"
+            fontWeight={500}
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              wordBreak: 'break-word',
+              textDecoration: isCompleted ? 'line-through' : 'none',
+              color: isCompleted ? 'text.disabled' : 'text.primary',
+            }}
+          >
             {card.title}
           </Typography>
-          <Stack
-            className="card-actions"
-            direction="row"
-            sx={{ opacity: 0, transition: 'opacity 0.15s', flexShrink: 0 }}
-          >
-            <Tooltip title="Upravit">
-              <IconButton size="small" sx={{ p: 0.25 }} onClick={() => onEdit(card)}>
-                <EditOutlinedIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Smazat">
+          <Stack direction="row" alignItems="center" spacing={0} sx={{ flexShrink: 0 }}>
+            {/* Complete toggle — always visible */}
+            <Tooltip title={isCompleted ? 'Označit jako nedokončené' : 'Označit jako dokončené'}>
               <IconButton
                 size="small"
-                color="error"
                 sx={{ p: 0.25 }}
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
+                onClick={(e) => { e.stopPropagation(); completeMutation.mutate(!isCompleted); }}
+                disabled={completeMutation.isPending}
               >
-                {deleteMutation.isPending ? (
-                  <CircularProgress size={12} color="error" />
+                {completeMutation.isPending ? (
+                  <CircularProgress size={14} color={isCompleted ? 'success' : 'inherit'} />
+                ) : isCompleted ? (
+                  <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />
                 ) : (
-                  <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                  <CheckCircleOutlineIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
                 )}
               </IconButton>
             </Tooltip>
+            {/* Edit + Delete — hover only */}
+            <Stack
+              className="card-actions"
+              direction="row"
+              sx={{ opacity: 0, transition: 'opacity 0.15s', flexShrink: 0 }}
+            >
+              <Tooltip title="Upravit">
+                <IconButton size="small" sx={{ p: 0.25 }} onClick={() => onEdit(card)}>
+                  <EditOutlinedIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Smazat">
+                <IconButton
+                  size="small"
+                  color="error"
+                  sx={{ p: 0.25 }}
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
+                >
+                  {deleteMutation.isPending ? (
+                    <CircularProgress size={12} color="error" />
+                  ) : (
+                    <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                  )}
+                </IconButton>
+              </Tooltip>
+            </Stack>
           </Stack>
         </Stack>
 
@@ -361,7 +435,7 @@ const KanbanCard: FC<KanbanCardProps> = ({
 
         {/* Checklist items */}
         {(card.checklistItems?.length ?? 0) > 0 && (
-          <Stack spacing={0.5} mt={1.25}>
+          <Stack spacing={0.5} mt={1.25} data-no-navigate>
             {[...(card.checklistItems ?? [])]
               .sort((a, b) => (a.itemOrder ?? 0) - (b.itemOrder ?? 0))
               .map((item) => (
